@@ -60,21 +60,22 @@ it("the terminal I/O examples write bytes, answer for the terminal, and read std
 		"a.txt\0b.txt\0",
 	);
 	expect((await captureExecute(terminalIO.status, [])).stdout).toBe(
-		"api\trunning\nworker\tstopped",
+		"api\trunning\nworker\tstopped\n",
 	);
 	expect((await captureExecute(terminalIO.status, [], { isTTY: true, columns: 40 })).stdout).toBe(
 		[
 			"NAME".padEnd(20) + "STATE",
 			"api".padEnd(20) + "running",
 			"worker".padEnd(20) + "stopped",
+			"",
 		].join("\n"),
 	);
 	expect(await captureExecute(terminalIO.lines, [], { stdin: "a\nb\n" })).toMatchObject({
-		stdout: "2",
+		stdout: "2\n",
 		exitCode: 0,
 	});
 	expect(await captureExecute(terminalIO.lines, ["-"], { isTTY: true })).toMatchObject({
-		stderr: "Error: Pass a file, or pipe text to stdin.",
+		stderr: "Error: Pass a file, or pipe text to stdin.\n",
 		exitCode: 2,
 	});
 	expect((await captureExecute(terminalIO.upper, [], { stdin: "shout" })).stdout).toBe("SHOUT");
@@ -82,7 +83,7 @@ it("the terminal I/O examples write bytes, answer for the terminal, and read std
 	expect((await captureExecute(terminalIO.upper, [], { stdin: truncated })).stdout).toBe(
 		"CAF\uFFFD",
 	);
-	expect((await captureExecute(terminalIO.log, [])).stdout).toMatch(/^line 1\n[^]*line 500$/);
+	expect((await captureExecute(terminalIO.log, [])).stdout).toMatch(/^line 1\n[^]*line 500\n$/);
 });
 
 it("extensions example prints the version for `--version` on the actionless root", async () => {

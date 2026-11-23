@@ -84,8 +84,8 @@ describe("json", () => {
 		});
 
 		expect(await captureExecute(app, ["--json"])).toEqual({
-			stdout: '{"id":7,"tags":["a"]}',
-			stderr: "working\nwarning",
+			stdout: '{"id":7,"tags":["a"]}\n',
+			stderr: "working\nwarning\n",
 			exitCode: 0,
 		});
 	});
@@ -113,8 +113,8 @@ describe("json", () => {
 			);
 
 			expect(await captureExecute(app, ["log", "--json"])).toEqual({
-				stdout: '{"ok":true}',
-				stderr: "logger:setup\nlogger:action",
+				stdout: '{"ok":true}\n',
+				stderr: "logger:setup\nlogger:action\n",
 				exitCode: 0,
 			});
 		},
@@ -141,7 +141,7 @@ describe("json", () => {
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
 				stdout: "",
-				stderr: 'logger:setup\n{"message":"setup failed"}',
+				stderr: 'logger:setup\n{"message":"setup failed"}\n',
 				exitCode: 1,
 			});
 		},
@@ -153,8 +153,8 @@ describe("json", () => {
 		});
 
 		expect(await captureExecute(app, [])).toEqual({
-			stdout: "working",
-			stderr: "Error: boom",
+			stdout: "working\n",
+			stderr: "Error: boom\n",
 			exitCode: 1,
 		});
 		expect(
@@ -163,7 +163,7 @@ describe("json", () => {
 				[],
 			),
 		).toEqual({
-			stdout: "working",
+			stdout: "working\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -183,7 +183,7 @@ describe("json", () => {
 
 		expect(await captureExecute(app, ["--json"])).toEqual({
 			stdout: "",
-			stderr: "working",
+			stderr: "working\n",
 			exitCode: 0,
 		});
 	});
@@ -210,7 +210,7 @@ describe("json", () => {
 
 		expect(await captureExecute(app, ["--json"])).toEqual({
 			stdout: "",
-			stderr: 'working\n{"message":"region unavailable"}',
+			stderr: 'working\n{"message":"region unavailable"}\n',
 			exitCode: 1,
 		});
 	});
@@ -225,7 +225,7 @@ describe("json", () => {
 
 		expect(await captureExecute(app, ["--json"])).toEqual({
 			stdout: "",
-			stderr: `working\n${line}`,
+			stderr: `working\n${line}\n`,
 			exitCode: 1,
 		});
 	});
@@ -250,7 +250,7 @@ describe("json", () => {
 
 		expect(exitCode).toBe(1);
 		expect(stdout).toBe("");
-		const lines = stderr.split("\n");
+		const lines = stderr.split("\n").slice(0, -1);
 		expect(lines).toHaveLength(2);
 		expect(lines[0]).toBe("working");
 		expect(JSON.parse(lines[1]!).message).toMatch(/^--json: the command result is not JSON data/);
@@ -310,8 +310,8 @@ describe("json", () => {
 			});
 
 		expect(await captureExecute(app, ["--json"])).toEqual({
-			stdout: '{"ok":true}',
-			stderr: '{"message":"dispose"}',
+			stdout: '{"ok":true}\n',
+			stderr: '{"message":"dispose"}\n',
 			exitCode: 1,
 		});
 		expect(await app.run([], { flags: { json: true } })).toMatchObject({
@@ -337,6 +337,7 @@ describe("json", () => {
 				'{"message":"boom"}',
 				'{"type":"cleanup","error":{"message":"dispose"}}',
 				'{"type":"cleanup","error":{"code":"PARSE","message":"cache close failed"}}',
+				"",
 			].join("\n"),
 			exitCode: 1,
 		});
@@ -371,7 +372,7 @@ describe("json", () => {
 			const app = outputAppReturning(() => ({ id: 7 }));
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"id":7}',
+				stdout: '{"id":7}\n',
 				stderr: "",
 				exitCode: 0,
 			});
@@ -390,7 +391,7 @@ describe("json", () => {
 					outputAppReturning(() => ({ id: 7 })),
 					[],
 				),
-			).toEqual({ stdout: "table row 1\ntable row 2", stderr: "", exitCode: 0 });
+			).toEqual({ stdout: "table row 1\ntable row 2\n", stderr: "", exitCode: 0 });
 		});
 
 		it("writes held text to stderr, in order, for an undefined result", async () => {
@@ -399,7 +400,7 @@ describe("json", () => {
 					outputAppReturning(() => undefined),
 					["--json"],
 				),
-			).toEqual({ stdout: "", stderr: "table row 1\ntable row 2", exitCode: 0 });
+			).toEqual({ stdout: "", stderr: "table row 1\ntable row 2\n", exitCode: 0 });
 		});
 
 		it("keeps held bytes as they were written", async () => {
@@ -431,7 +432,7 @@ describe("json", () => {
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
 				stdout: "",
-				stderr: 'table row 1\ntable row 2\n{"message":"boom"}',
+				stderr: 'table row 1\ntable row 2\n{"message":"boom"}\n',
 				exitCode: 1,
 			});
 		});
@@ -443,7 +444,7 @@ describe("json", () => {
 			);
 
 			expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
-			const lines = stderr.split("\n");
+			const lines = stderr.split("\n").slice(0, -1);
 			expect(lines.slice(0, 2)).toEqual(["table row 1", "table row 2"]);
 			expect(JSON.parse(lines[2]!).message).toMatch(/^--json: the command result is not JSON data/);
 		});
@@ -484,7 +485,7 @@ describe("json", () => {
 				});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"type":"event","data":1}\n{"type":"result","data":{"synced":1}}',
+				stdout: '{"type":"event","data":1}\n{"type":"result","data":{"synced":1}}\n',
 				stderr: "",
 				exitCode: 0,
 			});
@@ -500,8 +501,8 @@ describe("json", () => {
 				});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"type":"event","data":1}\n{"type":"result"}',
-				stderr: "working",
+				stdout: '{"type":"event","data":1}\n{"type":"result"}\n',
+				stderr: "working\n",
 				exitCode: 0,
 			});
 		});
@@ -536,7 +537,7 @@ describe("json", () => {
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
 				stdout: "",
-				stderr: "claimed\nworking",
+				stderr: "claimed\nworking\n",
 				exitCode: 1,
 			});
 		});
@@ -608,13 +609,13 @@ describe("json", () => {
 				});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"ok":true}',
+				stdout: '{"ok":true}\n',
 				stderr: "",
 				exitCode: 0,
 			});
 			expect(await captureExecute(app, ["--json", "--empty"])).toEqual({
 				stdout: "",
-				stderr: "working\nclosed",
+				stderr: "working\nclosed\n",
 				exitCode: 0,
 			});
 		});
@@ -634,11 +635,16 @@ describe("json", () => {
 					'{"type":"event","data":{"file":"a"}}',
 					'{"type":"event","data":"b"}',
 					'{"type":"result","data":{"synced":2}}',
+					"",
 				].join("\n"),
-				stderr: "working",
+				stderr: "working\n",
 				exitCode: 0,
 			});
-			expect(await captureExecute(app, [])).toEqual({ stdout: "working", stderr: "", exitCode: 0 });
+			expect(await captureExecute(app, [])).toEqual({
+				stdout: "working\n",
+				stderr: "",
+				exitCode: 0,
+			});
 		});
 
 		it("writes each event line as it is yielded", async () => {
@@ -664,7 +670,7 @@ describe("json", () => {
 			const app = new Crust("app").extend(json()).action(async function* () {});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"type":"result"}',
+				stdout: '{"type":"result"}\n',
 				stderr: "",
 				exitCode: 0,
 			});
@@ -680,6 +686,7 @@ describe("json", () => {
 				stdout: [
 					'{"type":"event","data":1}',
 					'{"type":"error","error":{"code":"PARSE","message":"bad value"}}',
+					"",
 				].join("\n"),
 				stderr: "",
 				exitCode: 2,
@@ -707,7 +714,7 @@ describe("json", () => {
 
 				expect(exitCode).toBe(1);
 				expect(stderr).toBe("");
-				const lines = stdout.split("\n");
+				const lines = stdout.split("\n").slice(0, -1);
 				expect(lines).toHaveLength(2);
 				expect(lines[0]).toBe('{"type":"event","data":1}');
 				expect(JSON.parse(lines[1]!)).toMatchObject({
@@ -727,7 +734,7 @@ describe("json", () => {
 			const { stdout, exitCode } = await captureExecute(app, ["--json"]);
 
 			expect(exitCode).toBe(1);
-			const lines = stdout.split("\n");
+			const lines = stdout.split("\n").slice(0, -1);
 			expect(lines).toHaveLength(2);
 			expect(JSON.parse(lines[1]!)).toMatchObject({
 				type: "error",
@@ -747,8 +754,8 @@ describe("json", () => {
 				});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}',
-				stderr: '{"message":"dispose"}',
+				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}\n',
+				stderr: '{"message":"dispose"}\n',
 				exitCode: 1,
 			});
 		});
@@ -767,8 +774,9 @@ describe("json", () => {
 				stdout: [
 					'{"type":"event","data":1}',
 					'{"type":"error","error":{"code":"PARSE","message":"bad value"}}',
+					"",
 				].join("\n"),
-				stderr: '{"type":"cleanup","error":{"message":"dispose"}}',
+				stderr: '{"type":"cleanup","error":{"message":"dispose"}}\n',
 				exitCode: 1,
 			});
 		});
@@ -790,10 +798,11 @@ describe("json", () => {
 				});
 
 			expect(await captureExecute(app, ["--json"])).toEqual({
-				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}',
+				stdout: '{"type":"event","data":"opened"}\n{"type":"result","data":{"ok":true}}\n',
 				stderr: [
 					'{"type":"cleanup","error":{"message":"dispose"}}',
 					'{"type":"cleanup","error":{"code":"PARSE","message":"cache close failed"}}',
+					"",
 				].join("\n"),
 				exitCode: 130,
 			});

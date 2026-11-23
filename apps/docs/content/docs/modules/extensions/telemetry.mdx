@@ -76,7 +76,7 @@ The first setting in this order that decides wins:
 
 An unset or empty variable decides nothing and falls through to the next row. The variables never change what is saved: `ACME_TELEMETRY=1` sends for that run even after `acme telemetry disable`, and `ACME_TELEMETRY=0` keeps a CI job quiet without touching the machine's preference.
 
-Both variables are read from `process.env` when the invocation settles; `execute({ env })` and `run()`'s `env` option only feed flags' `env` fallbacks. There is no test-runner detection, so a test suite opts out explicitly: set `DO_NOT_TRACK=1` or the `env` variable to `0`.
+Both variables are read from `process.env` when the invocation settles, so a test's [`env` option](/docs/modules/testing#captureoptions) or [`withEnv()`](/docs/modules/testing#withenvenv-fn) controls them too. There is no test-runner detection, so a test suite opts out explicitly: set `DO_NOT_TRACK=1` or the `env` variable to `0`.
 
 Each invocation decides once, when it settles. Turning telemetry off stops the events of invocations that settle after the preference is saved; it does not retract an event already handed to `send`, or one that another process is sending.
 

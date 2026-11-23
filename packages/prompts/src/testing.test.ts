@@ -1,3 +1,5 @@
+import type { Writable } from "node:stream";
+
 import { describe, expect, it } from "vite-plus/test";
 
 import { createPromptIO, encodeKey } from "./testing.ts";
@@ -11,6 +13,19 @@ describe("encodeKey", () => {
 });
 
 describe("createPromptIO screen", () => {
+	it("wraps later writes at the size resize() sets and emits resize", () => {
+		const harness = createPromptIO();
+		let resized = 0;
+		// SAFETY: the fake output is a Node.js Writable; TerminalIO types only what prompts use.
+		(harness.io.output as unknown as Writable).on("resize", () => resized++);
+		harness.resize(10, 5);
+		harness.io.output.write("a".repeat(15));
+
+		expect(harness.io.output).toMatchObject({ columns: 10, rows: 5 });
+		expect(resized).toBe(1);
+		expect(harness.screen()).toBe(`${"a".repeat(10)}\n${"a".repeat(5)}`);
+	});
+
 	it("delays the wrap at the last column until another character arrives", () => {
 		const harness = createPromptIO();
 		harness.io.output.write(`${"a".repeat(80)}\r\nnext`);

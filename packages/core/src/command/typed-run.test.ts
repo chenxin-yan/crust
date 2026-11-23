@@ -161,31 +161,28 @@ describe("typed programmatic invocation", () => {
 			})
 			.action(({ flags }) => flags);
 
-		it("fill omitted flags from the env option, after supplied values and before defaults", async () => {
+		it("fill omitted flags from process.env, after supplied values and before defaults", async () => {
+			vi.stubEnv("CRUST_TEST_TOKEN", "s3cret");
 			// `token` is optional in typed input: its variable may supply it.
-			expect(await app.run([], {}, { env: { CRUST_TEST_TOKEN: "s3cret" } })).toMatchObject({
+			expect(await app.run([], {})).toMatchObject({
 				status: "completed",
 				result: { token: "s3cret", port: 1 },
 			});
-			expect(
-				await app.run([], { flags: { token: "given" } }, { env: { CRUST_TEST_TOKEN: "s3cret" } }),
-			).toMatchObject({ result: { token: "given" } });
-			await expect(
-				unwrap(app.run([], {}, { env: { CRUST_TEST_TOKEN: "t", CRUST_TEST_PORT: "many" } })),
-			).rejects.toThrow("Expected a number for --port (from $CRUST_TEST_PORT).");
-		});
-
-		it("read process.env unless given env, which isolates the run", async () => {
-			vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
-			expect(await app.run([], { flags: { port: 2 } })).toMatchObject({
-				result: { token: "from-shell", port: 2 },
+			expect(await app.run([], { flags: { token: "given" } })).toMatchObject({
+				result: { token: "given" },
 			});
-			await expect(unwrap(app.run([], { flags: { port: 2 } }, { env: {} }))).rejects.toThrow(
+			vi.stubEnv("CRUST_TEST_PORT", "many");
+			await expect(unwrap(app.run([], {}))).rejects.toThrow(
+				"Expected a number for --port (from $CRUST_TEST_PORT).",
+			);
+			vi.stubEnv("CRUST_TEST_TOKEN", undefined);
+			vi.stubEnv("CRUST_TEST_PORT", undefined);
+			await expect(unwrap(app.run([], { flags: { port: 2 } }))).rejects.toThrow(
 				'Missing required flag "--token"',
 			);
 		});
 
-		it("let execute() read process.env unless given env", async () => {
+		it("let execute() read process.env", async () => {
 			vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
 			const echo = new Crust("cli")
 				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, required: true } })
@@ -195,13 +192,12 @@ describe("typed programmatic invocation", () => {
 			const exitCode = process.exitCode;
 			try {
 				expect(await echo.execute({ argv: [], io })).toBe(0);
-				expect(await echo.execute({ argv: [], io, env: { CRUST_TEST_TOKEN: "given" } })).toBe(0);
-				expect(await echo.execute({ argv: [], io, env: {} })).toBe(2);
+				vi.stubEnv("CRUST_TEST_TOKEN", undefined);
+				expect(await echo.execute({ argv: [], io })).toBe(2);
 			} finally {
 				process.exitCode = exitCode;
 			}
 			expect(output[0]).toBe("from-shell");
-			expect(output[1]).toBe("given");
 			expect(output.join("\n")).toContain('Missing required flag "--token"');
 		});
 	});

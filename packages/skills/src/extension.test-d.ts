@@ -1,5 +1,4 @@
 import { Crust, defineCommand } from "@crustjs/core";
-import { runInteractive } from "@crustjs/testing/interactive";
 
 import { skill } from "./extension.ts";
 
@@ -23,7 +22,6 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 	// @ts-expect-error -- `uninstall` declares no `--agent`
 	void app.run(["skills", "uninstall"], { flags: { agent: ["claude-code"] } });
 	void app.run(["skills", "repair"], { flags: { scope: "global" } });
-	void runInteractive(app, ["deploy"]);
 	// @ts-expect-error -- unknown command paths stay rejected after extend()
 	void app.run(["deplyo"]);
 	// @ts-expect-error -- unknown flags on host commands stay rejected
@@ -32,8 +30,6 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 	void app.run(["skills"], { flags: { scope: "user" } });
 	// @ts-expect-error -- `repair` declares no `--all`
 	void app.run(["skills", "repair"], { flags: { all: true } });
-	// @ts-expect-error -- the harness reads the same closed tree
-	void runInteractive(app, ["deplyo"]);
 }
 
 // a literal `command` option renames the contributed command without opening the tree

@@ -296,7 +296,7 @@ describe("input", () => {
 
 		expect(await captureExecute(app, ["--input", JSON.stringify({ [flag]: true })])).toEqual({
 			stdout: "",
-			stderr: `Error: Flag "--${flag}" is not command input: set it on the command line`,
+			stderr: `Error: Flag "--${flag}" is not command input: set it on the command line\n`,
 			exitCode: 2,
 		});
 	});
@@ -308,7 +308,7 @@ describe("input", () => {
 			.action(({ args, stdout }) => stdout(args.input));
 
 		expect(await captureExecute(app, ["--input", '{"input":"a.txt"}'])).toMatchObject({
-			stdout: "a.txt",
+			stdout: "a.txt\n",
 			exitCode: 0,
 		});
 	});
@@ -322,7 +322,7 @@ describe("input", () => {
 
 		const { stdout, stderr, exitCode } = await captureExecute(app, ["--json", "--input", "{bad"]);
 		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 2 });
-		expect(stderr.split("\n")).toHaveLength(1);
+		expect(stderr).toMatch(/^[^\n]*\n$/);
 		expect(JSON.parse(stderr)).toMatchObject({ code: "PARSE", message: expect.any(String) });
 	});
 

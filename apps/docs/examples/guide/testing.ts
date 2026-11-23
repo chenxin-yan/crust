@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 
 import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
-import { captureExecute } from "@crustjs/testing";
+import { captureExecute, withEnv } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 // ---cut---
 const app = new Crust("app").action(({ stdout }) => {
@@ -26,13 +26,34 @@ test("returns output and the action result", async () => {
 });
 //#endregion
 
+//#region env
+const whoami = new Crust("whoami")
+	.flags({ token: { type: "string", env: { name: "APP_TOKEN" } } })
+	.action(({ flags, stdout }) => {
+		stdout(flags.token ?? "anonymous");
+		return flags.token;
+	});
+
+test("reads its token from the environment the test sets", async () => {
+	// An empty environment: nothing from the shell running the tests.
+	expect(await captureExecute(whoami, [], { env: {} })).toEqual({
+		stdout: "anonymous\n",
+		stderr: "",
+		exitCode: 0,
+	});
+	// A typed run() keeps its typed result inside withEnv().
+	const outcome = await withEnv({ APP_TOKEN: "t0ken" }, () => whoami.run([]));
+	expect(outcome).toMatchObject({ status: "completed", result: "t0ken" });
+});
+//#endregion
+
 //#region capture-execute
 test("captures terminal errors", async () => {
 	const result = await captureExecute(app, ["--unknown"]);
 
 	expect(result.stdout).toBe("");
 	// [!code highlight:2]
-	expect(result.stderr).toContain("Unknown flag");
+	expect(result.stderr).toBe('Error: Unknown flag "--unknown"\n');
 	expect(result.exitCode).toBe(2);
 });
 //#endregion
@@ -48,9 +69,8 @@ test("drives a prompt", async () => {
 	await run.waitFor(/Name\?/);
 	run.type("Ada");
 	run.keys("return");
-	await run.done;
 
+	expect(await run.done).toEqual({ stdout: "", stderr: "Hello, Ada!\n", exitCode: 0 });
 	expect(run.screen()).toContain("Name? Ada");
-	expect(run.screen()).toContain("Hello, Ada!");
 });
 //#endregion

@@ -1,62 +1,23 @@
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
+import type { CapturedExecute } from "./capture.ts";
 import { runInteractive } from "./interactive.ts";
 
 // Compile-time regression checks; intentionally never invoked.
-// preserves command, argument, and flag types from the application
-function _typecheckPreservesCommandArgumentAndFlagTypesFromTheApplication() {
-	const deploy = defineCommand("deploy", (command) =>
-		command
-			.args({ name: "target", type: "string", required: true })
-			.flags({ force: { type: "boolean" } })
-			.action(() => {}),
-	);
-	const app = new Crust("cli").add(deploy);
-
-	void runInteractive(app, ["deploy"], { args: { target: "prod" } });
-	// @ts-expect-error -- command paths come from the application tree
-	void runInteractive(app, ["deply"], { args: { target: "prod" } });
-	// @ts-expect-error -- required arguments remain required through the harness
-	void runInteractive(app, ["deploy"]);
-	// @ts-expect-error -- flags come from the selected command
-	void runInteractive(app, ["deploy"], { args: { target: "prod" }, flags: { froce: true } });
+async function _typecheckKeysAndDone() {
+	const app = new Crust("cli").command("ask", (command) => command.action(() => {}));
+	const run = runInteractive(app, ["ask", "--verbose"], { env: {}, cwd: "fixtures", raw: true });
+	run.keys("return", "down", "space", "ctrl+c", "ctrl+d");
+	// @ts-expect-error -- a misspelled key name is a compile error, not a runtime throw
+	run.keys("entr");
+	// @ts-expect-error -- text goes through type(), not keys()
+	run.keys("y");
+	// @ts-expect-error -- ctrl takes one letter
+	run.keys("ctrl+enter");
+	run.resize(40, 10);
+	run.cancel();
+	const result: CapturedExecute = await run.done;
+	return result;
 }
 
-function _typecheckStrictInteractiveChoices(mode: string) {
-	const app = new Crust("cli").flags({
-		mode: {
-			type: "string",
-			choices: ["safe", "fast"],
-			required: true,
-		},
-	});
-	void runInteractive(app, [], { flags: { mode: "safe" } });
-	if (mode === "safe" || mode === "fast") void runInteractive(app, [], { flags: { mode } });
-	// @ts-expect-error -- a broad string is not validated by an assertion or generic inference
-	void runInteractive(app, [], { flags: { mode } });
-	// @ts-expect-error -- choice literals stay strict through the generic helper
-	void runInteractive(app, [], { flags: { mode: "slow" } });
-	// @ts-expect-error -- wrong primitives cannot infer a permissive AnyCrust fallback
-	void runInteractive(app, [], { flags: { mode: 1 } });
-	// @ts-expect-error -- extra typo beside the otherwise valid required field
-	void runInteractive(app, [], { flags: { mode: "safe", mdoe: "safe" } });
-	// @ts-expect-error -- required input stays required
-	void runInteractive(app, []);
-	// @ts-expect-error -- unknown paths cannot infer a permissive AnyCrust fallback
-	void runInteractive(app, ["missing"], { flags: { mode: "safe" } });
-}
-
-async function _typecheckDoneResolvesWithTheTypedOutcome() {
-	const app = new Crust("cli").command("ask", (command) => command.action(() => ({ name: "Ada" })));
-	const outcome = await runInteractive(app, ["ask"]).done;
-	const stderr: string = outcome.stderr;
-	void stderr;
-	if (outcome.status === "completed") {
-		const name: string = outcome.result.name;
-		// @ts-expect-error -- the result keeps the action's return type
-		const age: number = outcome.result.age;
-		void [name, age];
-	}
-	// @ts-expect-error -- failures reject `done`, so it never resolves with a failed outcome
-	if (outcome.status === "failed") void outcome;
-}
+void _typecheckKeysAndDone;

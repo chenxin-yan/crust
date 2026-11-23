@@ -2,7 +2,7 @@
 title: Testing
 ---
 
-`@crustjs/testing` adds helpers for raw `execute()` capture and fake interactive terminals. For ordinary typed action tests, use Core's [`app.run()`](/docs/api/crust#runpath-input-options), which already captures output and returns the action result; see [Testing](/docs/guide/testing).
+`@crustjs/testing` runs an app's command line in-process, as a user types it, and returns what it wrote and its exit code. For typed action tests, use Core's [`app.run(path, input)`](/docs/api/crust#runpath-input-options), which returns the action's typed result; see [Testing](/docs/guide/testing).
 
 ## Install
 
@@ -12,15 +12,26 @@ npm install -D @crustjs/testing
 
 `@crustjs/core` is a required peer. `@crustjs/prompts` is an optional peer needed only by the `@crustjs/testing/interactive` entry point; the root entry point works without it. TypeScript is an optional peer.
 
+## Command line or typed `run()`
+
+| Test                                                   | Use                                        |
+| ------------------------------------------------------ | ------------------------------------------ |
+| The typed result or error of one action                | `app.run(path, input)`                     |
+| Parsing, rendered errors, Extension output, exit codes | `captureExecute(app, argv)`                |
+| Prompts answered on a terminal                         | `runInteractive(app, argv)`                |
+| A typed `run()` with its own environment               | `withEnv(env, () => app.run(path, input))` |
+
+`captureExecute()` and `runInteractive()` take argv, run it through `execute()`, and resolve to `{ stdout, stderr, exitCode }`. Argv cannot be tied to a command's result type, so neither returns a typed result.
+
 ## `captureExecute(app, argv)`
 
 <include lang="ts">../../../examples/modules/testing.ts#execute</include>
 
-`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output. `app` is anything with Crust's `execute({ argv, io, env })` method (`ExecutableApp`).
+`captureExecute()` runs `argv` through `execute()` in-process and resolves to `stdout`, `stderr`, and `exitCode`. It leaves `process.exitCode` as it was. Use it for parser errors, rendered failures, Extension `onError` output, and exit codes. `app` is anything with Crust's `execute()` method (`ExecutableApp`).
 
-`stdout` and `stderr` hold what was written, decoded as UTF-8, without one final newline, like `run()`'s outcome: a single line compares as `"Error: …"`, not `"Error: …\n"`.
+`stdout` and `stderr` hold exactly what was written, decoded as UTF-8: `stdout(text)` writes `text` and a newline, so a one-line error compares as `"Error: …\n"`.
 
-<auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
+<auto-type-table path="../../../../../packages/testing/src/capture.ts" name="CapturedExecute" />
 
 An optional third argument takes [`CaptureOptions`](#captureoptions), plus the streams the action sees:
 
@@ -34,19 +45,20 @@ await captureExecute(app, [], { isTTY: true, columns: 120 });
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CaptureExecuteOptions" />
 
-## `runInteractive(app, path, input?)`
+## `runInteractive(app, argv)`
 
-Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`. `path` and `input` are typed like `app.run()`, so a definition must be added to the application before it can be addressed. An optional argument after `input` takes [`CaptureOptions`](#captureoptions): `runInteractive(app, path, input, { raw: true })`.
+Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`. `runInteractive(app, argv, options?)` runs `argv` through `execute()` on a fake terminal and returns a handle to drive it. The options take [`CaptureOptions`](#captureoptions).
 
 <include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
-`waitFor()` polls the ANSI-stripped screen and defaults to a 5000 ms timeout. It fails as soon as the invocation fails or completes without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
+- Prompts, progress, and the action's `stderr` draw on the terminal; `screen()` returns it as plain text. The action's `stdout` is captured apart, as a pipe: read it with the handle's `stdout()` method or from `done`.
+- `waitFor()` polls the screen and defaults to a 5000 ms timeout. It fails as soon as the run ends without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
+- `type(text)` types text. `keys()` presses named keys (`"return"`, `"up"`, `"space"`, `"escape"`, …) and `ctrl+<letter>`; any other name is a compile error.
+- `resize(columns, rows)` resizes the terminal: later output wraps at the new width, `stderr.columns` reports it, and the terminal emits `resize`. It starts at 80 by 24.
+- `cancel()` cancels the run as Ctrl-C does: a waiting prompt, or any work that honors [`signal`](/docs/guide/error-handling#cancellation), ends it with exit code `130`.
+- `done` resolves after cleanup with `stdout`, `stderr` (what the run wrote to stderr, without prompt frames), and `exitCode`, as `captureExecute()` does. It never rejects: a failure is its rendered error and exit code.
 
-`done` settles after cleanup like `app.run()`. It resolves with the `completed` outcome, carrying the typed `result`, or the `handled` one, each with the captured `stdout` and `stderr` (the action's `stderr()` lines, without prompt frames) and the `exitCode`: `0`, or the code the action set with `exitCode(n)`. It rejects with the error from a failed outcome. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `stderr()` output to the fake screen.
-
-The action's `stdout()` output stays off the screen; read it with the handle's `stdout()` method.
-
-The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. It does not inject stdin: test reading stdin and `--input -` with `captureExecute()`'s `stdin` option.
+The action's `stdin` is the terminal. The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. Test reading piped stdin and `--input -` with `captureExecute()`'s `stdin` option.
 
 <auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
 
@@ -54,10 +66,21 @@ The fake terminal counts as interactive even when `CI` is set, so a test that an
 
 Options for `captureExecute()` and `runInteractive()`:
 
-- Flags' [`env` fallbacks](/docs/api/types#flagdef) read `process.env` unless `env` is given. Pass the variables a test needs, or `{}` for none, so the result doesn't depend on the shell that runs the tests: `captureExecute(app, ["deploy"], { env: { API_TOKEN: "t" } })`.
+- `env` replaces `process.env` for the run and restores it afterwards. Flags' [`env` fallbacks](/docs/api/types#flagdef), settings, config and state directories, app code reading `process.env`, and child processes all see only these variables, so a result doesn't depend on the shell that runs the tests. `{}` is an empty environment; `{ ...process.env, NAME: "value" }` keeps the shell's and changes one; a variable set to `undefined` is left out, as with Node's `spawn()`.
+- `cwd` sets the working directory for the run, resolved against the current one, and restores it afterwards.
 - Captured `stdout` and `stderr` are plain text: ANSI escape sequences are stripped, like `@oclif/test` and `@inquirer/testing` do. Set `raw: true` to keep them and assert on styling.
 
+<include lang="ts">../../../examples/modules/testing.ts#env</include>
+
+The environment and the working directory belong to the process, so one run at a time may replace them: a second call with `env` or `cwd` while one is running throws, and so does `withEnv()`. Run these tests one after another (Vitest runs the tests of one file in order unless they are `concurrent`). For `runInteractive()`, the run lasts until `done` settles.
+
 <auto-type-table path="../../../../../packages/testing/src/capture.ts" name="CaptureOptions" />
+
+## `withEnv(env, fn)`
+
+`withEnv()` runs `fn` with `process.env` replaced by `env`, as the `env` option does, and resolves to `fn`'s result with its type, so a typed `run()` keeps its typed path, input, and result:
+
+<include lang="ts">../../../examples/modules/testing.ts#with-env</include>
 
 ## Styled output
 

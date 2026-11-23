@@ -41,6 +41,7 @@ describe("search", () => {
 				"acme keys rotate  Rotate an API key",
 				"acme keys         Manage API keys",
 				"acme keys list",
+				"",
 			].join("\n"),
 		);
 	});
@@ -69,11 +70,11 @@ describe("search", () => {
 
 	it("returns no matches and exits 0 when nothing matches, hidden commands included", async () => {
 		const plain = await captureExecute(buildCli(), ["search", "secret"]);
-		expect(plain).toMatchObject({ stdout: 'No command matches "secret".', exitCode: 0 });
+		expect(plain).toMatchObject({ stdout: 'No command matches "secret".\n', exitCode: 0 });
 
 		const app = buildCli().extend(json());
 		const data = await captureExecute(app, ["search", "secret", "--json"]);
-		expect(data).toMatchObject({ stdout: "[]", stderr: "", exitCode: 0 });
+		expect(data).toMatchObject({ stdout: "[]\n", stderr: "", exitCode: 0 });
 	});
 
 	it("publishes the match array as the command's output schema", async () => {

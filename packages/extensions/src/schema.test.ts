@@ -161,7 +161,7 @@ describe("schema", () => {
 		});
 		expect(await captureExecute(buildCli(), ["schema", "nope"])).toEqual({
 			stdout: "",
-			stderr: 'Error: Unknown command "nope".',
+			stderr: 'Error: Unknown command "nope".\n',
 			exitCode: 2,
 		});
 	});
@@ -226,6 +226,7 @@ describe("schema", () => {
 				"Flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
+				"",
 			].join("\n"),
 		);
 	});

@@ -810,7 +810,7 @@ function positionalGap(argument: string, omitted: string): CrustError {
  * deferred to `valueErrors`; invalid supplied values throw.
  *
  * @param env - Environment consulted for omitted flags' `FlagDef.env` fallbacks; none by default
- *   (invocations pass the caller's `env` option or `process.env`)
+ *   (invocations pass `process.env`)
  */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },

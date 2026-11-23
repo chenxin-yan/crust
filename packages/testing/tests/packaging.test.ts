@@ -37,7 +37,7 @@ const captured: CapturedExecute = await captureExecute(
 	new Crust("packed").action(({ stdout }) => stdout("packed-root-ok")),
 	[],
 );
-if (captured.exitCode !== 0 || captured.stdout !== "packed-root-ok") {
+if (captured.exitCode !== 0 || captured.stdout !== "packed-root-ok\\n") {
 	throw new Error(JSON.stringify(captured));
 }
 console.log("packed-root-ok");

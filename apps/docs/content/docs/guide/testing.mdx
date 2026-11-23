@@ -5,11 +5,11 @@ description: Test command results, terminal behavior, and prompts.
 
 Pick the helper that matches what you assert:
 
-| Helper             | Checks                                       |
-| ------------------ | -------------------------------------------- |
-| `run()`            | Results, errors, and captured output         |
-| `captureExecute()` | What a terminal user sees, and the exit code |
-| `runInteractive()` | Prompts driven by fake terminal input        |
+| Helper             | Input                    | Checks                                                 |
+| ------------------ | ------------------------ | ------------------------------------------------------ |
+| `run()`            | A typed path and input   | The action's typed result or error                     |
+| `captureExecute()` | Argv, as a user types it | What a terminal user sees, and the exit code           |
+| `runInteractive()` | Argv, as a user types it | Prompts answered on a fake terminal, and the exit code |
 
 `run()` is built into every app. The other two come from `@crustjs/testing`:
 
@@ -36,7 +36,7 @@ See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 <include lang="ts">../../../examples/guide/testing.ts#capture-execute</include>
 
-`captureExecute()` returns what `execute()` would print and the exit code it would set, including Extension error rendering. It restores the prior process exit state afterwards. Its `stdin`, `isTTY`, and `columns` options set what the action reads from [`stdin`](/docs/guide/terminal-io) and whether its output is a terminal; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
+`captureExecute()` runs argv through `execute()` and resolves to `{ stdout, stderr, exitCode }`: what a user would see and the exit code the shell would get, including Extension error rendering. `stdout` and `stderr` are exactly what was written, so a line printed with `stdout(text)` ends in a newline. It restores the prior process exit state afterwards. Its `stdin`, `isTTY`, and `columns` options set what the action reads from [`stdin`](/docs/guide/terminal-io) and whether its output is a terminal; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
 
 <Callout type="warn">
   Patching `process.stdout.write` doesn't capture Crust's output: outside Windows, `execute()`
@@ -48,13 +48,21 @@ See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 <include lang="ts">../../../examples/guide/testing.ts#interactive</include>
 
-`runInteractive()` shows what a user sees while a built-in prompt reads fake terminal input.
+`runInteractive()` runs argv through `execute()` on a fake terminal and returns a handle that types into it.
 
-- `screen()` contains prompt, progress, and `stderr` output.
-- The action's `stdout` output is read with the handle's `stdout()` method.
-- `await run.done` gives the same outcome as `run()`, with the typed `result`, `stdout`, and `stderr`.
+- `screen()` contains prompt, progress, and `stderr` output. The action's `stdout` is captured apart, as a pipe: read it with the handle's `stdout()` method.
+- `keys()` takes named keys and `ctrl+<letter>`; a misspelled name is a compile error. `resize(columns, rows)` resizes the terminal, and `cancel()` cancels the run as Ctrl-C does.
+- `await run.done` gives `{ stdout, stderr, exitCode }`, like `captureExecute()`. It never rejects: a failure is its rendered error and exit code.
 - Prompts show even when `CI` is set, so the test passes on CI runners as well.
 
-`captureExecute()` and `runInteractive()` return plain text unless `raw: true` keeps escape codes, and their `env` option replaces `process.env` for flags' `env` fallbacks (see [`CaptureOptions`](/docs/modules/testing#captureoptions)). `run()` returns styled text with its escape codes (see [Styled output](/docs/modules/testing#styled-output)).
+## Isolate the environment
 
-See the [`runInteractive()` reference](/docs/modules/testing#runinteractiveapp-path-input).
+<include lang="ts">../../../examples/guide/testing.ts#env</include>
+
+A test's result shouldn't depend on the shell that runs it. The `env` option of `captureExecute()` and `runInteractive()` replaces `process.env` for the run and restores it afterwards, so flags' `env` fallbacks, config directories, app code, and child processes see only those variables: `{}` is an empty environment, and `{ ...process.env, NAME: "value" }` changes one. `cwd` does the same for the working directory. For a typed `run()`, wrap the call in `withEnv(env, fn)`, which keeps the result's type.
+
+The environment and working directory belong to the process, so run these tests one after another: a second run that replaces them while one is active throws. See [`CaptureOptions`](/docs/modules/testing#captureoptions).
+
+`captureExecute()` and `runInteractive()` return plain text unless `raw: true` keeps escape codes. `run()` returns styled text with its escape codes (see [Styled output](/docs/modules/testing#styled-output)).
+
+See the [`@crustjs/testing` reference](/docs/modules/testing).

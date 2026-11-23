@@ -227,7 +227,7 @@ describe("crust build checks the handle", () => {
 		expect(await runBuildHooks(app)).toEqual({ files: new Map() });
 		expect(Object.keys((await app.snapshot()).subCommands)).toEqual(["api"]);
 		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe(
-			"POST /upload upload Upload [unavailable: unsupported-body-type]",
+			"POST /upload upload Upload [unavailable: unsupported-body-type]\n",
 		);
 		expect((await build(generatable)).error).toBe(
 			[

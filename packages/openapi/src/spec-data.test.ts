@@ -426,13 +426,13 @@ describe("spec data files", () => {
 
 		expect(await captureExecute(app, ["--help"])).toMatchObject({ exitCode: 0 });
 		expect(await captureExecute(app, ["users", "list-users"])).toEqual({
-			stdout: "[]",
+			stdout: "[]\n",
 			stderr: "",
 			exitCode: 0,
 		});
 		expect(await captureExecute(app, ["dns", "records", "list", "z1"])).toEqual({
 			stdout: "",
-			stderr: `Error: api: the OpenAPI data was not found at "${join(built.dir!, "openapi", "groups", "g-dns.json")}". Run \`crust build\` first, and ship its "openapi" directory with the CLI.`,
+			stderr: `Error: api: the OpenAPI data was not found at "${join(built.dir!, "openapi", "groups", "g-dns.json")}". Run \`crust build\` first, and ship its "openapi" directory with the CLI.\n`,
 			exitCode: 1,
 		});
 	});
@@ -529,7 +529,7 @@ describe("spec data files", () => {
 		expect(await captureExecute(appOf(chained()), ["dns", "records", "list", "z1"])).toEqual({
 			stdout: "",
 			stderr:
-				'Error: api: the OpenAPI data "groups/g-dns.json" has no operation "listRecords": its "openapi" directory comes from another build. Ship the one `crust build` wrote with this CLI.',
+				'Error: api: the OpenAPI data "groups/g-dns.json" has no operation "listRecords": its "openapi" directory comes from another build. Ship the one `crust build` wrote with this CLI.\n',
 			exitCode: 1,
 		});
 	});
@@ -556,7 +556,7 @@ describe("spec data files", () => {
 			["a", "b", "c"].map((name) => expect.objectContaining({ name, file: "spec.json" })),
 		);
 		expect(await captureExecute(appOf(plain()), ["b", "get-b"])).toMatchObject({
-			stdout: "[]",
+			stdout: "[]\n",
 			exitCode: 0,
 		});
 	});
@@ -711,7 +711,7 @@ describe("spec data files", () => {
 		expect(await captureExecute(mixed, ["users", "all"])).toEqual({
 			stdout: "",
 			stderr:
-				"Error: defineApi: the app holds generated commands of another chain of this API; take `extension` and `commands` from the same handle, and add `commands` whole (`exclude` an operation to leave it out)",
+				"Error: defineApi: the app holds generated commands of another chain of this API; take `extension` and `commands` from the same handle, and add `commands` whole (`exclude` an operation to leave it out)\n",
 			exitCode: 1,
 		});
 		// Two apps, each with one handle's Extension and commands, are fine.
@@ -785,7 +785,11 @@ describe("spec data files", () => {
 			[["users", "list-users"], 2],
 			[["--nope"], 2],
 		] as const) {
-			expect(await captureExecute(app, argv)).toEqual({ stdout: "", stderr: missing, exitCode });
+			expect(await captureExecute(app, argv)).toEqual({
+				stdout: "",
+				stderr: `${missing}\n`,
+				exitCode,
+			});
 		}
 		// An Extension extended before claims a failure first: `didYouMean()` reports the unknown command.
 		const late = chained();

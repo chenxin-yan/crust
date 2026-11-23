@@ -1,10 +1,13 @@
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { bold } from "@crustjs/style";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { captureExecute } from "./index.ts";
+import { captureExecute, withEnv } from "./index.ts";
 
 describe("captureExecute", () => {
 	let originalExitCode: typeof process.exitCode;
@@ -16,13 +19,16 @@ describe("captureExecute", () => {
 		process.exitCode = originalExitCode;
 	});
 
-	it("captures exit code 0 and stdout on success", async () => {
-		const app = new Crust("test-cli").action(({ stdout }) => {
-			stdout("hello");
+	it("captures exit code 0 and exactly what was written", async () => {
+		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+			stdout("a");
+			stdout("b");
+			stdout.write("no newline");
+			stderr("warn");
 		});
 
 		const result = await captureExecute(app, []);
-		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
+		expect(result).toEqual({ stdout: "a\nb\nno newline", stderr: "warn\n", exitCode: 0 });
 	});
 
 	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {
@@ -32,30 +38,86 @@ describe("captureExecute", () => {
 				stdout(bold("Done"));
 				stderr(bold("Warn"));
 			});
-			expect(await captureExecute(app, [])).toMatchObject({ stdout: "Done", stderr: "Warn" });
+			expect(await captureExecute(app, [])).toMatchObject({ stdout: "Done\n", stderr: "Warn\n" });
 			expect(await captureExecute(app, [], { raw: true })).toMatchObject({
-				stdout: "\x1b[1mDone\x1b[22m",
-				stderr: "\x1b[1mWarn\x1b[22m",
+				stdout: "\x1b[1mDone\x1b[22m\n",
+				stderr: "\x1b[1mWarn\x1b[22m\n",
 			});
 		} finally {
 			vi.unstubAllEnvs();
 		}
 	});
 
-	it("reads flags' env fallbacks from process.env unless the env option is given", async () => {
+	it("replaces process.env for the run with the env option, then restores it", async () => {
 		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+		vi.stubEnv("CRUST_TEST_OTHER", "kept");
 		try {
 			const app = new Crust("test-cli")
 				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
-				.action(({ flags, stdout }) => stdout(flags.token));
-			expect((await captureExecute(app, [])).stdout).toBe("from-shell");
-			expect((await captureExecute(app, [], { env: {} })).stdout).toBe("none");
-			expect((await captureExecute(app, [], { env: { CRUST_TEST_TOKEN: "given" } })).stdout).toBe(
-				"given",
-			);
+				.action(({ flags, stdout }) =>
+					stdout(
+						`${flags.token} ${process.env.CRUST_TEST_OTHER} ${Object.keys(process.env).length}`,
+					),
+				);
+			expect((await captureExecute(app, [])).stdout).toMatch(/^from-shell kept \d+\n$/);
+			expect((await captureExecute(app, [], { env: {} })).stdout).toBe("none undefined 0\n");
+			expect(
+				(await captureExecute(app, [], { env: { CRUST_TEST_TOKEN: "given", GONE: undefined } }))
+					.stdout,
+			).toBe("given undefined 1\n");
+			expect(
+				(await captureExecute(app, [], { env: { ...process.env, CRUST_TEST_TOKEN: "given" } }))
+					.stdout,
+			).toMatch(/^given kept \d+\n$/);
+			expect(process.env.CRUST_TEST_TOKEN).toBe("from-shell");
+			expect(process.env.CRUST_TEST_OTHER).toBe("kept");
 		} finally {
 			vi.unstubAllEnvs();
 		}
+	});
+
+	it("runs in the cwd option's directory, then restores the working directory", async () => {
+		const before = process.cwd();
+		const dir = realpathSync(mkdtempSync(join(tmpdir(), "crust-testing-cwd-")));
+		try {
+			const app = new Crust("test-cli").action(({ stdout }) => stdout(process.cwd()));
+			expect((await captureExecute(app, [], { cwd: dir })).stdout).toBe(`${dir}\n`);
+			expect(process.cwd()).toBe(before);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects a second run that replaces the environment while one is active", async () => {
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const app = new Crust("test-cli").action(async ({ stdout }) => {
+			await gate;
+			stdout(String(process.env.CRUST_TEST_RUN));
+		});
+		const first = captureExecute(app, [], { env: { CRUST_TEST_RUN: "first" } });
+		await expect(captureExecute(app, [], { env: { CRUST_TEST_RUN: "second" } })).rejects.toThrow(
+			"one after another",
+		);
+		await expect(withEnv({}, async () => {})).rejects.toThrow("one after another");
+		release();
+		expect((await first).stdout).toBe("first\n");
+		// The guard is released once the run settles.
+		expect(await withEnv({ CRUST_TEST_RUN: "later" }, async () => process.env.CRUST_TEST_RUN)).toBe(
+			"later",
+		);
+	});
+
+	it("restores the environment when withEnv's function throws", async () => {
+		const before = { ...process.env };
+		await expect(
+			withEnv({ ONLY: "1" }, async () => {
+				throw new Error("boom");
+			}),
+		).rejects.toThrow("boom");
+		expect(process.env).toEqual(before);
 	});
 
 	it("gives the action stdin and terminal answers from its options", async () => {
@@ -65,15 +127,15 @@ describe("captureExecute", () => {
 		});
 		expect(await captureExecute(app, [])).toEqual({
 			stdout: "",
-			stderr: "false false undefined undefined",
+			stderr: "false false undefined undefined\n",
 			exitCode: 0,
 		});
 		expect(await captureExecute(app, [], { isTTY: true })).toMatchObject({
-			stderr: "true true 80 80",
+			stderr: "true true 80 80\n",
 		});
 		expect(await captureExecute(app, [], { isTTY: true, columns: 120, stdin: "a\0b" })).toEqual({
 			stdout: "a\0b",
-			stderr: "false true 120 120",
+			stderr: "false true 120 120\n",
 			exitCode: 0,
 		});
 	});

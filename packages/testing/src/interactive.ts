@@ -1,125 +1,139 @@
 import { setTimeout } from "node:timers/promises";
 
-import type {
-	AnyCrust,
-	CommandPath,
-	CommandShapeAt,
-	RunInputArguments,
-	RunOutcome,
-	ShapeRunOutcome,
-} from "@crustjs/core";
+import type { OutputSink } from "@crustjs/core";
 import { withTerminalIO } from "@crustjs/prompts";
-import { createPromptIO, type Key } from "@crustjs/prompts/testing";
+import { createPromptIO, type NamedKey } from "@crustjs/prompts/testing";
 
-import { type CaptureOptions, captureText, joinChunks } from "./capture.ts";
+import {
+	type CaptureOptions,
+	type CapturedExecute,
+	captureText,
+	type ExecutableApp,
+	executeInProcess,
+	isolate,
+} from "./capture.ts";
 
-/**
- * A running interactive invocation. `Outcome` is the `run()` outcome of the selected command;
- * `done` resolves with its `completed` or `handled` branch.
- */
-export interface InteractiveRun<Outcome = RunOutcome<unknown, readonly unknown[] | undefined>> {
+type Letter =
+	| "a"
+	| "b"
+	| "c"
+	| "d"
+	| "e"
+	| "f"
+	| "g"
+	| "h"
+	| "i"
+	| "j"
+	| "k"
+	| "l"
+	| "m"
+	| "n"
+	| "o"
+	| "p"
+	| "q"
+	| "r"
+	| "s"
+	| "t"
+	| "u"
+	| "v"
+	| "w"
+	| "x"
+	| "y"
+	| "z";
+
+/** A key {@link InteractiveRun.keys} presses: a named key or `ctrl+<letter>`. Text goes through `type()`. */
+export type InteractiveKey = NamedKey | `ctrl+${Letter}`;
+
+/** A running interactive invocation on a fake terminal. */
+export interface InteractiveRun {
+	/** Resolves once the screen matches `pattern`; rejects after `timeoutMs` or once the run ended without a match. */
 	waitFor(pattern: RegExp, timeoutMs?: number): Promise<void>;
+	/** Type `text` as the user would. */
 	type(text: string): void;
-	keys(...namedKeys: Key[]): void;
+	keys(...keys: InteractiveKey[]): void;
+	/**
+	 * Resize the terminal: later output wraps at `columns`, `stderr.columns` reports it, and the
+	 * terminal emits `resize`.
+	 */
+	resize(columns: number, rows: number): void;
+	/** Cancel the run as Ctrl-C does: a prompt, or any work that honors `ctx.signal`, ends with exit code 130. */
+	cancel(): void;
+	/** What the terminal shows: prompts and stderr, as plain text. */
 	screen(): string;
-	/**
-	 * What the action wrote to `stdout` so far, without one final newline like `RunOutcome.stdout`;
-	 * plain unless `raw` is set.
-	 */
+	/** Exactly what the action wrote to `stdout` so far; plain unless `raw` is set. */
 	stdout(): string;
-	/**
-	 * Settles after cleanup like `app.run()`: resolves with the typed `result` (or the handling
-	 * Extension), the `exitCode`, and the captured `stdout` and `stderr` (plain unless `raw` is
-	 * set), or rejects with a failed outcome's `error`.
-	 */
-	readonly done: Promise<Exclude<Outcome, { readonly status: "failed" }>>;
+	/** Resolves once `execute()` finished, with what it wrote and its exit code. Never rejects. */
+	readonly done: Promise<CapturedExecute>;
 }
 
 /**
- * Run an application with fake terminal streams for its prompts and stderr output. Flags' `env`
- * fallbacks read `options.env` when given, and captured text is plain unless `options.raw` is set.
+ * Run `argv` through `app.execute()` on a fake terminal: prompts and `stderr` draw on it and read
+ * keys from it, and `stdout` is captured apart, as a pipe. `options.env` and `options.cwd`
+ * replace the process's until `done` settles, and captured text is plain unless `options.raw`
+ * is set. Throws while another run has replaced the environment or working directory.
  */
-export function runInteractive<
-	App extends AnyCrust,
-	const Path extends CommandPath<App["_types"]["tree"]>,
->(
-	app: App,
-	path: Path,
-	...args: readonly [
-		...RunInputArguments<CommandShapeAt<App["_types"]["shape"], Path>>,
-		options?: CaptureOptions,
-	]
-): InteractiveRun<ShapeRunOutcome<CommandShapeAt<App["_types"]["shape"], Path>>> {
+export function runInteractive(
+	app: ExecutableApp,
+	argv: readonly string[],
+	options?: CaptureOptions,
+): InteractiveRun {
 	const harness = createPromptIO();
-	const output = harness.io.output;
-	const input = args[0];
-	// SAFETY: the rest tuple puts CaptureOptions second; its generic input element hides that here.
-	const options = args[1] as CaptureOptions | undefined;
+	const terminal = harness.io.output;
+	const controller = new AbortController();
 	const stdoutChunks: Buffer[] = [];
+	const stderrChunks: Buffer[] = [];
 	// One decoder across stderr writes, so a character split between two writes reaches the screen whole.
 	const stderrDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
-	const done = withTerminalIO(harness.io, () =>
-		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
-		app
-			.run(path as never, input as never, {
-				env: options?.env,
-				stdout: (chunk) => {
-					stdoutChunks.push(Buffer.from(chunk));
-				},
-				stderr: (chunk) => {
-					// A string starts on a character boundary, so bytes still waiting are an incomplete character.
-					output.write(
-						typeof chunk === "string"
-							? stderrDecoder.decode() + chunk
-							: stderrDecoder.decode(chunk, { stream: true }),
-					);
-				},
-			})
-			.then((outcome) => {
-				const rest = stderrDecoder.decode();
-				if (rest) output.write(rest);
-				if (outcome.status === "failed") throw outcome.error;
-				const captured = {
-					...outcome,
-					stdout: captureText(outcome.stdout, options),
-					stderr: captureText(outcome.stderr, options),
-				};
-				// SAFETY: the same Path + input link that types `app.run()` selects this outcome.
-				return captured as Exclude<
-					ShapeRunOutcome<CommandShapeAt<App["_types"]["shape"], Path>>,
-					{ readonly status: "failed" }
-				>;
+	const stdout: OutputSink = {
+		write: (chunk) => void stdoutChunks.push(Buffer.from(chunk)),
+		isTTY: false,
+	};
+	const stderr: OutputSink = {
+		write: (chunk) => {
+			stderrChunks.push(Buffer.from(chunk));
+			// A string starts on a character boundary, so bytes still waiting are an incomplete character.
+			terminal.write(
+				typeof chunk === "string"
+					? stderrDecoder.decode() + chunk
+					: stderrDecoder.decode(chunk, { stream: true }),
+			);
+		},
+		isTTY: true,
+		get columns() {
+			return terminal.columns;
+		},
+	};
+	let exitCode: number | undefined;
+	const done = isolate(options, () =>
+		withTerminalIO(harness.io, () =>
+			executeInProcess(app, {
+				argv,
+				io: { stdin: harness.io.input, stdout, stderr },
+				signal: controller.signal,
 			}),
-	);
-
-	// Observe settlement so waitFor can stop polling; the action also keeps an
-	// unawaited rejected `done` from surfacing as an unhandled rejection.
-	let settled = false;
-	let failed = false;
-	let failure: unknown;
-	done.then(
-		() => {
-			settled = true;
-		},
-		(cause: unknown) => {
-			settled = true;
-			failed = true;
-			failure = cause;
-		},
-	);
+		),
+	).then((code) => {
+		const rest = stderrDecoder.decode();
+		if (rest) terminal.write(rest);
+		exitCode = code;
+		return {
+			stdout: captureText(stdoutChunks, options),
+			stderr: captureText(stderrChunks, options),
+			exitCode: code,
+		};
+	});
 
 	return {
 		waitFor: async (pattern, timeoutMs = 5000) => {
 			const matcher = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ""));
 			const deadline = Date.now() + timeoutMs;
 			while (!matcher.test(harness.screen())) {
-				if (settled) {
+				if (exitCode !== undefined) {
 					// All writes land before settlement; re-test once in case the
 					// loop condition ran before the final frame was written.
 					if (matcher.test(harness.screen())) return;
-					if (failed) throw failure;
 					throw new Error(
-						`waitFor(${matcher}) never matched; the application already completed. Screen:\n${harness.screen()}`,
+						`waitFor(${matcher}) never matched; the application already exited with code ${exitCode}. Screen:\n${harness.screen()}`,
 					);
 				}
 				if (Date.now() > deadline) {
@@ -131,9 +145,11 @@ export function runInteractive<
 			}
 		},
 		type: (text) => harness.type(text),
-		keys: (...namedKeys) => harness.keys(...namedKeys),
+		keys: (...keys) => harness.keys(...keys),
+		resize: (columns, rows) => harness.resize(columns, rows),
+		cancel: () => controller.abort(),
 		screen: () => harness.screen(),
-		stdout: () => captureText(joinChunks(stdoutChunks), options),
+		stdout: () => captureText(stdoutChunks, options),
 		done,
 	};
 }

@@ -63,7 +63,7 @@ class FakeTerminal {
 	// An escape sequence cut off at the end of a write, completed by the next one.
 	private pending = "";
 
-	constructor(private readonly columns: number) {}
+	constructor(public columns: number) {}
 
 	write(chunk: string): void {
 		const text = this.pending + chunk;
@@ -170,6 +170,11 @@ export interface PromptTestIO {
 	readonly io: Required<Pick<TerminalIO, "input" | "output">>;
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
+	/**
+	 * Change the terminal's size, as a user resizing the window: later writes wrap at `columns`,
+	 * and the output emits `resize`, as a terminal's stream does on `SIGWINCH`.
+	 */
+	resize(columns: number, rows: number): void;
 	screen(): string;
 }
 
@@ -192,8 +197,7 @@ class TestInput extends PassThrough {
 export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): PromptTestIO {
 	const input = new TestInput(isTTY);
 
-	const columns = 80;
-	const terminal = new FakeTerminal(columns);
+	const terminal = new FakeTerminal(80);
 	const output = Object.assign(
 		new Writable({
 			write(chunk, _encoding, callback) {
@@ -201,7 +205,7 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 				callback();
 			},
 		}),
-		{ columns, isTTY },
+		{ columns: terminal.columns, rows: 24, isTTY },
 	);
 
 	return {
@@ -209,6 +213,11 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 		type: (text) => input.write(text),
 		keys: (...keys) => {
 			for (const key of keys) input.write(encodeKey(key));
+		},
+		resize: (columns, rows) => {
+			terminal.columns = output.columns = columns;
+			output.rows = rows;
+			output.emit("resize");
 		},
 		screen: () => stripVTControlCharacters(terminal.screen()),
 	};

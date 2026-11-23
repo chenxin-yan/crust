@@ -305,7 +305,7 @@ Editors complete command names, argument and flag names, and the action's result
 
 - Values bind directly against definitions without producing argv, then flow through parsers, schemas, Contexts, and the action. Custom parsers and schemas still receive their raw input, usually strings.
 - Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
-- A flag the input omits falls back to its `env` variable, then to its default; a supplied value always wins. Variables come from `options.env`, which defaults to `process.env`, so `run()` resolves like the terminal; pass `{ env: {} }` (or chosen variables) so results don't depend on the caller's shell. An invalid environment value fails like on argv, naming the variable but not the value. TypeScript lets the input omit a `required` flag that has an `env` binding.
+- A flag the input omits falls back to its `env` variable, then to its default; a supplied value always wins. Variables come from `process.env`, so `run()` resolves like the terminal; wrap the call in [`withEnv()`](/docs/modules/testing#withenvenv-fn) so a test's result doesn't depend on the caller's shell. An invalid environment value fails like on argv, naming the variable but not the value. TypeScript lets the input omit a `required` flag that has an `env` binding.
 - TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
 - `raw` reaches the action as `rawArgs`, like tokens after `--` that no declared argument consumed. It never fills `args`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
@@ -319,7 +319,7 @@ Editors complete command names, argument and flag names, and the action's result
 - `options.stdout` / `options.stderr` also receive each write live, as it was made: `stdout(text)` arrives as `text` and a newline, and bytes as a `Uint8Array`. `options.onEvent` receives each event an async generator action yields, live, typed like the outcome's `events`. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` or `SIGTERM` handler.
 - Preparation is cached per builder and shared by later `run()`, `execute()`, and `snapshot()` calls on it. Pending commands materialize as needed; `snapshot()` visits the full tree.
 
-For terminal interaction in tests, use `execute()` or [`runInteractive`](/docs/modules/testing#runinteractiveapp-path-input).
+For terminal interaction in tests, use `execute()` or [`runInteractive`](/docs/modules/testing#runinteractiveapp-argv).
 
 ## `.at(path)`
 
@@ -346,7 +346,6 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - On macOS and Linux, a failed write to the default stdout throws from `stdout(text)` and `stdout.write(chunk)`. Once the reader is gone (`app | head -1`, `EPIPE`), it throws an `AbortError` whose `cause` is `"SIGPIPE"` and aborts the invocation's `signal` with it: nothing renders, and the exit code is `141` whatever the action did. No signal is re-raised: Node.js and Bun ignore `SIGPIPE`. Any other error, such as `ENOSPC` from `app > /dev/full`, is thrown as it is and fails the run with exit code `1`. A failed write to the default stderr is ignored.
 - `options.io` replaces the process's streams, such as in tests: `stdout` and `stderr` take an [`OutputSink`](/docs/api/types#outputsink) that receives each write and may report `isTTY` and `columns`, and `stdin` takes an async iterable of text or bytes, such as a Node.js readable stream. An iterable the action did not read to its end is closed when the invocation ends (its `return()` is called), as leaving a `for await` loop does; a Node.js readable is left open and paused. Each one omitted stays the process's. The injected `stderr` also receives default prompt and progress output. It does not provide prompt input. With `io` set, even to `stdin` alone, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running.
 - `options.onEvent` receives each event an async generator action yields, live. Events are never printed.
-- `options.env` is the environment flags' `env` bindings read; it defaults to `process.env`. Pass `{}` (or chosen variables) to isolate a test from the caller's shell.
 
 Ctrl-C (`SIGINT`) and `SIGTERM` (sent by `docker stop`, Kubernetes, systemd, `timeout`, and CI cancellation):
 

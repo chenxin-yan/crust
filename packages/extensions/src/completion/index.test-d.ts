@@ -1,5 +1,4 @@
 import { Crust, defineCommand } from "@crustjs/core";
-import { runInteractive } from "@crustjs/testing/interactive";
 
 import { completion } from "./index.ts";
 
@@ -18,15 +17,12 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 	void app.run(["deploy"], { flags: { force: true } });
 	void app.run(["completion"], { args: { shell: "zsh" } });
 	void app.run(["completion"], { args: { shell: "bash" }, flags: { "output-dir": "out" } });
-	void runInteractive(app, ["deploy"]);
 	// @ts-expect-error -- unknown command paths stay rejected after extend()
 	void app.run(["deplyo"]);
 	// @ts-expect-error -- unknown flags on host commands stay rejected
 	void app.run(["deploy"], { flags: { forse: true } });
 	// @ts-expect-error -- the contributed command keeps its shell choices
 	void app.run(["completion"], { args: { shell: "powershell" } });
-	// @ts-expect-error -- the harness reads the same closed tree
-	void runInteractive(app, ["deplyo"]);
 }
 
 // a literal `command` option renames the contributed command without opening the tree

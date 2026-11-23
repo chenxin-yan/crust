@@ -77,12 +77,6 @@ export interface InvocationOptions<Event = unknown> {
 	 * after the selected Renderer's `event`. A throw fails the invocation.
 	 */
 	onEvent?: (event: Event) => void;
-	/**
-	 * Environment for the `env` fallback of flags the input omits; defaults to `process.env`,
-	 * so `run()` resolves like the terminal. Pass `{}` (or chosen variables) to isolate a
-	 * result from the caller's shell, e.g. in tests.
-	 */
-	env?: Readonly<Record<string, string | undefined>>;
 }
 
 /**
@@ -136,11 +130,6 @@ export interface ExecuteOptions {
 	 * after the selected Renderer's `event`. Core never prints events. A throw fails the invocation.
 	 */
 	onEvent?: (event: unknown) => void;
-	/**
-	 * Environment for flags' `env` fallbacks; defaults to `process.env`. Pass `{}` (or chosen
-	 * variables) to isolate a result from the caller's shell, e.g. in tests.
-	 */
-	env?: Readonly<Record<string, string | undefined>>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

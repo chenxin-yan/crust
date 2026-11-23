@@ -73,7 +73,7 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-`env` is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Variables come from `process.env`, or from the `env` option of [`run()`](/docs/api/crust#runpath-input-options) and [`execute()`](/docs/api/crust#executeoptions) when given; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
+`env` is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Variables come from `process.env`; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
 
 `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
 
