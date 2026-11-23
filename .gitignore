@@ -24,6 +24,7 @@ out/
 build
 dist
 .crust
+.crust.lock
 *.bun-build
 *.tgz
 *.tsbuildinfo

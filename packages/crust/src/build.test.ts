@@ -714,7 +714,7 @@ describe("build", () => {
 		expect(manifest).not.toHaveProperty("build");
 		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
 
-		// Option validation fails before the stage is wiped, with the CLI's messages.
+		// Option validation fails before staging, with the CLI's messages.
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
 		await expect(
 			build({ cwd: tmpDir, targets: ["bun-linux-x64"], validate: false }),
@@ -843,7 +843,7 @@ describe("build", () => {
 		});
 	}, 30_000);
 
-	it("selects and validates the binary compiler before wiping the previous stage", async () => {
+	it("selects and validates the binary compiler before staging", async () => {
 		writeProject({ name: "engine-cli", engines: { bun: "0.0.1" } }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
@@ -859,7 +859,7 @@ describe("build", () => {
 		).rejects.toThrow('package.json engines.bun is not a valid semver range: "latest"');
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 
-		// Under Node there is no embedded Bun to fall back to: a missing bun fails before the wipe too.
+		// Under Node there is no embedded Bun to fall back to: a missing bun fails before staging too.
 		writeProject({ name: "engine-cli" }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
@@ -880,7 +880,7 @@ describe("build", () => {
 
 	// The shim is a POSIX script; the real Node binary builds run in tests/node-exe.integration.test.ts.
 	it.skipIf(process.platform === "win32")(
-		"selects and validates the node binary compiler and tsdown's requirements before wiping the previous stage",
+		"selects and validates the node binary compiler and tsdown's requirements before staging",
 		async () => {
 			const nodePath = which("node")!;
 			const bunDir = dirname(which("bun")!);
@@ -994,7 +994,7 @@ describe("build", () => {
 });
 
 describe("buildCommand", () => {
-	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {
+	it("rejects invalid identity before staging, even with --no-validate", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-identity-guard-"));
 		mkdirSync(join(tmpDir, ".crust"));
 		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept");

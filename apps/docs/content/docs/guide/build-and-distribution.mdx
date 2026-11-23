@@ -60,7 +60,7 @@ npm run build
 
 Binaries are built for your machine only, unless [`crust.targets`](#choose-release-targets) lists the platforms you release. Runtime packages have no targets.
 
-Each successful build replaces `.crust/`; a failed build keeps the previous one. Add `.crust/` to `.gitignore`. On Linux x64 with Bun binaries:
+Each successful build replaces `.crust/`; a failed build keeps the previous one. Add `.crust/` and `.crust.lock/` to `.gitignore`. On Linux x64 with Bun binaries:
 
 ```text
 .crust/

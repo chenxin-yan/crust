@@ -35,7 +35,7 @@ Install dependencies if you skipped installation or just cloned the project:
 `<%~ it.run %> build` stages the selected output and npm metadata in `.crust/`:
 
 - `package`: a JavaScript bundle in `.crust/root/` that requires the selected runtime installed.
-- `binary`: a standalone executable per platform, with its runtime embedded. Pass `--target host` to `crust build` to build only this machine's target.
+- `binary`: a standalone executable per platform, with its runtime embedded. `<%~ it.run %> build` builds only this machine's target; before `<%~ it.run %> release`, pass `--target all` to `crust build` or list your targets in `crust.targets`.
 
 Bun is used for build preparation and Bun/Node bundling. Node binaries additionally need Node 26+ and Crust's optional compiler backend. Crust does not install or upgrade compilers. See [compiler requirements](https://crustjs.com/docs/guide/build-and-distribution#binary-runtime-version).
 

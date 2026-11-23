@@ -793,7 +793,7 @@ describe("runDistributeBuild", () => {
 		writeFileSync(join(tmpDir, "dist", "index.d.ts"), "export declare const build: number;\n");
 		const stageDir = join(tmpDir, ".crust");
 		const stage = (exports: JsonValue | undefined, include = ["dist"]) => {
-			// The build command wipes the stage before each build; do the same so no earlier copy lingers.
+			// The build command stages into an empty directory; do the same so no earlier copy lingers.
 			rmSync(stageDir, { recursive: true, force: true });
 			return runDistributeBuild(
 				createPlan(
