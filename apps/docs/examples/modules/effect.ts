@@ -71,14 +71,11 @@ new Crust("app").provide(limits()).action(
 	}),
 );
 
-// Not provided on this path: fails with CrustDefinitionError, catchable by tag.
 new Crust("app").action(
-	handler(() =>
-		service(limits).pipe(
-			Effect.map(({ limit }) => limit),
-			Effect.catchTag("CrustDefinitionError", () => Effect.succeed(0)),
-		),
-	),
+	// @ts-expect-error -- no limits Context on this path.
+	handler(function* () {
+		return (yield* service(limits)).limit;
+	}),
 );
 //#endregion
 

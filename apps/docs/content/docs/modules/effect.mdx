@@ -75,7 +75,7 @@ Each invocation builds the Layer in a fresh `Scope`, closed with the other Conte
 
 `fn` receives the same input as a plain action, with the same inference. The action resolves with the program's success value.
 
-The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path. Requiring any other service is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, provides nothing.
+The program's requirements are checked against `ServicesOf<Input>`: the services of the `layer()` Contexts on the path, and each Context in the action's `ctx`, for `service()`. Requiring any other service, or pulling a Context the command does not have, is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, provides nothing.
 
 ## `service(factory)`
 
@@ -84,8 +84,9 @@ The program's requirements are checked against `ServicesOf<Input>`, the services
 Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value.
 
 - It is lazy like `ctx.<name>`, and repeated pulls share one build.
-- It works only inside `handler()`: its Effect requires `HandlerInput`, which is exported for annotating reusable programs.
-- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing provider, or a different factory with the same name, fails with a `CrustDefinitionError` at runtime, not compile time.
+- It works only inside `handler()`: its Effect requires `HandlerInput` and `ContextService<Name, Value>`, both exported for annotating reusable programs.
+- The command's `ctx` must hold a Context of that name and value type, provided or used on its path; otherwise the `handler()` call is a compile error.
+- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A different factory with the same name and value type compiles, and fails with a `CrustDefinitionError` at runtime.
 
 ## Environment variables
 

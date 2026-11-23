@@ -3,7 +3,7 @@ import { defineEnv } from "@crustjs/env";
 import { Context, Effect, Layer } from "effect";
 
 import { type CrustEnvError, type CrustTaggedError, tryCrust } from "./errors.ts";
-import { handler, type ServicesOf, service } from "./handler.ts";
+import { type ContextService, handler, type ServicesOf, service } from "./handler.ts";
 import type { HandlerInput } from "./index.ts";
 import { layer, type LayerValue } from "./layer.ts";
 
@@ -61,13 +61,13 @@ const adaptedGenerator = handler(function* () {
 });
 type _GeneratorResult = Expect<Equal<ReturnType<typeof adaptedGenerator>, Promise<number>>>;
 
-// ServicesOf counts branded layer() values only.
+// ServicesOf provides the services of branded layer() values, and each Context in ctx by name.
 type _Services = Expect<
 	Equal<
 		ServicesOf<{
 			ctx: { db: Promise<LayerValue<Db>>; unbranded: Promise<Context.Context<Cache>> };
 		}>,
-		Db
+		Db | ContextService<"db", LayerValue<Db>> | ContextService<"unbranded", Context.Context<Cache>>
 	>
 >;
 
@@ -109,7 +109,41 @@ layer("needsCache", needsCache);
 type ConfigService = ReturnType<typeof service<typeof config>>;
 type _ServiceValue = Expect<Equal<Effect.Success<ConfigService>, { prefix: string }>>;
 // Its requirement is nameable, so reusable programs can be annotated.
-type _ServiceRequirement = Expect<Equal<Effect.Services<ConfigService>, HandlerInput>>;
+type _ServiceRequirement = Expect<
+	Equal<Effect.Services<ConfigService>, HandlerInput | ContextService<"config", { prefix: string }>>
+>;
+
+// service() of a Context the command's ctx does not hold is rejected, in both forms.
+new Crust("cli").provide(db()).action(
+	// @ts-expect-error -- no config Context on the path.
+	handler(function* () {
+		return yield* service(config);
+	}),
+);
+new Crust("cli").provide(db()).action(
+	handler(() =>
+		// @ts-expect-error -- no config Context on the path.
+		Effect.gen(function* () {
+			return yield* service(config);
+		}),
+	),
+);
+// A Context of the same name with another value type is rejected too.
+const otherConfig = defineContext("config").setup(() => ({ prefix: 1 }));
+new Crust("cli").provide(config()).action(
+	// @ts-expect-error -- ctx.config holds { prefix: string }.
+	handler(function* () {
+		return yield* service(otherConfig);
+	}),
+);
+// A Context the command uses (not only provides) satisfies service().
+new Crust("cli").provide(config()).command("show", (cmd) =>
+	cmd.use(config).action(
+		handler(function* () {
+			return (yield* service(config)).prefix;
+		}),
+	),
+);
 
 const env = defineEnv("env", {
 	PORT: { type: "number", default: 3000 },
