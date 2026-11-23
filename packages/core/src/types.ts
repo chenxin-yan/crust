@@ -770,7 +770,8 @@ type InputFlagValue<D, Value = InputBaseValue<D>> = [Value] extends [never]
 				: Value
 			: Value;
 
-type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
+/** Names of the arguments marked `required` without a definite default. */
+export type RequiredArgNames<A extends readonly object[]> = A[number] extends infer D
 	? D extends { name: infer N extends string }
 		? "required" extends keyof D
 			? true extends D["required"]

@@ -244,6 +244,13 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 		]
 	>;
 	type _schemas = Expect<Equal<Schemas[1]["FIX_REQUIRED_AFTER_OPTIONAL"], Message>>;
+	// An `unknown` input (`z.coerce.number()`) says nothing about absence, so it opens no gap.
+	type Coerced = { "~standard": { types?: { input: unknown; output: number } } };
+	type CoercedFirst = readonly [
+		{ name: "port"; schema: Coerced & StandardSchema },
+		{ name: "host"; type: "string"; required: true },
+	];
+	type _coercedFirst = Expect<Equal<ValidateArgs<CoercedFirst>, CoercedFirst>>;
 
 	type Exec = readonly [
 		{ name: "pod"; type: "string" },

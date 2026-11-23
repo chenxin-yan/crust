@@ -1,6 +1,6 @@
 import type { InferInput, StandardSchema } from "@crustjs/utils/schema";
 
-import type { ArgDef, ArgsDef, VariadicMode } from "../types.ts";
+import type { ArgDef, ArgsDef, RequiredArgNames, VariadicMode } from "../types.ts";
 import type {
 	CollisionBrand,
 	DefName,
@@ -42,21 +42,20 @@ type RequiredAfterOptionalError = {
 
 /**
  * `true` when argv must supply the argument: `required` without a default, or a scalar
- * schema that rejects absence (a variadic schema receives `[]`, never absence).
+ * schema that rejects absence (a variadic schema receives `[]`, never absence). An `unknown`
+ * input (`z.coerce.number()`) says nothing about absence, so it opts out like a union does.
  */
 type IsRequiredArg<D> = D extends { schema: infer S extends StandardSchema }
 	? D extends { variadic: VariadicMode }
 		? false
-		: undefined extends InferInput<S>
-			? false
-			: true
-	: D extends { required: true }
-		? D extends { default: infer Default }
-			? undefined extends Default
-				? true
-				: false
-			: true
-		: false;
+		: unknown extends InferInput<S>
+			? boolean
+			: undefined extends InferInput<S>
+				? false
+				: true
+	: RequiredArgNames<[D & object]> extends never
+		? false
+		: true;
 
 /** Only a definitely optional argument opens the gap; a conditional one opts out. */
 type IsOptionalArg<D> = [IsRequiredArg<D>] extends [false] ? true : false;

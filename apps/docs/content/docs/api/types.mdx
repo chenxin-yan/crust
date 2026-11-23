@@ -57,7 +57,7 @@ TypeScript checks the order of an argument list, across `.args()` calls; nothing
 
 - An `"afterDoubleDash"` or `"passthrough"` argument is last (`FIX_LAST_ARGUMENT_POSITION`).
 - A `variadic: true` argument is last, or directly before a final `"afterDoubleDash"` argument (`FIX_VARIADIC_POSITION`).
-- No required argument follows an optional one (`FIX_REQUIRED_AFTER_OPTIONAL`), except an `"afterDoubleDash"` argument, which follows `--` instead. An argument with a `default` is optional, and so is a schema-backed one whose schema accepts `undefined`.
+- No required argument follows an optional one (`FIX_REQUIRED_AFTER_OPTIONAL`), except an `"afterDoubleDash"` argument, which follows `--` instead. An argument with a `default` is optional, and so is a schema-backed one whose schema accepts `undefined`. A schema whose input is `unknown`, such as `z.coerce.number()`, counts as neither: it is not flagged, and a required argument may follow it.
 
 Every mode is supplied by name, as an array, in typed `run()` input, `--input`, and MCP. A word no argument takes, before or after `--`, is a usage error. See [Wrapper commands](/docs/guide/arguments-and-flags#wrapper-commands).
 
