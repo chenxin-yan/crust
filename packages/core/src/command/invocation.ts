@@ -527,8 +527,9 @@ function checkExtensionCommandNames(
 }
 
 /**
- * Reject a key packages add through `ArgExtras`, `FlagExtras`, or `CommandExtras` that no
- * installed Extension owns: the key's type exists whether or not its package is installed.
+ * Reject a definition key Core does not read that no installed Extension owns, such as one a
+ * package adds through `ArgExtras`, `FlagExtras`, or `CommandExtras`: the key's type exists
+ * whether or not its package is installed.
  */
 function checkOwnedKeys(node: CommandNode, path: string, owned: ReadonlySet<string>): void {
 	const check = (
@@ -596,7 +597,6 @@ export function buildExtensionTree(
 		);
 	const rootFlagOwners = flagOwners(true);
 	const childFlagOwners = flagOwners(false);
-	const ownedKeys = new Set(extensions.flatMap((extension) => extension.owns));
 	const handlers = new Map<string, BoundHandler>();
 	let noAction: PreparedInvocation["noAction"];
 	let renderer: PreparedInvocation["renderer"];
@@ -747,7 +747,7 @@ export function buildExtensionTree(
 				...hookContexts,
 			]);
 			flagShapes = checkReusedFlagShapes(prepared, path, ancestorFlagShapes ?? new Map());
-			checkOwnedKeys(prepared, path, ownedKeys);
+			checkOwnedKeys(prepared, path, new Set(extensions.flatMap((extension) => extension.owns)));
 		}
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);

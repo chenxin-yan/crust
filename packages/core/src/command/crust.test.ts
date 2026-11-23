@@ -1164,6 +1164,29 @@ describe("Extension named hooks", () => {
 			},
 		);
 
+		it("treats a list the delimiter leaves empty as omitted, as argv does", async () => {
+			async function execute(text: Text, argv: string[]) {
+				const stderr: string[] = [];
+				const exitCode = await new Crust("cli")
+					.flags({ tags: { type: "string", multiple: true, delimiter: ",", required: true } })
+					.extend(defineExtension(defineExtensionId("text")).preRun((ctx) => ctx.bindText(text)))
+					.action(() => {})
+					.execute({ argv, io: { stdout: { write() {} }, stderr: lineSink(stderr) } });
+				return { exitCode, stderr: stderr.join("\n") };
+			}
+			const fromArgv = await execute({}, ["--tags", ","]);
+			expect(fromArgv.exitCode).toBe(2);
+			expect(fromArgv.stderr).toContain('Missing required flag "--tags"');
+			expect(await execute({ flags: { tags: [","] } }, [])).toEqual(fromArgv);
+		});
+
+		it("does not suggest a command-line spelling for text that starts with =", async () => {
+			expect(await textApp({ flags: { port: "=5x" } }).execute([])).toEqual({
+				exitCode: 2,
+				stderr: "Error: Expected a number for --port.",
+			});
+		});
+
 		it("never converts text for a value argv gave, and reports a bound value as bound", async () => {
 			const sources: unknown[] = [];
 			const app = new Crust("cli")

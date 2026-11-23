@@ -288,6 +288,7 @@ function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
 
 function snapshotArg(def: ArgDef): ArgSnapshot {
 	return freezeCompact({
+		// Extras first, so a same-named extra never overrides a core field (also in snapshotFlag and projectMeta).
 		...Object.fromEntries(extraEntries(def, CORE_ARG_KEYS)),
 		name: def.name,
 		type: def.type,
