@@ -1219,7 +1219,6 @@ export async function executeInvocation(
 		let cancelledExitCode: number = EXIT_CODE_CANCELLED;
 		let cancelledBy: CancellingSignal | "SIGPIPE" | undefined;
 		const cancel = (name: CancellingSignal | "SIGPIPE", reason: Error): void => {
-			interruptedAt = performance.now();
 			if (!signal.aborted) {
 				cancelledBy = name;
 				cancelledExitCode =
@@ -1229,6 +1228,8 @@ export async function executeInvocation(
 		};
 		const onSignal = (name: CancellingSignal): void => {
 			if (!controller.signal.aborted) {
+				// Only a real signal opens the relay window: a Ctrl-C right after a closed stdout is not a duplicate.
+				interruptedAt = performance.now();
 				const { message } = CANCELLING_SIGNALS[name];
 				cancel(name, Object.assign(new DOMException(message, "AbortError"), { cause: name }));
 				return;

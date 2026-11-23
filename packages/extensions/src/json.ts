@@ -41,9 +41,9 @@ const flushHeld = /* @__PURE__ */ new WeakMap<ExtensionContext, () => void>();
  * command returns nothing, fails, or is cancelled. An async generator action
  * streams NDJSON on stdout instead: one `{"type":"event","data":…}` line per
  * yield, then one `{"type":"result","data":…}` or `{"type":"error","error":…}`
- * line. A cancelled invocation (exit code 130, or 143 after SIGTERM), or a failure another
- * Extension's `onError` hook claims, ends the stream without that final line,
- * so consumers should check the exit status. Cleanup that fails after a failure
+ * line. A cancelled invocation (exit code 130, 143 after SIGTERM, or 141 after a
+ * closed stdout), or a failure another Extension's `onError` hook claims, ends
+ * the stream without that final line, so consumers should check the exit status. Cleanup that fails after a failure
  * was rendered, or while a cancellation unwinds, is written to stderr as one
  * `{"type":"cleanup","error":…}` line. Exit codes are unchanged. Adds a
  * "JSON output" section to the root command's documentation saying so.

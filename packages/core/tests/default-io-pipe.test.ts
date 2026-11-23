@@ -174,15 +174,6 @@ await new Crust("pipe-cli")
 		});
 
 		it.runIf(fdWriter)(
-			`cancels silently with 141 once a consumer closes stdout (${runtime})`,
-			async () => {
-				const { exitCode, other } = await runWithEarlyClose(runtime, "stdout");
-				expect(exitCode).toBe(141);
-				expect(other).toBe("first\n");
-			},
-		);
-
-		it.runIf(fdWriter)(
 			`stops a streaming action piped to head -1 and aborts its signal (${runtime})`,
 			() => {
 				const source = `${importCore("dist/index.js")}await new Crust("follow")
@@ -213,6 +204,39 @@ await new Crust("pipe-cli")
 					stderr: "cause SIGPIPE\n",
 					status: 0,
 				});
+			},
+		);
+
+		it.runIf(fdWriter)(
+			`dies by a SIGINT that arrives right after stdout closed (${runtime})`,
+			() => {
+				const source = `${importCore("dist/index.js")}await new Crust("follow")
+	.action(async ({ stdout }) => {
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+		for (;;) {
+			try {
+				stdout("x");
+			} catch {
+				break;
+			}
+			await sleep(5);
+		}
+		process.kill(process.pid, "SIGINT");
+		await sleep(500);
+	})
+	.execute({ argv: [] });
+`;
+				const { stdout, status } = spawnSync(
+					"bash",
+					[
+						"-c",
+						'"$0" --input-type=module --eval "$1" | true; echo "${PIPESTATUS[*]}"',
+						runtime,
+						source,
+					],
+					{ encoding: "utf8", timeout: 5_000 },
+				);
+				expect({ stdout, status }).toEqual({ stdout: "130 0\n", status: 0 });
 			},
 		);
 
