@@ -46,6 +46,7 @@ Each `handler()` invocation runs one Effect program, provided with every `layer(
 
 The program and Layer builds run with the invocation's `signal`, so caller cancellation, Ctrl-C, or `SIGTERM` interrupts them.
 
+- A `Data.TaggedError` without a `message` field has an empty message, so it prints its tag (`Error: NotFound`, `{"message":"NotFound"}` under `--json`). Declare a `message` field to say what went wrong.
 - Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`.
 - Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
 

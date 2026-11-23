@@ -17,14 +17,16 @@ const jsonFlags = {
 } as const;
 
 /**
- * `CrustError` serializes through its own `toJSON()`; any other failure exposes only its message,
- * plus the details an error opts into with the `detailsKey` property (`jsonErrorDetails`).
+ * `CrustError` serializes through its own `toJSON()`; any other failure exposes only its message
+ * (its name when the message is empty, as Core's `Error:` line shows it), plus the details an
+ * error opts into with the `detailsKey` property (`jsonErrorDetails`).
  */
 function errorData(error: unknown, detailsKey: symbol): unknown {
 	if (error instanceof CrustError) return error.toJSON();
 	if (!(error instanceof Error)) return { message: String(error) };
+	const message = error.message || String(error);
 	const details: unknown = (error as Error & Record<symbol, unknown>)[detailsKey];
-	return details === undefined ? { message: error.message } : { message: error.message, details };
+	return details === undefined ? { message } : { message, details };
 }
 
 /** Per invocation: writes the stdout text its renderer still holds to stderr. */
