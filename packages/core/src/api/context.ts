@@ -11,13 +11,11 @@ import type {
 	MergeProviders,
 	RuntimeCommandSectionInput,
 } from "../types.ts";
-import type { LocalSectionsBrand } from "../validation/commands.brands.ts";
 import type {
 	ContextOwnedFlags,
 	FlagRecordErrors,
 	FlagsInput,
 	DefinedFlags,
-	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
 import type {
 	IsAny,
@@ -328,12 +326,10 @@ export interface ContextBuilder<
 	 * Takes one record keyed by flag name; repeated calls accumulate.
 	 */
 	flags<const F extends FlagsInput>(
-		flags: F & FlagRecordErrors<F, LocalSpellingsOf<OF>>,
+		flags: F & FlagRecordErrors<F>,
 	): ContextBuilder<Name, Use, AppendedFlags<OF, DefinedFlags<F>>>;
 	/** Document only the providing command (the root for Extension-provided Contexts). */
-	sections<const S extends readonly RuntimeCommandSectionInput[]>(
-		...sections: S & LocalSectionsBrand<{ sections: S }>["sections"]
-	): ContextBuilder<Name, Use, OF>;
+	sections(...sections: readonly RuntimeCommandSectionInput[]): ContextBuilder<Name, Use, OF>;
 	/**
 	 * Finish the definition. `setup` runs lazily, once per invocation, when a
 	 * consumer first reads the Context. Annotate its optional second parameter to
@@ -385,7 +381,7 @@ function createContextBuilder(
 				sections,
 			),
 		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
-		flags: (record: unknown) =>
+		flags: (record: object) =>
 			createContextBuilder(
 				name,
 				use,

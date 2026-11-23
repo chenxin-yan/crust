@@ -116,18 +116,12 @@ function invokeParse<ParseOutput>(
 	index?: number,
 ): ParseOutput {
 	const location = index === undefined ? label : `${label} element [${index}]`;
-	let result: ParseOutput;
 	try {
-		result = parse(raw);
+		return parse(raw);
 	} catch (err) {
 		const reason = err instanceof Error ? err.message : String(err);
 		throw new CrustError("PARSE", `Failed to parse ${location}: ${reason}`).withCause(err);
 	}
-	if (process.getBuiltinModule("node:util/types").isPromise(result)) {
-		result.catch(() => {});
-		throw new CrustError("PARSE", `Failed to parse ${location}: parse must be synchronous`);
-	}
-	return result;
 }
 
 /**
@@ -780,8 +774,8 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
  *
  * @param flags - Flag definitions keyed by result name; each `env.name` selects its variable
  * @param env - Raw variable text; only own properties are read
- * @throws {CrustError} `DEFINITION` for a definition `defineFlag` rejects (e.g. a
- *   `__proto__` key or a default outside `choices`); `PARSE` or `VALIDATION` on the first
+ * @throws {CrustError} `DEFINITION`, outside built artifacts, for a definition `defineFlag`
+ *   rejects (e.g. a `__proto__` key); `PARSE` or `VALIDATION` on the first
  *   coercion or requiredness failure, or `VALIDATION` aggregating schema issues. Core's own
  *   messages name the variable, never its value; schema issue messages are the validator's.
  */

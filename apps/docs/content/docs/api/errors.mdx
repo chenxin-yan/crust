@@ -20,14 +20,14 @@ See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/co
 
 ## Codes
 
-| Code                | Meaning                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| `DEFINITION`        | Malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section failure |
-| `PARSE`             | Argv syntax, structured input binding (`run()`, `bindInput`), or built-in value parsing failed          |
-| `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
-| `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                                   |
-| `OUTPUT`            | A Command Action result failed its [`.output()`](/docs/api/crust#outputschema) schema                   |
+| Code                | Meaning                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `DEFINITION`        | Malformed definition or collision, recipe, Extension, Context, or documentation-section failure |
+| `PARSE`             | Argv syntax, structured input binding (`run()`, `bindInput`), or built-in value parsing failed  |
+| `VALIDATION`        | Required-value or Standard Schema validation failed                                             |
+| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)             |
+| `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                           |
+| `OUTPUT`            | A Command Action result failed its [`.output()`](/docs/api/crust#outputschema) schema           |
 
 With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action; without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` returns `COMMAND_NOT_FOUND` for any unknown path segment.
 
@@ -50,7 +50,7 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 | `empty-spelling`, `invalid-spelling`                                              | A flag name, alias, or `short` is empty, contains whitespace, or starts with `-`; or a name or alias contains `=`                                                                            |
 | `integer-like-name`                                                               | A flag name is integer-like (`"0"`, `"10"`), which JavaScript records list before other keys                                                                                                 |
 | `reserved-no-prefix`                                                              | A flag name or alias starts with `no-`, which is reserved for boolean negation                                                                                                               |
-| `invalid-flags`                                                                   | `.flags()` receives a `null` or `undefined` record or definition, or a record whose prototype is not `Object.prototype` or `null` (such as one written with a literal `__proto__` key)       |
+| `invalid-flags`                                                                   | `.flags()` receives a record whose prototype is not `Object.prototype` or `null` (such as one written with a literal `__proto__` key)                                                        |
 | `missing-context`                                                                 | A Context is pulled or demanded but not provided                                                                                                                                             |
 | `missing-extension`                                                               | A command `.use()`s an Extension the app does not extend                                                                                                                                     |
 | `context-cycle`                                                                   | Context dependencies form a cycle                                                                                                                                                            |
@@ -60,7 +60,7 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 | `context-after-disposal`                                                          | Any Context is pulled after disposal                                                                                                                                                         |
 | `duplicate-section`                                                               | A Context's section title matches a command section or another Context's section on the same command                                                                                         |
 
-Other non-object definitions, such as a string or an array, are TypeScript errors and are not checked at runtime.
+The reasons about names, spellings, collisions, and sections come from the [definition checks](/docs/api/crust#definition-checks): they are raised when the CLI runs from source and by `crust build`, never by a built CLI. The Context reasons, `missing-extension`, and `extension-defer-after-setup` are raised wherever the CLI runs. A definition that is not an object, such as a string, an array, or `undefined`, is a TypeScript error and is not checked at runtime.
 
 ### `ParseErrorDetails`
 

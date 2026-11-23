@@ -19,19 +19,8 @@ import type {
 	RunInputPayload,
 	ValueSource,
 } from "../types.ts";
-import type {
-	KnownCommandSpellings,
-	ValidateCommandDefinitions,
-} from "../validation/commands.brands.ts";
 import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
-import type {
-	FlagRecordErrors,
-	FlagsInput,
-	DefinedFlags,
-	LocalSpellingsOf,
-	ProvideChecks,
-	ProvidedContextSpellings,
-} from "../validation/flags.brands.ts";
+import type { FlagRecordErrors, FlagsInput, DefinedFlags } from "../validation/flags.brands.ts";
 import type { IsClosedName, IsStaticTuple, IsUnion } from "../validation/shared.ts";
 import {
 	definingOf,
@@ -504,12 +493,6 @@ type ExtensionDeps<
 	ContextsDependencies<Provide> &
 	CommandDefinitionsDependencies<Commands>;
 
-/** Flag spellings an Extension already owns: declared flags plus provided Context-owned flags. */
-type DeclaredSpellings<
-	F extends ExtensionFlagsDef,
-	Provide extends readonly AnyContextInstance[],
-> = LocalSpellingsOf<F> | ProvidedContextSpellings<Provide>;
-
 // Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
 type AppendedFlags<OF extends ExtensionFlagsDef, F extends ExtensionFlagsDef> =
 	IsUnion<OF> extends true ? OF & F : keyof OF extends never ? F : OF & F;
@@ -542,7 +525,7 @@ export interface ExtensionData<
 	readonly [extensionHookProof]?: (deps: HookDeps) => void;
 	readonly id: ExtensionId;
 	readonly flags: Readonly<Record<string, ExtensionFlagDef>>;
-	/** @internal — phantom carrying the declared flag record for extend-time collision checks */
+	/** @internal — phantom carrying the declared flag record for the flags' types */
 	readonly _flagDefs?: FlagDefs;
 	readonly commands: Commands;
 	readonly use: readonly AnyContextFactory[];
@@ -729,14 +712,14 @@ export interface ExtensionBuilder<
 	 * commands that `.use()` them; by every command when this Extension's hooks use them.
 	 */
 	provide<const Cs extends readonly AnyContextInstance[]>(
-		...instances: KnownContextInstances<Cs> & ProvideChecks<DeclaredSpellings<OF, Provide>, Cs>
+		...instances: Cs & KnownContextInstances<Cs>
 	): ExtensionBuilder<Use, readonly [...Provide, ...Cs], OF, Commands, MetaKeys>;
 	/**
 	 * Own flags, one record keyed by flag name; repeated calls accumulate. `recursive`
 	 * (default `true`) contributes a flag to every command.
 	 */
 	flags<const F extends FlagsInput<ExtensionFlagDef>>(
-		flags: F & FlagRecordErrors<F, DeclaredSpellings<OF, Provide>, ExtensionFlagDef>,
+		flags: F & FlagRecordErrors<F, ExtensionFlagDef>,
 	): ExtensionBuilder<
 		Use,
 		Provide,
@@ -746,7 +729,7 @@ export interface ExtensionBuilder<
 	>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
-		...definitions: Ds & ValidateCommandDefinitions<Ds, KnownCommandSpellings<Commands>>
+		...definitions: Ds
 	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys>;
 	/** See {@link ExtensionHooks.setup}. */
 	setup(
@@ -835,13 +818,11 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 			next({ use: [...state.use, ...factories.map(definingOf)] }),
 		provide: (...instances: readonly AnyContextInstance[]) =>
 			next({ provide: [...state.provide, ...instances.map(definingOf)] }),
-		flags: (record: unknown) =>
+		flags: (record: object) =>
 			next({
 				flags: [
 					...state.flags,
-					...flagRecordEntries(record).map(
-						([name, def]) => [name, ownDefinition(def, "flag", name)] as const,
-					),
+					...flagRecordEntries(record).map(([name, def]) => [name, ownDefinition(def)] as const),
 				],
 			}),
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
@@ -852,7 +833,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),
 		handle: (flag: string, run: ExtensionHandler["run"], options: ExtensionHandleOptions = {}) => {
 			// A dynamic flag record hides its names from the types.
-			if (!Object.hasOwn(flags, flag)) {
+			if (process.env.CRUST_INTERNAL_BUILD !== "1" && !Object.hasOwn(flags, flag)) {
 				throw new CrustError(
 					"DEFINITION",
 					`Extension "${state.id}" handles flag "--${flag}", which it does not own`,
@@ -874,11 +855,10 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 				(...args: unknown[]) => {
 					const extension = define(sealed, ...args);
 					// Identity is a runtime value: types cannot tell one ExtensionId from another.
-					const returned = definingOf(extension).id;
-					if (returned !== state.id) {
+					if (process.env.CRUST_INTERNAL_BUILD !== "1" && definingOf(extension).id !== state.id) {
 						throw new CrustError(
 							"DEFINITION",
-							`Extension factory "${state.id}" returned Extension "${returned}"; return an Extension built from the handle it receives`,
+							`Extension factory "${state.id}" returned Extension "${definingOf(extension).id}"; return an Extension built from the handle it receives`,
 							{ subject: "extension", name: state.id, reason: "factory-id-mismatch" },
 						);
 					}

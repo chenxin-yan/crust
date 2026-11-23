@@ -59,13 +59,6 @@ type ConfigFileOption = true | `${string}.json`;
  */
 type FlagOf<D> = D extends unknown ? Omit<D, "default" | "required" | "flag"> : never;
 
-/** The flags the Context owns: every setting without `flag: false`. */
-type ConfigFlags<F extends ConfigFlagsDef> = {
-	[K in keyof F as F[K] extends { flag: false } ? never : K]: FlagOf<F[K]>;
-} extends infer D extends FlagsDef
-	? D
-	: never;
-
 /**
  * A setting's value: inferred as the setting would be as a flag (`required`, `default`, `choices`,
  * `parse`), for each variant of a definition typed as a union.
@@ -182,17 +175,6 @@ type AppNameBrand<N> = N extends "." | ".."
 type ReservedNameBrand<F> = [Extract<keyof F, "$schema" | "__proto__">] extends [never]
 	? unknown
 	: { readonly FIX_RESERVED_NAME: "no setting may be named $schema or __proto__" };
-
-// Types only: core's public `.flags()` signature, to reuse its checks on the flags the Context owns.
-declare const ownedFlagsBuilder: ReturnType<typeof defineContext<"config">>;
-
-/** Core's checks of a flag record (a bad `short`, two settings with one spelling) on the owned flags. */
-type CoreFlagChecks<F extends ConfigFlagsDef> =
-	ConfigFlags<F> extends Parameters<typeof ownedFlagsBuilder.flags<ConfigFlags<F>>>[0]
-		? unknown
-		: {
-				readonly FIX_FLAG_SPELLING: "a setting's flag is one .flags() refuses: check each short and alias, and that no two settings share one";
-			};
 
 type NoFileBrand<G, P> = [G, P] extends [undefined, undefined]
 	? { readonly FIX_NO_FILE: "set global, project, or both" }
@@ -360,8 +342,7 @@ export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
 		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
 		settings: F & {
 			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
-		} & ReservedNameBrand<F> &
-			CoreFlagChecks<F>,
+		} & ReservedNameBrand<F>,
 	): Config<F, G>;
 }
 
@@ -378,8 +359,8 @@ export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
  *
  * @throws {CrustError} `DEFINITION` for an unknown option, a file name with a directory or not
  *   ending in `.json`, or no file at all; `.flags()` throws it for a setting that is not a string,
- *   number or boolean flag definition, or one that `defineFlag` rejects (such as a default outside
- *   `choices`).
+ *   number or boolean flag definition, or one that `defineFlag` rejects (such as an empty
+ *   delimiter) when the CLI runs from source and in `crust build`.
  */
 export function defineConfig<
 	const G extends ConfigFileOption | undefined = undefined,

@@ -70,13 +70,11 @@ it("checks pending Extension flag relations at preparation", async () => {
 		},
 	});
 	const root = new Crust("app").extend(ext);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 	const withFlag = root.flags({ token: { type: "number" } });
 	await expect(withFlag.snapshot()).rejects.toThrow("collides");
 	const owner = defineContext("owner")
 		.flags({ token: { type: "number" } })
 		.setup(() => 1);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 	const withProvider = root.provide(owner());
 	await expect(withProvider.snapshot()).rejects.toThrow("collides");
 });
@@ -199,10 +197,9 @@ it("checks Extension flag relations before trusted reuse, including each factory
 		extension.flags(flags).provide(...provided),
 	);
 	expect(() => factory()).toThrow("collides");
-	expect(() =>
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		defineExtension(defineExtensionId("peers")).provide(owner(), peer()),
-	).toThrow("collides");
+	expect(() => defineExtension(defineExtensionId("peers")).provide(owner(), peer())).toThrow(
+		"collides",
+	);
 });
 
 it("keeps same-name Context replacement order inside checked Extensions", async () => {
@@ -227,10 +224,9 @@ it("keeps same-name Context replacement order inside checked Extensions", async 
 			.action(({ ctx }) => ctx.empty)
 			.run([], {}),
 	).toMatchObject({ status: "completed", result: "new" });
-	expect(() =>
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		defineExtension(defineExtensionId("repeated-owned")).provide(old(), old()),
-	).toThrow("collides");
+	expect(() => defineExtension(defineExtensionId("repeated-owned")).provide(old(), old())).toThrow(
+		"collides",
+	);
 });
 
 it("keeps root providers' flags off contributed commands that do not use them", async () => {

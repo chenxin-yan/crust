@@ -2,10 +2,8 @@ import type { ArgDef, ArgsDef } from "../types.ts";
 import type {
 	CollisionBrand,
 	DefName,
-	EmptyLiteralNameBrand,
 	HasClosedNames,
 	LocalValueBrand,
-	DefNameMembers,
 	UnknownKeysBrand,
 } from "./shared.ts";
 
@@ -23,19 +21,10 @@ type DuplicateArgBrand<A, Existing extends string> = CollisionBrand<
 	" is already defined"
 >;
 
-type EmptyArgNameError = { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" };
-
-/** Reject empty argument names, including empty members of a name union. */
-export type EmptyArgNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyArgNameError>;
-
-// An empty name renders as "<>" in help/snapshot labels and validation messages.
-type EmptyArgDefinitionNameBrand<A> = EmptyArgNameBrand<DefNameMembers<A>>;
-
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
 	LocalValueBrand<A> &
-	UnknownKeysBrand<A, ArgDef> &
-	EmptyArgDefinitionNameBrand<A>;
+	UnknownKeysBrand<A, ArgDef>;
 
 type VariadicPositionError = {
 	readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
@@ -61,8 +50,7 @@ type HeadPositionBrand<Head, Tail extends readonly unknown[]> = (Head extends {
  * Per-arg validation tuple type. Resolves to `A` when the constraints are
  * satisfied: only the last arg is variadic (or the one before a final
  * `afterDoubleDash` arg), only the last arg sets `afterDoubleDash`, names are
- * non-empty and unique, custom parsers are synchronous, and literal defaults
- * are within `choices`. Invalid definitions receive a branded property.
+ * unique, custom parsers are synchronous, and literal defaults are within `choices`. Invalid definitions receive a branded property.
  *
  * Generalized to work with any ordered tuple of object-typed definitions.
  * Uses `readonly object[]` to avoid TypeScript's weak type detection

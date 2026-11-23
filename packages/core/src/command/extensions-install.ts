@@ -24,7 +24,7 @@ function contributionTarget(
 		const next = Object.hasOwn(target.subCommands, segment)
 			? target.subCommands[segment]
 			: undefined;
-		if (!next) {
+		if (process.env.CRUST_INTERNAL_BUILD !== "1" && !next) {
 			throw new CrustError(
 				"DEFINITION",
 				`Extension "${extension.id}" section target "${command.join(" ")}" is not a canonical command path`,
@@ -35,7 +35,7 @@ function contributionTarget(
 				},
 			);
 		}
-		target = next;
+		target = next!;
 	}
 	return target;
 }
@@ -70,6 +70,18 @@ export function applyNodeContextSections(
 	// Match Context resolution: the last provider for a name replaces earlier ones.
 	const effective = [...new Map(instances.map((instance) => [instance.name, instance])).values()];
 	if (!effective.some((instance) => instance.sections.length > 0)) return;
+	if (process.env.CRUST_INTERNAL_BUILD !== "1") checkContextSectionTitles(node, path, effective);
+	node.meta.sections = [
+		...(node.meta.sections ?? []),
+		...effective.flatMap((instance) => instance.sections),
+	];
+}
+
+function checkContextSectionTitles(
+	node: CommandNode,
+	path: string,
+	effective: readonly AnyContextInstance[],
+): void {
 	const titles = new Set((node.meta.sections ?? []).map(({ title }) => title));
 	for (const instance of effective) {
 		for (const { title } of instance.sections) {
@@ -84,10 +96,6 @@ export function applyNodeContextSections(
 		// One Context may repeat its own titles, like a command's static sections.
 		for (const { title } of instance.sections) titles.add(title);
 	}
-	node.meta.sections = [
-		...(node.meta.sections ?? []),
-		...effective.flatMap((instance) => instance.sections),
-	];
 }
 
 /**

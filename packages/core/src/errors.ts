@@ -40,9 +40,15 @@ export type ParseErrorReason =
 	| "positional-gap"
 	| "flag-not-forwardable";
 
-/** `details.reason` values Core sets on `DEFINITION` errors. */
+/**
+ * `details.reason` values Core sets on `DEFINITION` errors. Checks of a CLI's definition (names,
+ * spellings, collisions) run from source and in `crust build`, not in built artifacts: each tests
+ * `process.env.CRUST_INTERNAL_BUILD !== "1"` literally where it runs, so the bundler that defines
+ * the marker drops it. The Context reasons (`missing-context`, `context-*`,
+ * `flags-before-validation`), `extension-defer-after-setup`, and `missing-extension` are raised
+ * wherever the CLI runs.
+ */
 export type DefinitionErrorReason =
-	| "after-double-dash-position"
 	| "alias-collision"
 	| "command-collision"
 	| "context-after-disposal"
@@ -50,9 +56,6 @@ export type DefinitionErrorReason =
 	| "context-defer-after-setup"
 	| "context-during-disposal"
 	| "context-flags-not-parsed"
-	| "default-outside-choices"
-	| "delimiter-without-multiple"
-	| "duplicate-arg"
 	| "duplicate-no-action"
 	| "duplicate-renderer"
 	| "duplicate-section"
@@ -68,7 +71,6 @@ export type DefinitionErrorReason =
 	| "foreign-command-builder"
 	| "integer-like-name"
 	| "invalid-alias"
-	| "invalid-env"
 	| "invalid-flags"
 	| "invalid-name"
 	| "invalid-section-path"
@@ -77,12 +79,10 @@ export type DefinitionErrorReason =
 	| "invalid-spelling"
 	| "missing-context"
 	| "missing-extension"
-	| "nested-command-extension"
 	| "reserved-name"
 	| "reserved-no-prefix"
 	| "reserved-spelling"
-	| "unknown-handle-flag"
-	| "variadic-position";
+	| "unknown-handle-flag";
 
 /** Details for argv syntax or built-in value parsing failures. */
 export interface ParseErrorDetails {

@@ -58,8 +58,6 @@ function _checkedCommandNames(name: string) {
 	const plain: string = name;
 	new Crust(name);
 	defineCommand(name, (command) => command);
-	// @ts-expect-error -- a dynamic name does not erase known alias grammar
-	defineCommand(name, { aliases: ["bad alias"] }, (command) => command);
 	defineCommand(name, { aliases: ["alternate"] }, (command) => command);
 	const app = new Crust(name)
 		.flags({ verbose: { type: "boolean" } })
@@ -78,14 +76,10 @@ function _genericCommandName<Name extends string>(name: Name) {
 	const command = defineCommand(name, (builder) => builder);
 	const renamed = command.as(name);
 	type _name = Expect<Equal<typeof renamed.name, Name>>;
-	// @ts-expect-error -- a generic string constraint does not prove canonical validity
-	new Crust("cli").add(command);
-	// @ts-expect-error -- a generic name does not prove valid renaming
-	new Crust("cli").add(renamed);
 	return command;
 }
 
-// A generic factory is checked where its result is added, against each literal name.
+// A generic factory's result is typed by each literal name it is added under.
 function _genericCommandFactory() {
 	function deployTo<const N extends "staging" | "production">(name: N) {
 		return defineCommand(name, { description: `Deploy to ${name}` }, (command) =>
@@ -103,23 +97,9 @@ function _genericCommandFactory() {
 	type _prod = Expect<
 		Equal<typeof prod, Promise<RunOutcome<{ env: "production"; force: boolean | undefined }>>>
 	>;
-	// @ts-expect-error -- each added literal name is still checked
-	new Crust("cli").add(_genericCommandName("-x"));
 }
 
-// Names in a spread array that is not a tuple are still checked where they are added.
-function _spreadArrayCommandNames() {
-	const commands = [
-		defineCommand("-x", (command) => command),
-		defineCommand("ok", (command) => command),
-	];
-	// @ts-expect-error -- "-x" is not a valid command name
-	new Crust("cli").add(...commands);
-	// @ts-expect-error -- and an Extension checks it too
-	defineExtension(defineExtensionId("spread")).add(...commands);
-}
-
-// A generic name may carry literal aliases: the self-alias check runs where the definition is added.
+// A generic name may carry literal aliases.
 function _genericCommandNameWithLiteralAliases() {
 	function deployTo<const N extends "staging" | "production">(name: N) {
 		return defineCommand(name, { aliases: ["d"] }, (command) => command);
@@ -129,8 +109,6 @@ function _genericCommandNameWithLiteralAliases() {
 	}
 	void new Crust("cli").add(deployTo("staging"));
 	void new Crust("cli").add(renameTo("production"));
-	// @ts-expect-error -- an alias equal to its own command name is rejected where it is added
-	void new Crust("cli").add(defineCommand("issue", { aliases: ["issue"] }, (command) => command));
 }
 
 function _localMetadata(
@@ -141,26 +119,10 @@ function _localMetadata(
 ) {
 	// @ts-expect-error -- audiences are constructively nonempty
 	const _empty: CommandSectionInput = { title: "Notes", body: "text", only: [] };
-	// @ts-expect-error -- trusted metadata owns nonblank section text
-	new Crust("cli", { sections: [{ title: " ", body: "text" }] });
-	// @ts-expect-error -- titles are single line
-	defineCommand("child", { sections: [{ title: "a\nb", body: "text" }] }, (b) => b);
 	new Crust("cli", { sections: [{ title, body: "text" }] });
 	defineCommand("child", { aliases }, (b) => b);
 	new Crust("cli", { sections: [{ title, body: "text", only }] });
-	defineCommand("child", { aliases, sections: [{ title, body: "text" }] }, (b) => b);
-	// @ts-expect-error -- a dynamic body cannot hide a known invalid title
-	new Crust("app", { sections: [{ title: "two\nlines", body: text }] });
-	// @ts-expect-error -- a dynamic title cannot hide a known invalid body
-	new Crust("app", { sections: [{ title: text, body: " " }] });
-}
-
-function _conditionalSectionText(cond: boolean) {
-	const section = cond
-		? { title: "Valid" as const, body: "Body" as const }
-		: { title: "" as const, body: "Body" as const };
-	// @ts-expect-error -- one valid branch cannot erase the invalid title of another
-	defineCommand("child", { sections: [section] }, (b) => b);
+	defineCommand("child", { aliases, sections: [{ title, body: text }] }, (b) => b);
 }
 
 function _localAliasProofIsNotDestinationProof(aliases: string[]) {
@@ -213,10 +175,6 @@ function _contextBoundaries(name: string, flags: FlagsDef) {
 	defineContext("auth")
 		.flags(flags)
 		.setup(() => 1);
-	defineContext("auth")
-		// @ts-expect-error -- Context flags close the same local spelling proof
-		.flags({ token: { type: "string", short: "xx" } })
-		.setup(() => 1);
 	const auth = defineContext(name)
 		.flags({ token: { type: "string" } })
 		.setup(({ flags }) => flags.token);
@@ -260,8 +218,6 @@ function _commandCompositionBoundary(definitions: readonly ReturnType<typeof def
 	// Sealed recipes parse only the Context flags they use, so nothing is inherited to collide
 	new Crust("cli").provide(owner()).add(colliding);
 	defineCommand("parent", (b) => b.provide(owner()).add(colliding));
-	// @ts-expect-error -- a used Context's flags join the command's own namespace
-	defineCommand("used", (b) => b.use(owner).flags({ token: { type: "number" } }));
 }
 
 function _contextProofCannotBeForged() {

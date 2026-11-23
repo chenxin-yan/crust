@@ -279,7 +279,10 @@ export function defineApi<const Id extends string = never>(
 export function defineApi(options: DefineApiOptions): Api {
 	const { spec, id = "openapi", paginate, baseUrl } = options;
 	const isUrl = spec instanceof URL;
-	if (isUrl ? spec.protocol !== "file:" : !isPlainObject(spec)) {
+	if (
+		process.env.CRUST_INTERNAL_BUILD !== "1" &&
+		(isUrl ? spec.protocol !== "file:" : !isPlainObject(spec))
+	) {
 		throw new CrustError(
 			"DEFINITION",
 			"defineApi: `spec` must be a file: URL or the OpenAPI document as an object; specs are pinned, never fetched",

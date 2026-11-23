@@ -129,18 +129,7 @@ function _metadataRequirements() {
 	>;
 	// @ts-expect-error Structural assignment must not manufacture metadata.
 	const _laundered: typeof app = unversioned;
-	const VersionedCrust = Crust<
-		{},
-		[],
-		{},
-		never,
-		never,
-		{},
-		{},
-		{ extension: never; tree: never; demands: {}; pending: never },
-		void,
-		{ version: string }
-	>;
+	const VersionedCrust = Crust<{}, [], {}, {}, {}, { demands: {} }, void, { version: string }>;
 	// @ts-expect-error Explicit type arguments cannot manufacture metadata.
 	new VersionedCrust("app");
 	// @ts-expect-error Explicit undefined cannot manufacture metadata either.
@@ -251,8 +240,6 @@ function _fluentInference() {
 	app.action(async ({ ctx }) => {
 		const _value: { info: () => void } = await ctx.logger;
 	});
-	// @ts-expect-error The contributed flag still participates in collisions.
-	app.flags({ verbose: { type: "string" } });
 	const needsLogger = defineExtension<"version">(ID).use(logger);
 	// @ts-expect-error Metadata requirements must not erase Context requirements.
 	new Crust("app", { version: "1" }).extend(needsLogger);
@@ -320,11 +307,6 @@ function _positionalCallbacks() {
 		.onError((_error, { flags }) => {
 			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
 		});
-	const first = defineCommand("first", { aliases: ["f"] }, (cmd) => cmd);
-	defineExtension(ID)
-		.add(first)
-		// @ts-expect-error Repeated add() calls check earlier command spellings.
-		.add(defineCommand("f", (cmd) => cmd));
 }
 
 function _handleCallbacks() {

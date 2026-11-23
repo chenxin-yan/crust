@@ -40,11 +40,9 @@ A child command name (from `defineCommand()`, `.command()`, or `.as()`) and each
 | Not `__proto__`                        | `reserved-name` |                   |
 | An alias differs from the command name |                 | `alias-collision` |
 
-The last two columns are the runtime `DEFINITION` reason.
+The last two columns are the `DEFINITION` reason.
 
-- TypeScript rejects literal names and aliases that break these rules. A `.command()` name and aliases, and `defineCommand()` aliases, fail at that call. A `defineCommand()` or `.as()` name, and an alias equal to the command's own name, fail where the definition is passed to `.add()`, including when spread from an array.
-- So a generic factory such as `<const N extends "staging" | "production">(name: N) => defineCommand(name, recipe)` compiles, and each name it is called with is checked when added.
-- At runtime, `defineCommand()`, `.command()`, and `.as()` validate every name, including ones the types can't see.
+- `defineCommand()`, `.command()`, and `.as()` check every name and alias when they run. These are [definition checks](#definition-checks): they run from source and in `crust build`, not in TypeScript and not in the built CLI.
 - The root name given to `new Crust()` is never an argv token, so only the blank and `__proto__` rules apply to it.
 
 ## Constructor
@@ -65,13 +63,16 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 
 `.flags()` takes one record keyed by flag name; `.args()`, `.provide()`, `.add()`, and `.extend()` are variadic. All accept dynamic collections and accumulate across calls.
 
-- TypeScript rejects statically known invalid definitions and collisions. Runtime checks cover what the types can't see: a name typed `string`, a spread array, a `Record` of definitions, or properties hidden by a structural view.
-- A runtime-only name doesn't switch off compile-time checks among statically known names: after `.add(dynamicCommand)`, a later literal command that collides with an earlier one is still a compile error.
-- Flags are the exception. Once a command's flags include a runtime-only spelling (from a dynamic record, a Context, or an Extension), later flags on that command are checked against the earlier ones only at runtime. Subcommands are still checked against the statically known Context and recursive Extension flags they inherit.
-- Extension ids aren't tracked by the types, so a same-id re-registration that reuses an earlier registration's literal names is a compile-time collision, although the runtime replaces it.
-- TypeScript-only constraints, such as requiring a command recipe, have no runtime check; `as never`, `any`, and plain JavaScript bypass them. Runtime checks still apply to all inputs, including conflicting section audiences, malformed flag `env` bindings, and delimiters on scalar flags.
+### Definition checks
 
-Runtime checks throw a `DEFINITION` [error](/docs/api/errors) at different times:
+Each rule about a definition is checked once, by TypeScript or by Core at runtime.
+
+- TypeScript checks types and structure: unknown keys, a `default` within literal `choices`, the argument list (unique names, and the position of `variadic` and `afterDoubleDash` arguments), a schema's input type, a synchronous `parse`, Context dependencies, required root metadata, an `env` binding that is an object, `delimiter` only with `multiple`, and a section with `only` or `except` but not both. These have no runtime check: `as never`, `any`, a value TypeScript can't see (such as a `choices` array that is not a literal tuple), and plain JavaScript bypass them.
+- Core checks names, spellings, and the assembled tree at runtime: blank, reserved, or malformed names and spellings, the `no-` prefix, integer-like flag names, one-character `short`s, empty `env` names and delimiters, section text, and every collision (flags, aliases, sibling commands, Extension commands, section titles, a second `renderer` or `noAction`). Each throws a `DEFINITION` [error](/docs/api/errors).
+- These runtime checks run when the CLI runs from source (`bun`, `node`, tests) and when [`crust build`](/docs/modules/crust) takes its snapshot, so a definition error fails the build. The artifacts `crust build` bundles leave them out, so a built CLI does not repeat them. `crust build --no-validate` skips the snapshot, and these checks with it.
+- So a definition must be the same on every run: one that varies with the platform or the environment is checked only as it is on the build machine. A name, alias, or flag built from runtime data, such as user-configured aliases or a plugin list, is input: validate it yourself before you pass it to Crust.
+
+The runtime checks throw at different times:
 
 | Check                                                                                               | When                                                      |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -127,7 +128,7 @@ const copy = new Crust("copy").args(
 );
 ```
 
-Names must be unique, custom `parse` functions must be synchronous, and only the last argument across all calls may be variadic, or the one right before a final [`afterDoubleDash`](/docs/api/types#argdef) argument. Only the last argument may set `afterDoubleDash`. A schema-backed argument receives the raw string (`string[]` when variadic, `undefined` when absent); its schema owns coercion, defaults, requiredness, and validation, so it cannot also set `type`, `default`, `required`, `choices`, or `parse`.
+TypeScript checks that names are unique, custom `parse` functions are synchronous, and only the last argument across all calls may be variadic, or the one right before a final [`afterDoubleDash`](/docs/api/types#argdef) argument. Only the last argument may set `afterDoubleDash`. A schema-backed argument receives the raw string (`string[]` when variadic, `undefined` when absent); its schema owns coercion, defaults, requiredness, and validation, so it cannot also set `type`, `default`, `required`, `choices`, or `parse`.
 
 ## `.flags(flags)`
 
@@ -144,11 +145,10 @@ const serve = new Crust("serve").flags({
 
 `.flags()` takes exactly one record per call; call it again to add more flags.
 
-- Only own enumerable string keys are flags; TypeScript rejects symbol keys and unquoted number keys, so write `"1.5"` rather than `1.5`. Integer-like names (`"0"`, or digits without a leading zero such as `"2"`) are rejected at any length, because JavaScript lists array-index keys first and would reorder help. A record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key, throws a `DEFINITION` error.
+- Only own enumerable string keys are flags; TypeScript rejects symbol keys. Integer-like names (`"0"`, or digits without a leading zero such as `"2"`) are rejected at any length, because JavaScript lists array-index keys first and would reorder help. A record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key, throws a `DEFINITION` error.
 - A key written after a spread (`{ ...shared, out }`) silently replaces the spread's flag of the same name. Attach shared sets in their own `.flags()` call: collisions across calls are checked.
-- A record with an index signature, such as one built with `Object.fromEntries()`, is checked when the call runs; literal keys beside it or in later `.flags()` calls are still checked by TypeScript, against each other but not against the dynamic flags.
 - Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
-- Names, aliases, and `short` are written without dashes: each must be non-empty, contain no whitespace, and not start with `-`. Names and aliases must also not contain `=`, because `--name=value` splits there. TypeScript rejects literal spellings that break this; dynamic ones throw a `DEFINITION` error, with `reason: "empty-spelling"` for an empty spelling and `"invalid-spelling"` for the rest.
+- Names, aliases, and `short` are written without dashes: each must be non-empty, contain no whitespace, and not start with `-`. Names and aliases must also not contain `=`, because `--name=value` splits there. A spelling that breaks this throws a `DEFINITION` error, with `reason: "empty-spelling"` for an empty spelling and `"invalid-spelling"` for the rest.
 - One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Generated docs list both.
 - Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from generated docs. Names and aliases beginning with `no-` are reserved.
 - Schema-backed flags still set `type: "string" | "boolean"` to declare whether a value token follows; the schema receives the raw value, including `undefined` when omitted. With `type: "json"`, the token is parsed as JSON first and the schema receives the parsed value.
@@ -189,7 +189,7 @@ const app = new Crust("my-cli")
 - Flags declared with a Context's `.flags()` are installed on this command and on inline `.command()` children added afterwards. The builder's flag type includes them. A reusable definition parses them only if it declares the Context with [`.use()`](#usefactories); other commands reject them as unknown. See [Flags owned by a Context](/docs/guide/contexts#flags-owned-by-a-context).
 - Its `.sections()` document only the providing command, after the command's own sections. Duplicate titles throw `DEFINITION` (`duplicate-section`) during preparation, not at `.provide()`. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Within one call, dependencies may appear in any order; across calls, providers must precede their consumers.
-- Names, dependencies, and owned-flag collisions are checked by TypeScript. Runtime composition checks reject missing declared providers and dynamic flag collisions with a `DEFINITION` error, without running setup. Pulling a Context also checks missing providers, dependency cycles, and lifecycle misuse.
+- Names and dependencies are checked by TypeScript, owned-flag collisions by the [definition checks](#definition-checks). Runtime composition checks reject missing declared providers with a `DEFINITION` error, without running setup. Pulling a Context also checks missing providers, dependency cycles, and lifecycle misuse.
 - A command can shadow an inherited Context. After `.action()`, a local replacement must satisfy the value type that action received.
 
 ### Context lifecycle
@@ -214,7 +214,7 @@ const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 ```
 
 - `.extend()` only records the list. The app applies and validates the final list when it prepares, so flag or command collisions and missing Contexts surface there as `DEFINITION` errors.
-- A repeated `ExtensionId` replaces the earlier registration at runtime, which also rescues an earlier registration that conflicted. The types don't track ids: they still see the earlier registration's commands and flags, so reusing one of its literal names is a compile-time collision.
+- A repeated `ExtensionId` replaces the earlier registration at runtime, which also rescues an earlier registration that conflicted. The types don't track ids: they still see the earlier registration's commands and flags.
 - Once a call includes an Extension with runtime-only command names, typed `run()` results are `unknown` for the commands of Extensions registered up to and in that call. Commands added with `.add()` or `.command()` keep their result types.
 - Extensions apply to every command, whether it was added before or after `.extend()`. Extension commands are built on first use, like added definitions.
 - Contexts an Extension provides reach every command. Between a root `.provide()` and an Extension-provided Context of the same name, the later call wins, as the types infer; a command's own `.provide()` always wins.

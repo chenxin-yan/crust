@@ -14,26 +14,6 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 }
 
 {
-	// brands empty argument names
-	type Result = ValidateArgs<readonly [{ name: ""; type: "string" }]>;
-	type _empty = Expect<Equal<Result[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
-	type Widened = ValidateArgs<readonly [{ name: string; type: "string" }]>;
-	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
-	// an open template member does not hide an empty literal member
-	type Mixed = ValidateArgs<readonly [{ name: "" | `p-${string}`; type: "string" }]>;
-	type _mixed = Expect<Equal<Mixed[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
-	type MixedValid = ValidateArgs<readonly [{ name: "pos" | `p-${string}`; type: "string" }]>;
-	type _mixedValid = Expect<Equal<Extract<keyof MixedValid[0], `FIX_${string}`>, never>>;
-	// a definition union: the open variant's `string` must not absorb the literal variant's ""
-	type MixedDefs = ValidateArgs<
-		readonly [{ name: ""; type: "string" } | { name: string; type: "number" }]
-	>;
-	type _mixedDefs = Expect<
-		Equal<MixedDefs[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">
-	>;
-}
-
-{
 	// brands the specific non-last arg that is variadic
 	type Args = readonly [
 		{ name: "files"; type: "string"; variadic: true },

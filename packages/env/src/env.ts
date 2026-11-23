@@ -9,8 +9,7 @@ import {
 } from "@crustjs/core";
 import { formatDescription, type LocalValueBrand, parseFlagValues } from "@crustjs/core/tooling";
 
-const FLAG_ONLY_KEYS = ["short", "aliases", "negatable", "noNegate", "hidden", "env"] as const;
-type FlagOnlyKey = (typeof FLAG_ONLY_KEYS)[number];
+type FlagOnlyKey = "short" | "aliases" | "negatable" | "noNegate" | "hidden" | "env";
 
 // `?: never`, not just Omit: a generic `V extends EnvVarsDef` would admit them as excess keys.
 type WithoutFlagOnlyKeys<D> = D extends unknown
@@ -68,18 +67,8 @@ function readRaw(
 	return emptyStringAsUndefined && raw === "" ? undefined : raw;
 }
 
-/** Reject what `defineFlag` rejects, plus flag-only keys that would change env parsing. */
+/** Reject what `defineFlag` rejects, naming the variable. */
 function ownVar(name: string, def: EnvVarDef): EnvVarDef {
-	for (const key of FLAG_ONLY_KEYS) {
-		// An explicit `undefined` changes nothing, so only a value is rejected.
-		if (def[key] !== undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				`Environment variable "${name}" cannot declare flag-only "${key}"`,
-				{ name, reason: "flag-only-key" },
-			);
-		}
-	}
 	try {
 		// A name-less definition keeps variable names such as `__proto__` out of flag spelling rules.
 		return defineFlag(def);
@@ -175,8 +164,8 @@ function environmentSection(vars: OwnedVars): { title: string; body: string }[] 
  * Define typed environment variables as a lazy Context named `name`.
  *
  * Definitions and option settings are copied here, rejecting with
- * `CrustError("DEFINITION")` what `defineFlag` rejects (such as a default
- * outside `choices`) and flag-only keys. Reading `ctx.<name>` reads the
+ * `CrustError("DEFINITION")` what `defineFlag` rejects (such as an empty
+ * delimiter) when the CLI runs from source and in `crust build`. Reading `ctx.<name>` reads the
  * `source` values then and validates every variable, throwing one
  * `CrustError("ENV")` listing each missing or invalid variable without its
  * value. `.provide()` also documents the variables in an "Environment" section

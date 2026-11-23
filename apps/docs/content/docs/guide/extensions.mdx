@@ -23,7 +23,7 @@ Available commands: deploy
 - `.extend()` order doesn't change behavior. When several such flags are passed, the first one wins, as in GNU tools: `--help --version` prints help, `--version --help` the version.
 - `--no-color` applies to help output too.
 
-Call `.extend()` on the root builder; registering Extensions inside a command recipe is a `DEFINITION` error. See [built-in Extensions](/docs/modules/extensions) for the full list.
+Call `.extend()` on the root builder; a command recipe's builder has no `.extend()`. See [built-in Extensions](/docs/modules/extensions) for the full list.
 
 ## Write your own
 
@@ -65,7 +65,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 ### Ids and builders
 
 - Give each Extension a namespaced id, such as `acme:preview`, with `defineExtensionId()`.
-- Registering the same id again replaces the earlier registration. TypeScript doesn't track ids, though: if the re-registration contributes the same literal command names, or a later command reuses one, it is a compile-time collision even though the app runs.
+- Registering the same id again replaces the earlier registration.
 - Builder methods other than `.factory()` return new frozen Extensions; there is no build step.
 - Declare flags and Contexts before the hooks that read them. Collection methods such as `.flags()` append; setting a hook again replaces its callback.
 
@@ -88,8 +88,7 @@ checking my-cli
 
 Contributed commands work like commands added with `.add()`, including typed `run()` paths.
 
-- A name or alias that collides with an app command or another Extension's command is a compile error.
-- A collision TypeScript can't see, such as a name chosen by a factory option, is a `DEFINITION` error when the app prepares.
+- A name or alias that collides with an app command or another Extension's command is a `DEFINITION` error when the app prepares, from source or in `crust build` (see [definition checks](/docs/api/crust#definition-checks)).
 - Such a runtime-only name makes `run()` results `unknown` for the Extension commands registered up to and in that `.extend()` call, since a same-id re-registration may replace them. Your own commands keep their result types.
 - They are [MCP tools](/docs/modules/mcp#tools) only when `include` names them.
 
@@ -121,7 +120,7 @@ setup → handle → preRun → validation → action → postRun
 - **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully.
 - **`postRun`:** a `completed` outcome carries `outcome.result`: the [`.output()`](/docs/api/crust#outputschema) schema's output if the command declares one, otherwise the action's awaited return value. After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` outcomes also carry its yielded values as `outcome.events`.
 - **Early failures:** routing, argv-parse, and typed `run()` input failures happen before the other hooks. Under `execute()`, `onError` still sees routing and argv-parse failures; `run()` never calls `onError` and returns a `failed` outcome.
-- **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares.
+- **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares, from source or in `crust build`.
 
 Only handlers and `noAction` can end an invocation early, and reordering `.extend()` changes neither choice. It only orders setups, `preRun` checks, and `onError` hooks (registration order) and `postRun` hooks and cleanups (reverse).
 

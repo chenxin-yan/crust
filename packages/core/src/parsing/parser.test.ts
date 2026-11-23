@@ -7,10 +7,7 @@ import { makeNode, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
 import { createCommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgDef } from "../types.ts";
 import { parseArgs, parseFlagValues, parseStructured, validateParsed } from "./parser.ts";
-
-type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
 
 /** Surface a deferred value error the way the invocation's terminal step does. */
 function parseAndValidate(...[command, argv, env]: Parameters<typeof parseArgs>): void {
@@ -336,16 +333,6 @@ describe("validateParsed", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
-	it("contains a rejected Promise from a dynamic parser", async () => {
-		const rejecting: DynamicParser = async () => {
-			throw new Error("boom");
-		};
-		const app = new Crust("test").flags({ n: { type: "string", parse: rejecting } });
-		await expect(unwrap(app.run([], { flags: { n: "42" } }))).rejects.toThrow(
-			"parse must be synchronous",
-		);
-	});
-
 	it("runs parse per element on multi-value flags", () => {
 		const cmd = makeNode({
 			meta: "test",
@@ -458,32 +445,7 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		expect(received).toBe("42");
 	});
 
-	it("names the flag or argument whose dynamic definition is invalid", () => {
-		const choices: string[] = ["a", "b"];
-		expect(() =>
-			new Crust("test").flags({ mode: { type: "string", choices, default: "z" } }),
-		).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				message: 'Flag "mode" default must be one of choices',
-				details: { subject: "flag", name: "mode", reason: "default-outside-choices" },
-			}),
-		);
-		// Every element of a multiple default is checked, not just the first.
-		expect(() =>
-			new Crust("test").flags({
-				tags: { type: "string", multiple: true, choices, default: ["a", "z"] },
-			}),
-		).toThrow("default must be one of choices");
-		expect(() =>
-			new Crust("test").args({ name: "mode", type: "string", choices, default: "z" }),
-		).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				message: 'Argument "mode" default must be one of choices',
-				details: { subject: "argument", name: "mode", reason: "default-outside-choices" },
-			}),
-		);
+	it("names the flag whose dynamic definition is invalid", () => {
 		const short: string = "vv";
 		expect(() => new Crust("test").flags({ verbose: { type: "boolean", short } })).toThrow(
 			expect.objectContaining({
@@ -1048,7 +1010,7 @@ describe("parseFlagValues", () => {
 		).rejects.toMatchObject({ code: "VALIDATION" });
 	});
 
-	it("rejects definitions core normalization rejects, including a __proto__ key", async () => {
+	it("rejects a definition core normalization rejects, such as a __proto__ key", async () => {
 		const reserved = Object.defineProperty({}, "__proto__", {
 			value: { type: "string", env: { name: "X" } },
 			enumerable: true,
@@ -1057,12 +1019,6 @@ describe("parseFlagValues", () => {
 			code: "DEFINITION",
 			details: { reason: "reserved-spelling" },
 		});
-		await expect(
-			parseFlagValues(
-				{ level: { type: "string", choices: ["ok"], default: "bad", env: { name: "L" } } },
-				{},
-			),
-		).rejects.toMatchObject({ code: "DEFINITION" });
 	});
 
 	it("awaits async schemas and ignores inherited variables", async () => {

@@ -194,6 +194,37 @@ await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running $
 	);
 
 	it.skipIf(hostTarget() === null)(
+		"fails on a definition error the CLI raises from source",
+		async () => {
+			process.cwd = () => tmpDir;
+			writeFileSync(
+				join(tmpDir, "src", "collision-cli.ts"),
+				`import { Crust } from ${JSON.stringify(corePath)};
+await new Crust("collision-cli")
+  .flags({ out: { type: "string", short: "o" }, open: { type: "boolean", short: "o" } })
+  .action(() => {})
+  .execute();
+`,
+			);
+			writePackageJson(tmpDir, {
+				...basePackageJson,
+				bin: { "collision-cli": "src/collision-cli.ts" },
+			});
+
+			const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--target",
+				"host",
+			]);
+
+			expect(exitCode).not.toBe(0);
+			expect(stderr).toContain(
+				'Flag "open" collides with existing flag "out" on command "collision-cli"',
+			);
+		},
+	);
+
+	it.skipIf(hostTarget() === null)(
 		"applies --env-file to validation and embeds PUBLIC_ constants only",
 		async () => {
 			const host = hostTarget()!;

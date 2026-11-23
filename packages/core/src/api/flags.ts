@@ -1,7 +1,5 @@
 import { normalizeFlag, normalizeArg } from "../parsing/spellings.ts";
 import type { ArgDef, FlagDef, OmitName } from "../types.ts";
-import type { EmptyArgNameBrand } from "../validation/args.brands.ts";
-import type { LocalFlagBrand } from "../validation/flags.brands.ts";
 import type { LocalValueBrand, UnknownKeysBrand } from "../validation/shared.ts";
 
 /** A positional argument definition without its name — the `defineArg` input shape. */
@@ -26,7 +24,7 @@ type Named<N extends string, D> = D extends unknown ? Frozen<{ name: N } & D> : 
  * attached under names it (`.flags({ format })`); attachment checks the name and collisions.
  */
 export function defineFlag<const D extends FlagDef>(
-	def: D & LocalFlagBrand<D> & UnknownKeysBrand<D, FlagDef>,
+	def: D & LocalValueBrand<D> & UnknownKeysBrand<D, FlagDef>,
 ): Owned<D>;
 
 export function defineFlag(def: FlagDef): FlagDef {
@@ -35,7 +33,7 @@ export function defineFlag(def: FlagDef): FlagDef {
 
 /** Define and own one positional argument; layout belongs to its consuming command. */
 export function defineArg<const N extends string, const D extends UnnamedArgDef>(
-	name: N & EmptyArgNameBrand<N>,
+	name: N,
 	def: D & LocalValueBrand<D> & UnknownKeysBrand<D, UnnamedArgDef>,
 ): Named<N, D>;
 

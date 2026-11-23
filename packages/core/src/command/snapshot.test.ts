@@ -396,7 +396,6 @@ describe("command metadata sections", () => {
 
 	it("rejects CR/LF in authored and contributed section titles", async () => {
 		expect(
-			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
 		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(

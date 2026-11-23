@@ -173,7 +173,6 @@ describe("Crust .provide()", () => {
 			.setup(() => ({}));
 		const app = new Crust("cli").flags({ mode: { type: "string" } });
 
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => app.provide(owner())).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",

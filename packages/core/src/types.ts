@@ -493,8 +493,7 @@ export type OmitName<D> = D extends unknown ? Omit<D, "name"> : never;
 /**
  * Merges two flag sets as a flat intersection.
  *
- * Statically known shared keys are branded at compile time (`FlagRecordErrors`,
- * `ProvideChecks`). Per-call merge layers (mapped type or `Simplify<Omit & …>`)
+ * Shared keys collide; the definition checks reject that at runtime. Per-call merge layers (mapped type or `Simplify<Omit & …>`)
  * nested and hit TS2589 at ~47 / ~31 chained calls. Chaining builder methods
  * (`.flags()`, `.provide()`, `.extend()`) also write `&` inline instead of this
  * alias: re-instantiating an alias revisits its type arguments, so each chained

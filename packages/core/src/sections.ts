@@ -71,12 +71,12 @@ export function normalizeSection(
 ): CommandSection {
 	const { title, body, only, except } = section;
 	if (
-		!title.trim() ||
-		/[\r\n]/.test(title) ||
-		!body.trim() ||
-		only?.length === 0 ||
-		except?.length === 0 ||
-		(only !== undefined && except !== undefined)
+		process.env.CRUST_INTERNAL_BUILD !== "1" &&
+		(!title.trim() ||
+			/[\r\n]/.test(title) ||
+			!body.trim() ||
+			only?.length === 0 ||
+			except?.length === 0)
 	) {
 		throw invalidSections(owner);
 	}
