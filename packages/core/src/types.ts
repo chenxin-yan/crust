@@ -521,7 +521,8 @@ interface RepeatableOccurrenceFields {
 	multiple: true;
 	/**
 	 * Split each string argv value, and the environment variable's text, into separate
-	 * occurrences (`--tags a,b` with `","` is two occurrences). Empty segments are dropped.
+	 * occurrences (`--tags a,b` with `","` is two occurrences). Empty segments are dropped;
+	 * `--tags ""` is an empty list, and a variable left with no segment is unset.
 	 * Boolean argv switches stay booleans. Opt-in with no default; structured `run()`
 	 * arrays are never split.
 	 */

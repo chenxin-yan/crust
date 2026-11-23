@@ -95,7 +95,7 @@ A boolean flag takes no value: `--color=false` is a `PARSE` error. `--no-<name>`
 
 `env` names a variable, or lists variables of which the first that is set wins. It is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`; an empty variable counts as unset for a boolean. Variables come from `process.env`; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
 
-`delimiter` splits string argv occurrences and the environment text alike. It requires `multiple: true` and drops empty segments. Boolean argv switches are never split.
+`delimiter` splits string argv occurrences and the environment text alike. It requires `multiple: true` and drops empty segments: `--tags ""` is `[]`, unless the flag is required, while a variable with no segment left is unset. Boolean argv switches are never split.
 
 `hidden: true` parses the flag as usual but leaves it out of help, man pages, completion, generated skills, search, and command input schemas. `deprecated: "message"` prints `Warning: flag "--name" is deprecated. message` on stderr once when the command line gives the flag, and help appends `[deprecated: message]`; command input schemas mark it `deprecated: true`. `requires: ["json"]` names flags of the same record the flag needs when given; another name is a compile error. See [Hidden and deprecated flags](/docs/guide/arguments-and-flags#hidden-and-deprecated-flags).
 

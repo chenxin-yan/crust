@@ -312,7 +312,7 @@ publishing to npm tags=latest,beta,next
 ```
 
 - It requires `multiple: true`, which TypeScript checks, and a nonempty separator. An empty `delimiter` or variable name throws a `DEFINITION` error when the CLI runs from source or in `crust build`.
-- Empty segments are dropped. Zero values after splitting follow the usual default, required, and schema rules, but an argv occurrence still wins over the environment.
+- Empty segments are dropped. On the command line, a flag left with zero values (`--tag ""`) is an empty list, which wins over the default and the environment; a required flag still needs a value. A variable left with zero values counts as unset.
 - [`run()`](/docs/api/crust#runpath-input-options) takes arrays and never splits them.
 - Boolean argv stays `--flag`. Repeated booleans can split environment text such as `true,false` with `env: "FEATURES", delimiter: ","`.
 

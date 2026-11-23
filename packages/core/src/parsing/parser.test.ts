@@ -1139,11 +1139,25 @@ describe("parseArgs \u2014 delimiter", () => {
 		);
 	});
 
-	it("keeps an explicit all-empty argv value as argv, never falling through to env", () => {
-		// Zero occurrences after splitting then follow the existing empty-array rule (default).
-		expect(parseArgs(cmd, ["--tags", ","], { APP_TAGS: "stale" }).flags.tags).toEqual(["x"]);
-		expect(parseArgs(cmd, ["--ports", ":"], { APP_PORTS: "80" }).flags.ports).toBeUndefined();
+	it("reads an all-empty argv value as an empty list, over the default and env", () => {
+		const parsed = parseArgs(cmd, ["--tags", "", "--ports", ":"], {
+			APP_TAGS: "stale",
+			APP_PORTS: "80",
+		});
+		expect(parsed.flags).toEqual({ tags: [], ports: [] });
+		expect(parsed.sources.flags).toEqual({ tags: "argv", ports: "argv" });
+		// An all-empty variable stays unset.
 		expect(parseArgs(cmd, [], { APP_TAGS: "," }).flags.tags).toEqual(["x"]);
+	});
+
+	it("still requires a value from a required flag given only empty segments", () => {
+		const command = makeNode({
+			meta: "test",
+			flags: { ids: { type: "string", multiple: true, delimiter: ",", required: true } },
+		});
+		expect(() => parseAndValidate(command, ["--ids", ","])).toThrow(
+			'Missing required flag "--ids"',
+		);
 	});
 
 	it("splits boolean env text while keeping boolean argv switches and structured values intact", () => {

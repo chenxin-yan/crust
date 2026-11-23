@@ -345,9 +345,8 @@ function envVariable(def: FlagDef, env: FlagEnvironment): [string, string] | und
  * Select each flag's source: argv > `env` > `default`.
  *
  * Source selection looks at explicit argv presence *before* delimiter
- * splitting, so `--tags ""` stays an argv value (zero occurrences, then
- * default/required rules) instead of letting a stale environment variable
- * override an explicit request. Structured `run()` input never reaches this
+ * splitting, so `--tags ""` stays an argv value (an empty list) instead of
+ * letting a stale environment variable or the default override an explicit request. Structured `run()` input never reaches this
  * function as `argvValues`; {@link parseStructured} passes only its omitted flags.
  */
 function applyEnvAndDelimiter(
@@ -366,9 +365,10 @@ function applyEnvAndDelimiter(
 				Array.isArray(argvValue.value)
 			) {
 				const occurrences = splitOccurrences(argvValue.value, def.delimiter);
-				// Zero occurrences after splitting follow the omission rules (default, required).
-				values[name] =
-					occurrences.length === 0 ? undefined : { kind: "string", value: occurrences };
+				// `--filter ""` asks for an empty list; a required flag still needs a value.
+				const missing =
+					occurrences.length === 0 && def.required === true && def.default === undefined;
+				values[name] = missing ? undefined : { kind: "string", value: occurrences };
 			} else {
 				values[name] = argvValue;
 			}
