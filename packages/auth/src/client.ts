@@ -229,7 +229,8 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 	/**
 	 * The four methods over the login `select` picks at each call, with `read`, the file as the
 	 * pick saw it. With profiles, the profile is in `status()` and its name in a
-	 * `LoginRequiredError`.
+	 * `LoginRequiredError`. Only with `loginTakesProfile` does `login()` read `profile`: an options
+	 * object held in a variable may carry it past the type of another client's `login()`.
 	 */
 	function clientOf(
 		select: () => Promise<{
@@ -237,9 +238,11 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			profile: Profile | undefined;
 			read: () => Promise<CredentialsDocument | undefined>;
 		}>,
+		loginTakesProfile = false,
 	): ProfileClient {
 		async function login(loginOptions: ProfileLoginOptions): Promise<void> {
-			const { flow = "auto", signal, onWarning, profile } = loginOptions;
+			const { flow = "auto", signal, onWarning } = loginOptions;
+			const profile = loginTakesProfile ? loginOptions.profile : undefined;
 			const mode = flow === "auto" ? detectLoginMode() : flow;
 			if (mode === "refuse") {
 				throw new LoginRequiresInteractionError(
@@ -255,8 +258,16 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 						? (await select()).source
 						: sourceOf(checkProfile(profile, "profile"));
 			const server = await discover(config, issuer, { signal, fetch });
-			const save = async (source: TokenSource, tokens: () => Promise<TokenSet>) => {
-				const ticket = await tokenSourceInternals(source).beginLogin({ signal, onWarning });
+			const save = async (
+				source: TokenSource,
+				tokens: () => Promise<TokenSet>,
+				observedIn?: CredentialsDocument,
+			) => {
+				const ticket = await tokenSourceInternals(source).beginLogin({
+					signal,
+					onWarning,
+					observedIn,
+				});
 				try {
 					// Recorded with the login, so every refresh asks for the same resource.
 					await ticket.commit(await tokens(), {
@@ -270,9 +281,14 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			// Opened before the flow, so a logout while it runs makes the commit fail, not undo it.
 			if (typeof target !== "function")
 				return save(target, () => signIn(server, mode, loginOptions));
+			// The profile is named only after sign-in, so its commit is checked against the file as it
+			// was before: a logout or login of that profile meanwhile still makes it fail.
+			const before =
+				(await files.read()) ??
+				(await files.update((current) => current ?? emptyDocument(), signal));
 			const tokens = await signIn(server, mode, loginOptions);
 			const profileName = checkProfile(await unlessAborted(target(tokens), signal), "profile");
-			return save(sourceOf(profileName), async () => tokens);
+			return save(sourceOf(profileName), async () => tokens, before);
 		}
 
 		const loginToken = (
@@ -364,13 +380,14 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			: { name: chosen, via: "current" };
 	}
 
-	const current = clientOf(async () => {
+	const selectCurrent = async () => {
 		const fromEnv = envProfile();
 		if (fromEnv) return { source: sourceOf(fromEnv.name), profile: fromEnv, read: readDocument };
 		const document = await files.read();
 		const profile = chosenIn(document);
 		return { source: sourceOf(profile.name), profile, read: async () => document };
-	});
+	};
+	const current = clientOf(selectCurrent);
 
 	function profileClient(profileName?: string): ProfileClient {
 		if (profileName === undefined) return current;
@@ -415,7 +432,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 	}
 
 	return Object.freeze({
-		...current,
+		...clientOf(selectCurrent, true),
 		profile: profileClient,
 		profiles: Object.freeze({ list, use }),
 	});

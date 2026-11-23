@@ -64,6 +64,8 @@ interface Flight {
 	readonly promise: Promise<AccessToken>;
 	readonly controller: AbortController;
 	waiters: number;
+	/** The `onWarning` of each waiter still attached, which a plaintext write reports to. */
+	readonly warnings: OnWarning[];
 }
 
 /** In-process single-flight refreshes, by credentials file and key. */
@@ -94,8 +96,16 @@ interface TokenSourceInternals {
 		baseUrl?: string;
 		onWarning?: OnWarning;
 	}): Promise<AccessToken>;
-	/** `beginLogin()`, whose commit reports a plaintext write to `onWarning`. */
-	beginLogin(options: { signal?: AbortSignal; onWarning?: OnWarning }): Promise<LoginTicket>;
+	/**
+	 * `beginLogin()`, whose commit reports a plaintext write to `onWarning`. With `observedIn`, an
+	 * earlier snapshot of the file, the commit is stale against that snapshot instead of the file
+	 * as it is now.
+	 */
+	beginLogin(options: {
+		signal?: AbortSignal;
+		onWarning?: OnWarning;
+		observedIn?: CredentialsDocument;
+	}): Promise<LoginTicket>;
 }
 
 /** A call's own receiver of a plaintext write, instead of the store's `keyring.onWarning`. */
@@ -253,7 +263,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 	async function refresh(
 		generation: string,
 		signal: AbortSignal,
-		onWarning: OnWarning | undefined,
+		warnings: readonly OnWarning[],
 	): Promise<AccessToken> {
 		return store.lockIdentity(
 			key,
@@ -268,6 +278,14 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 				// The keys come first: one that can't be read or created stops the refresh unmarked.
 				const secret = await store.reveal(document, key, record, signal);
 				if (secret.refreshToken === undefined) throw new LoginRequiredError("expired");
+				// Without a waiter's own callback, the store's `keyring.onWarning` gets it.
+				const onWarning =
+					warnings.length === 0
+						? undefined
+						: (warning: AuthWarning) => {
+								// A copy: a callback that aborts its own call detaches it from `warnings`.
+								for (const notify of warnings.slice()) notify(warning);
+							};
 				const writeKey = await store.writeKey(document, false, signal, onWarning);
 				const server = await discoverServer(signal);
 				throwIfAborted(signal);
@@ -374,18 +392,20 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 		let flight = refreshFlights.get(id);
 		if (!flight) {
 			const controller = new AbortController();
-			// A joined refresh reports to the caller that started it.
-			const promise = refresh(generation, controller.signal, onWarning).finally(() => {
+			const warnings: OnWarning[] = [];
+			const promise = refresh(generation, controller.signal, warnings).finally(() => {
 				if (refreshFlights.get(id) === flight) refreshFlights.delete(id);
 			});
 			promise.catch(() => {});
-			flight = { promise, controller, waiters: 0 };
+			flight = { promise, controller, waiters: 0, warnings };
 			refreshFlights.set(id, flight);
 		}
 		const joined = flight;
 		joined.waiters += 1;
+		if (onWarning) joined.warnings.push(onWarning);
 		return detach(joined.promise, signal, () => {
 			joined.waiters -= 1;
+			if (onWarning) joined.warnings.splice(joined.warnings.indexOf(onWarning), 1);
 			// Until the mark is written, the refresh stops when its last waiter leaves.
 			if (joined.waiters === 0) joined.controller.abort(new AbortError());
 		});
@@ -479,7 +499,12 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 		async beginLogin({
 			signal,
 			onWarning,
-		}: { signal?: AbortSignal; onWarning?: OnWarning } = {}): Promise<LoginTicket> {
+			observedIn,
+		}: {
+			signal?: AbortSignal;
+			onWarning?: OnWarning;
+			observedIn?: CredentialsDocument;
+		} = {}): Promise<LoginTicket> {
 			throwIfAborted(signal);
 			if (openLogins.has(id)) throw new LoginInProgressError();
 			openLogins.add(id);
@@ -499,6 +524,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 					async () => {
 						// An absent file gets its document now, so the ticket observes a storeId.
 						const document =
+							observedIn ??
 							(await store.read()) ??
 							(await store.update((current) => current ?? emptyDocument(), signal));
 						const raw = document.records[key];

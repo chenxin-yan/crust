@@ -46,7 +46,7 @@ import {
 	StaleCommitError,
 	UnsafeStorageError,
 } from "./errors.ts";
-import { createTokenSource } from "./token-source.ts";
+import { createTokenSource, refreshFlights } from "./token-source.ts";
 import type {
 	AuthWarning,
 	BrowserLoginPrompt,
@@ -962,6 +962,45 @@ describe("storage", () => {
 		expect(warnings).toHaveLength(2);
 	});
 
+	it("without a keyring, a shared refresh tells every call still waiting for it, not one that left", async () => {
+		let issued = 0;
+		const { auth, app, issuer, fetch } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		// The login's lock is held until all three calls wait for the same refresh.
+		const store = credentialStore({ app });
+		const { key } = createTokenSource({
+			config: defineServers({ servers: [{ issuer, clientId: "cli" }] }),
+			identity: { issuer, clientId: "cli", apiOrigins: [API] },
+			store,
+			fetch,
+		});
+		const lock = await holdLock((fn) => credentialStoreInternals(store).lockIdentity(key, fn));
+		const flight = () => [...refreshFlights.values()][0];
+		const joined: AuthWarning[] = [];
+		const left: AuthWarning[] = [];
+		const leaving = new AbortController();
+		// The first call starts the refresh without a callback; the others join it.
+		const starter = auth.token();
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(1));
+		const joiner = auth.token({ onWarning: (warning) => joined.push(warning) });
+		const quitter = auth.token({
+			signal: leaving.signal,
+			onWarning: (warning) => left.push(warning),
+		});
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(3));
+		leaving.abort();
+		expect(await rejection(quitter)).toBeInstanceOf(AbortError);
+		await lock.release();
+		expect((await starter).value).toBe("AT2");
+		expect((await joiner).value).toBe("AT2");
+		expect(joined).toEqual([{ code: "plaintext-storage" }]);
+		expect(left).toEqual([]);
+	});
+
 	it("strict refuses to store a login without a keyring, with a typed key error", async () => {
 		const { auth } = setup(undefined, { strict: true });
 		const error = await rejection(auth.login({ onUrl: browser().onUrl, onCode: noCode }));
@@ -1602,6 +1641,21 @@ describe("profiles", () => {
 		});
 	});
 
+	it("login({ profile }) is read only by the client's own login(), not by a profile's or the current one's", async () => {
+		const { auth } = profiled();
+		// Not a fresh literal, so TypeScript allows the extra property.
+		const options = { onUrl: browser().onUrl, onCode: noCode, profile: "personal" };
+		await auth.profile("work").login(options);
+		await auth.profile().login({ ...options, onUrl: browser().onUrl });
+		expect(await auth.profiles.list()).toEqual([
+			{ name: "default", current: true },
+			{ name: "work", current: false },
+		]);
+		const { auth: unprofiled } = setup();
+		await unprofiled.login({ ...options, onUrl: browser().onUrl });
+		expect(await unprofiled.status()).toMatchObject({ source: "login" });
+	});
+
 	it("login({ profile }) stores nothing when the function throws, is aborted or names a bad profile", async () => {
 		const { auth, requests } = profiled();
 		const thrown = new Error("no account");
@@ -1621,6 +1675,17 @@ describe("profiles", () => {
 			return new Promise<string>(() => {});
 		}, controller.signal);
 		expect(await rejection(pending)).toBeInstanceOf(AbortError);
+		expect(await auth.profiles.list()).toEqual([]);
+		// A logout of the named profile while the user signs in is not undone.
+		let loggedOut: unknown;
+		const stale = await rejection(
+			login(async () => {
+				loggedOut = await auth.profile("work").logout();
+				return "work";
+			}),
+		);
+		expect(loggedOut).toEqual({ local: "absent", remote: "skipped" });
+		expect(stale).toBeInstanceOf(StaleCommitError);
 		expect(await auth.profiles.list()).toEqual([]);
 		// A bad name given up front is refused before any request.
 		const before = requests.length;
