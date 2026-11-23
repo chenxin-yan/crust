@@ -109,4 +109,17 @@ describe("search", () => {
 			),
 		);
 	});
+
+	it("takes another command name, used by its documentation section too", async () => {
+		const app = new Crust("acme")
+			.extend(search({ command: "find" }), help())
+			.add(
+				defineCommand("search", { description: "Search issues" }, (cmd) => cmd.action(() => {})),
+			);
+
+		expect((await captureExecute(app, ["find", "issues"])).stdout).toBe(
+			"acme search  Search issues\n",
+		);
+		expect((await captureExecute(app, ["--help"])).stdout).toContain('acme find "<task>"');
+	});
 });

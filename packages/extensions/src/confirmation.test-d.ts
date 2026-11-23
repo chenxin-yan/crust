@@ -1,6 +1,6 @@
 import { defineCommand } from "@crustjs/core";
 
-import { confirm } from "./confirm.ts";
+import { confirmation } from "./confirmation.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -8,7 +8,7 @@ type Equal<A, B> =
 
 function _confirmTypesItsContextValue() {
 	defineCommand("drop", (cmd) =>
-		cmd.use(confirm).action(async ({ ctx }) => {
+		cmd.use(confirmation).action(async ({ ctx }) => {
 			type _Confirm = Expect<
 				Equal<Awaited<typeof ctx.confirm>, (message: string) => Promise<void>>
 			>;

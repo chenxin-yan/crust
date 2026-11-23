@@ -1120,7 +1120,7 @@ describe("api <path>", () => {
 		expect(run.status).toBe(0);
 	});
 
-	// An earlier consumer, such as input() for `--input -`, read stdin to EOF.
+	// An earlier consumer, such as jsonInput() for `--input -`, read stdin to EOF.
 	it.each([
 		["node", process.execPath, ["--input-type=module"]],
 		["bun", "bun", []],

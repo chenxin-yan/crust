@@ -7,7 +7,7 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
-const JSON_INPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:input");
+const JSON_INPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:json-input");
 
 const inputFlags = {
 	input: {
@@ -45,7 +45,7 @@ async function readInput(value: string, context: ExtensionContext): Promise<stri
  * `--help` takes over. Adds a "JSON input" section to the root command's
  * documentation saying so.
  */
-export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
+export const jsonInput: ExtensionFactory<[], {}, [], typeof inputFlags> =
 	/* @__PURE__ */ defineExtension(JSON_INPUT).factory((extension) =>
 		extension
 			.flags(inputFlags)

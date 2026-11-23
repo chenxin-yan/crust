@@ -33,12 +33,19 @@ function _nextStepsTypesInputFromTheDefinition() {
 			next.add(bare, raw);
 			// @ts-expect-error a primitive is no input.
 			next.add(bare, 42);
+			next.add("pnpm install");
+			next.add("pnpm install", "Install dependencies");
+			// @ts-expect-error A text step has no input to render.
+			next.add("pnpm install", { args: {} });
 		}),
 	);
 }
 
 function _nextStepsOnErrorTakesDefinitions() {
 	nextSteps({ onError: () => [{ command: status, input: { args: { env: "prod" } } }] });
+	nextSteps({ onError: () => [{ command: "pnpm install", description: "Install dependencies" }] });
 	// @ts-expect-error steps name a command by its definition, not a path.
 	nextSteps({ onError: () => [{ command: ["status"] }] });
+	// @ts-expect-error A text step has no input to render.
+	nextSteps({ onError: () => [{ command: "pnpm install", input: { args: {} } }] });
 }

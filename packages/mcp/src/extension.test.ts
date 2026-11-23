@@ -1,4 +1,5 @@
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { json } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -44,6 +45,25 @@ describe("mcpExtension", () => {
 		const vscode = await capture(["mcp", "config", "--client", "vscode"]);
 		expect(Object.keys(JSON.parse(vscode.stdout.join("")))).toEqual(["servers"]);
 		expect(vscode.stderr).toEqual([]);
+	});
+
+	it("returns the client JSON, so --json prints it as one JSON string", async () => {
+		const withJson = new Crust("demo").extend(
+			json(),
+			mcpExtension({ app: (): AnyCrust => withJson }),
+		);
+		let stdout = "";
+		let stderr = "";
+		const exitCode = await withJson.execute({
+			argv: ["mcp", "config", "--client", "vscode", "--json"],
+			io: {
+				stdout: { write: (chunk) => void (stdout += String(chunk)) },
+				stderr: { write: (chunk) => void (stderr += String(chunk)) },
+			},
+		});
+		expect(exitCode).toBe(0);
+		expect(JSON.parse(JSON.parse(stdout))).toHaveProperty("servers.demo.type", "stdio");
+		expect(stderr).toBe("");
 	});
 
 	it("uses an explicit launch for both client JSON and the Claude command", async () => {

@@ -20,3 +20,10 @@ function _versionRequiresGuaranteedRootMeta(meta: RootCommandMeta) {
 	// @ts-expect-error Optional root metadata does not guarantee a version.
 	new Crust("app", meta).extend(version());
 }
+
+function _versionShortSpellings() {
+	version("1", { short: "V" });
+	version("1", { short: false });
+	// @ts-expect-error `-v` and `-V` are the conventional version shorts; any other letter is a mistake.
+	version("1", { short: "x" });
+}

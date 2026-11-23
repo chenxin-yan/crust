@@ -111,7 +111,7 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 
 ### Command input as JSON
 
-`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name. Flags an Extension declares (`--help`, `--json`, `--input`, …, marked by `extension` in their [`FlagSnapshot`](/docs/api/types#flagsnapshot)) configure the invocation, not the command, so they are left out; Context-owned flags such as `confirm()`'s `--yes` stay.
+`commandInputSchema(command, path)` describes a command's input as one flat JSON object: every arg and flag by name. Flags an Extension declares (`--help`, `--json`, `--input`, …, marked by `extension` in their [`FlagSnapshot`](/docs/api/types#flagsnapshot)) configure the invocation, not the command, so they are left out; Context-owned flags such as `confirmation()`'s `--yes` stay.
 
 It throws, naming `path`, when an arg and a flag share a name.
 

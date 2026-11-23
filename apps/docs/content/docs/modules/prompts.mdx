@@ -188,7 +188,7 @@ NonInteractiveError: Prompts require an interactive terminal (TTY).
 - Ctrl+C or Ctrl+D rejects with a `DOMException` whose name is `AbortError`, and the prompt replaces its frame with a cancelled line, such as `✗ Project name?`.
 - When the resolved `signal` aborts, the prompt draws the same cancelled line, restores the terminal (cursor shown, raw mode off), and rejects with `signal.reason`. An already-aborted signal rejects before rendering.
 
-To choose before prompting, call `canPrompt(io?)`, the rule the prompts follow. The [`confirm()` Extension](/docs/modules/extensions/confirm) uses it too.
+To choose before prompting, call `canPrompt(io?)`, the rule the prompts follow. The [`confirmation()` Extension](/docs/modules/extensions/confirmation) uses it too.
 
 ```ts
 const runtime = flags.runtime ?? (canPrompt() ? await select({ choices: ["bun", "node"] }) : "bun");

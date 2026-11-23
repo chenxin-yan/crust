@@ -21,15 +21,23 @@ type DefinitionInput<D> =
 		? RunInput<Shape>
 		: RunInputPayload;
 
-/** A follow-up command to suggest. */
-export interface NextStep {
-	/** The command's definition; the step names the command the application added from it. */
-	readonly command: AnyCommandDefinition;
-	/** Arguments and flags in the shape `run()` takes, rendered as argv. */
-	readonly input?: RunInputPayload | undefined;
-	/** What the step is for; printed above its command line. */
-	readonly description?: string | undefined;
-}
+/** A follow-up step to suggest: a command the application adds, or a command line as text. */
+export type NextStep =
+	| {
+			/** The command's definition; the step names the command the application added from it. */
+			readonly command: AnyCommandDefinition;
+			/** Arguments and flags in the shape `run()` takes, rendered as argv. */
+			readonly input?: RunInputPayload | undefined;
+			/** What the step is for; printed above its command line. */
+			readonly description?: string | undefined;
+	  }
+	| {
+			/** A command line printed as written, such as `cd my-app` or `pnpm install`. */
+			readonly command: string;
+			readonly input?: undefined;
+			/** What the step is for; printed above its command line. */
+			readonly description?: string | undefined;
+	  };
 
 /** The `nextSteps` Context value: collects the steps to suggest after this invocation. */
 export interface NextSteps {
@@ -39,6 +47,8 @@ export interface NextSteps {
 		input?: DefinitionInput<D>,
 		description?: string,
 	): void;
+	/** Suggest a command line printed as written, such as `cd my-app` or `pnpm install`. */
+	add(text: string, description?: string): void;
 }
 
 export interface NextStepsOptions {
@@ -55,8 +65,18 @@ const addedSteps = new WeakMap<NextSteps, NextStep[]>();
 const nextStepsContext = /* @__PURE__ */ defineContext("nextSteps").setup(() => {
 	const steps: NextStep[] = [];
 	const next: NextSteps = {
-		add: (command, input?: RunInputPayload, description?: string) =>
-			void steps.push({ command, input, description }),
+		add: (
+			command: AnyCommandDefinition | string,
+			input?: RunInputPayload | string,
+			description?: string,
+		) =>
+			void steps.push(
+				typeof command === "string"
+					? // SAFETY: the text overload's second parameter is the description.
+						{ command, description: input as string | undefined }
+					: // SAFETY: the definition overload's second parameter is the input.
+						{ command, input: input as RunInputPayload | undefined, description },
+			),
 	};
 	addedSteps.set(next, steps);
 	return next;
@@ -71,7 +91,7 @@ function errorMessage(error: unknown): string {
  * prints a `Next steps:` block to stderr: on failure the `onError` steps first,
  * then the steps the action added. A command declares the Context with
  * `.use(nextSteps)`, awaits `ctx.nextSteps`, and calls
- * `.add(definition, input?, description?)` on it.
+ * `.add(definition, input?, description?)` or `.add(text, description?)` on it.
  * A step whose command the application does not add, or whose input does not match
  * it, is skipped with a note on stderr; printing never changes the invocation's result.
  */

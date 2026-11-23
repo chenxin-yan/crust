@@ -14,7 +14,7 @@ $ my-cli --version
 my-cli v1.2.3
 ```
 
-`version()` owns the root-only `--version` and `-v` flag. It prints to stdout instead of running the Command Action. Subcommands reject it wherever it is typed, since the command that runs reads every flag: `my-cli deploy --version` and `my-cli --version deploy` are both an unknown flag. A subcommand may give `-v` its own meaning, such as `--verbose`, as long as it takes no value: `my-cli -v deploy` then passes it to `deploy`.
+`version()` owns the root-only `--version` flag and its short `-v`. It prints to stdout instead of running the Command Action. Subcommands reject it wherever it is typed, since the command that runs reads every flag: `my-cli deploy --version` and `my-cli --version deploy` are both an unknown flag. A subcommand may give `-v` its own meaning, such as `--verbose`, as long as it takes no value: `my-cli -v deploy` then passes it to `deploy`.
 
 ## API
 
@@ -32,6 +32,14 @@ version(() => process.env.APP_VERSION ?? "dev");
 version("1.2.3", { format: "plain" });
 // $ my-cli --version
 // 1.2.3
+```
+
+`short` picks the short spelling: `"v"` (the default), `"V"` for an application that uses `-v` for something else, as ripgrep uses it for `--invert-match`, or `false` for none. `--version` itself is fixed.
+
+```ts
+version("1.2.3", { short: "V" });
+// $ my-cli -V
+// my-cli v1.2.3
 ```
 
 <auto-type-table

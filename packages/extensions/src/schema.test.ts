@@ -3,9 +3,9 @@ import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
 import { help } from "./help.ts";
-import { input } from "./input.ts";
+import { jsonInput } from "./json-input.ts";
 import { json } from "./json.ts";
-import { schema } from "./schema.ts";
+import { renderCommandIndex, schema } from "./schema.ts";
 
 const deployResult = {
 	type: "object",
@@ -248,7 +248,7 @@ describe("schema", () => {
 				{ title: "Not for schema", body: "Help only.", except: [schemaExtension] },
 			],
 		})
-			.extend(schemaExtension, json(), input())
+			.extend(schemaExtension, json(), jsonInput())
 			.add(
 				defineCommand(
 					"deploy",
@@ -290,6 +290,23 @@ describe("schema", () => {
 		const { stdout } = await captureExecute(app, ["--llms"]);
 		expect(stdout).toContain("## `mono run <task> [-- <extra>...]`");
 		expect(stdout).toContain("- `[-- <extra>...]` (string)");
+	});
+
+	it("renderCommandIndex() renders what --llms prints without running the app", async () => {
+		const app = buildCli();
+		const { stdout } = await captureExecute(app, ["--llms"]);
+
+		expect(`${await renderCommandIndex(await app.snapshot())}\n`).toBe(stdout);
+	});
+
+	it("takes another command name, leaving the app's own schema command alone", async () => {
+		const app = new Crust("mycli")
+			.extend(schema({ command: "describe" }))
+			.add(defineCommand("schema", (cmd) => cmd.action(({ stdout }) => stdout("own"))));
+
+		expect((await captureExecute(app, ["schema"])).stdout).toBe("own\n");
+		const described = await app.run(["describe"], { args: { path: ["schema"] } });
+		expect(described).toMatchObject({ status: "completed", result: { input: { type: "object" } } });
 	});
 
 	it("--llms is root-only", async () => {

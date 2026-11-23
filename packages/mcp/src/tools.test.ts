@@ -1,5 +1,5 @@
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
-import { completion, confirm, help, input, json, schema } from "@crustjs/extensions";
+import { completion, confirmation, help, json, jsonInput, schema } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
 import { mcpExtension } from "./extension.ts";
@@ -89,7 +89,7 @@ describe("toolsFromSnapshot", () => {
 
 	it("serves Extension commands only when included, and never Extension flags", async () => {
 		const app: AnyCrust = new Crust("cli", { description: "CLI", version: "1.0.0" })
-			.extend(help(), input(), json(), completion(), schema())
+			.extend(help(), jsonInput(), json(), completion(), schema())
 			.extend(mcpExtension({ app: () => app }))
 			.add(defineCommand("work", (c) => c.flags({ fast: { type: "boolean" } }).action(noop)));
 		const snapshot = await app.snapshot();
@@ -142,10 +142,10 @@ describe("toolsFromSnapshot", () => {
 		);
 	});
 
-	it("lists confirm()'s yes input only on tools whose command uses confirm", async () => {
+	it("lists confirmation()'s yes input only on tools whose command uses confirmation", async () => {
 		const app = new Crust("fixture")
-			.extend(confirm())
-			.add(defineCommand("drop", (c) => c.use(confirm).action(noop)))
+			.extend(confirmation())
+			.add(defineCommand("drop", (c) => c.use(confirmation).action(noop)))
 			.add(defineCommand("list", (c) => c.action(noop)));
 		const properties = Object.fromEntries(
 			toolsFromSnapshot(await app.snapshot()).map(({ name, inputSchema }) => [

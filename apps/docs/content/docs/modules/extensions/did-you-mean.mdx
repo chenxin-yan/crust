@@ -1,6 +1,6 @@
 ---
 title: Did You Mean
-description: Present command-not-found errors with typo suggestions.
+description: Suggest the command or flag a mistyped name meant.
 ---
 
 ## Usage
@@ -15,16 +15,26 @@ Unknown command "deply". Did you mean "deploy"?
 
 Available commands: deploy
 # exit code: 2
+
+$ my-cli deploy --forse
+Error: Unknown flag "--forse". Did you mean "--force"?
+# exit code: 2
 ```
 
 `didYouMean()` presents `COMMAND_NOT_FOUND` errors in `execute()`. It suggests the visible sibling command closest to the typed name:
 
 - Candidates are command names and their aliases; the suggestion always prints the canonical name.
-- A candidate matches when it starts with the typed text or is a few edits away from it.
+- A candidate matches when it starts with the typed text or is at most two edits away from it, cobra's cutoff. An empty word matches nothing.
 - Prefix matches rank first, then fewer edits; ties go alphabetically.
 - Hidden commands are never suggested.
 
 Without a match, the message has no `Did you mean` part.
+
+It also suggests a flag for an unknown flag, from the flag name in Core's `PARSE` error (`details.reason` is `"unknown-flag"`):
+
+- Candidates are the long spellings the command accepts: flag names, their aliases of two or more characters, the members of an [exclusive group](/docs/guide/arguments-and-flags#one-of-several-flags), and `no-<name>` for a negatable flag. The same matching rule applies.
+- Hidden flags are never suggested, and neither is anything for a one-character name such as `-x`: every short name is within two edits of it.
+- The suggestion is added to the error's message, which then renders as usual: Core's `Error:` line, or the error JSON under [`--json`](/docs/modules/extensions/json) when `didYouMean()` is registered before `json()`. `mode` does not apply to flags.
 
 ## API
 
@@ -42,7 +52,7 @@ new Crust("my-cli").extend(didYouMean({ mode: "help" }));
 | `"error"` (default) | Message and available commands, on stderr |
 | `"help"`            | Message and the parent's help, on stdout  |
 
-The exit code stays 2 in both modes.
+The exit code stays 2 in both modes, and for a flag suggestion.
 
 ## Limitations
 

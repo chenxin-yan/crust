@@ -1,4 +1,4 @@
-import type { CommandSnapshot, CrustError, ExtensionContext } from "@crustjs/core";
+import type { CommandSnapshot, CrustError, ExtensionContext, FlagSnapshot } from "@crustjs/core";
 import { isListed } from "@crustjs/core/tooling";
 
 import type { RenderHelpOptions } from "./help.ts";
@@ -29,41 +29,30 @@ function levenshtein(a: string, b: string): number {
 }
 
 /**
- * Find the best canonical-name suggestion for `input` by matching against every
- * sibling's canonical name **and** any aliases declared on each sibling.
+ * The best suggestion for `input`: each candidate is the name to suggest and the
+ * spellings that match it, so an alias maps back to its canonical name. The better
+ * score of a candidate's spellings counts, and ties go to the alphabetically first name.
  *
- * Matched aliases are mapped back to their canonical, so suggestions only
- * ever report canonical names — mirroring `router.ts`, which records
- * canonicals on `commandPath`. When both a canonical and its alias score
- * within threshold, the better score wins for that command (a short alias
- * cannot lose to a more-distant canonical, and vice-versa).
- *
- * Subcommands marked `meta.hidden: true` are excluded from the candidate
- * set so internal commands (e.g. `__complete`) cannot leak into
- * user-facing typo suggestions. They remain invocable by direct name —
- * routing does not consult `meta.hidden`.
- *
- * The matching is limited to: (a) `candidate.startsWith(input)` (a
- * forward-completion hint, useful when the user typed a prefix) and
- * (b) Levenshtein distance ≤ 3. The reverse `input.startsWith(candidate)`
- * shortcut is intentionally omitted: with aliases in the candidate set,
- * any 1–2 char alias would falsely match every typo as distance 0.
+ * A spelling matches when it starts with `input` (a forward-completion hint for a
+ * typed prefix) or is within two edits of it, cobra's cutoff. An empty input matches
+ * nothing. The reverse `input.startsWith(spelling)` shortcut is omitted: any 1–2 char
+ * alias would falsely match every typo as distance 0.
  */
 function findSuggestion(
 	input: string,
-	subCommands: Readonly<Record<string, CommandSnapshot>>,
+	candidates: Iterable<readonly [name: string, spellings: readonly string[]]>,
 ): string | undefined {
+	if (input === "") return undefined;
 	let bestName: string | undefined;
 	let bestDistance = Infinity;
 
-	for (const [name, node] of Object.entries(subCommands)) {
-		if (!isListed(node)) continue;
+	for (const [name, spellings] of candidates) {
 		let distance = Infinity;
-		for (const spelling of [name, ...(node.meta.aliases ?? [])]) {
+		for (const spelling of spellings) {
 			distance = Math.min(distance, spelling.startsWith(input) ? 0 : levenshtein(input, spelling));
 		}
 		if (
-			distance <= 3 &&
+			distance <= 2 &&
 			(bestName === undefined ||
 				distance < bestDistance ||
 				(distance === bestDistance && name.localeCompare(bestName) < 0))
@@ -74,6 +63,45 @@ function findSuggestion(
 	}
 
 	return bestName;
+}
+
+/**
+ * Listed subcommands, by canonical name and aliases. Hidden ones (e.g. `__complete`)
+ * stay invocable by name but never leak into suggestions.
+ */
+function* commandCandidates(
+	subCommands: Readonly<Record<string, CommandSnapshot>>,
+): Generator<readonly [string, readonly string[]]> {
+	for (const [name, node] of Object.entries(subCommands)) {
+		if (isListed(node)) yield [name, [name, ...(node.meta.aliases ?? [])]];
+	}
+}
+
+/** Visible long spellings of `flags`, without dashes; an exclusive group's members stand for it. */
+function* flagCandidates(
+	flags: Readonly<Record<string, FlagSnapshot>>,
+): Generator<readonly [string, readonly string[]]> {
+	for (const [name, flag] of Object.entries(flags)) {
+		if (flag.hidden) continue;
+		if (flag.flags) {
+			yield* flagCandidates(flag.flags);
+			continue;
+		}
+		yield [name, [name, ...(flag.aliases ?? []).filter((alias) => alias.length > 1)]];
+		if (flag.negatable) yield [`no-${name}`, [`no-${name}`]];
+	}
+}
+
+/**
+ * Append a suggestion to an unknown-flag error's message; loaded only when one occurs.
+ * The error then renders as usual, so `--json` and Core's `Error:` line both carry it.
+ */
+export function suggestFlag(error: CrustError<"PARSE">, command: CommandSnapshot): void {
+	const flag = error.details?.flag;
+	// A one-letter name may be a short flag, and any short name is within two edits of it.
+	if (flag === undefined || flag.length < 2) return;
+	const suggestion = findSuggestion(flag, flagCandidates(command.flags));
+	if (suggestion !== undefined) error.message += `. Did you mean "--${suggestion}"?`;
 }
 
 /** Report a command-not-found failure; loaded only when one occurs. */
@@ -88,7 +116,10 @@ export async function reportUnknownCommand(
 	) => Promise<string>,
 ): Promise<true> {
 	const details = error.details;
-	const suggestion = findSuggestion(details.input, details.parentCommand.subCommands);
+	const suggestion = findSuggestion(
+		details.input,
+		commandCandidates(details.parentCommand.subCommands),
+	);
 
 	let message = `Unknown command "${details.input}".`;
 	if (suggestion !== undefined) {

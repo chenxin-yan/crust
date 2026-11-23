@@ -23,7 +23,7 @@ The server speaks MCP protocol revision 2026-07-28. A client that opens with the
 `mcpExtension()` owns two commands:
 
 - `<cli> mcp` serves the application over stdio until the client disconnects. Stdout carries protocol frames, so the Command Action writes nothing else to it; command output is captured per call instead.
-- `<cli> mcp config [--client claude|cursor|vscode]` prints the client configuration snippet on stdout. `--client` defaults to `claude`, which also prints a `claude mcp add` one-liner on stderr.
+- `<cli> mcp config [--client claude|cursor|vscode]` prints the client configuration snippet on stdout. `--client` defaults to `claude`, which also prints a `claude mcp add` one-liner on stderr. It returns the snippet too, so with [`json()`](/docs/modules/extensions/json), `--json` prints it as one JSON string.
 
 `app` is a callback, called when `mcp` runs, because the Extension is installed before the application is complete. To return the variable being assigned, annotate the callback `(): AnyCrust =>`; otherwise TypeScript reports the variable as referenced in its own initializer. `mcpExtension.id` is the Extension identity.
 
@@ -71,7 +71,7 @@ The tool name is the canonical command path joined with `_` (`deploy api` become
 
 Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core#command-input-as-json), and call arguments go back through `parseCommandInput()`:
 
-- Flags an Extension declares, such as `--help`, `--json`, or `--input`, are not tool inputs. A call that sends one fails with `PARSE: Flag "--json" is not command input: set it on the command line`, so it never selects a flag handler or reads stdin. Context-owned flags such as [`confirm()`](/docs/modules/extensions/confirm)'s `yes` stay.
+- Flags an Extension declares, such as `--help`, `--json`, or `--input`, are not tool inputs. A call that sends one fails with `PARSE: Flag "--json" is not command input: set it on the command line`, so it never selects a flag handler or reads stdin. Context-owned flags such as [`confirmation()`](/docs/modules/extensions/confirmation)'s `yes` stay.
 - A flag with an `env` binding is optional, and its description names the variable. An omitted value falls back to the variable in the server's environment, then to the default, as on the command line; a required flag still fails when neither supplies it.
 - A `hidden` flag is left out of the schema (a call that sends it is still accepted), and a `deprecated` one is marked `deprecated: true`. A deprecated command's tool description ends with `[deprecated: <message>]`.
 - An [exclusive group](/docs/guide/arguments-and-flags#one-of-several-flags) is one input, `oneOf` an object per listed member: `{ "flag": "org-id", "value": "acme" }`, or `{ "flag": "all" }` for a boolean member. A required group whose members have an `env` binding is optional, as for a flag.
@@ -96,7 +96,7 @@ The three tools are the same for the server's whole life; the protocol does not 
 
 The outcome of `app.run()` decides the tool result:
 
-- A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. Arrays and primitives are wrapped as `{ "result": value }` under every protocol revision: 2026-07-28 allows any JSON value, but earlier revisions require an object.
+- A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. An object property holding `undefined` is left out, as `JSON.stringify` does. Arrays and primitives are wrapped as `{ "result": value }` under every protocol revision: 2026-07-28 allows any JSON value, but earlier revisions require an object.
 - Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
 - A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors. Arguments that cannot become `run()` input, such as an invalid URL or a value that is not JSON data, fail the same way with `PARSE`.
 

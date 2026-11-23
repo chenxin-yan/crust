@@ -68,6 +68,32 @@ describe("version", () => {
 		}
 	});
 
+	it.each([
+		[undefined, "-v", "-V"],
+		["V", "-V", "-v"],
+	] as const)(
+		"short %s prints the version for %s and not for %s",
+		async (short, spelled, other) => {
+			const app = new Crust("app").extend(version("1.2.3", { short })).action(() => {});
+
+			expect(await captureExecute(app, [spelled])).toMatchObject({
+				stdout: "app v1.2.3\n",
+				exitCode: 0,
+			});
+			expect(await captureExecute(app, [other])).toMatchObject({ stdout: "", exitCode: 2 });
+		},
+	);
+
+	it("short false leaves only --version, so the app can declare -v", async () => {
+		const app = new Crust("app")
+			.extend(version("1.2.3", { short: false }))
+			.flags({ verbose: { type: "boolean", short: "v" } })
+			.action(({ flags, stdout }) => stdout(`verbose ${flags.verbose}`));
+
+		expect((await captureExecute(app, ["-v"])).stdout).toBe("verbose true\n");
+		expect((await captureExecute(app, ["--version"])).stdout).toBe("app v1.2.3\n");
+	});
+
 	it("version extension supports plain format", async () => {
 		const app = new Crust("app").extend(version("1.2.3", { format: "plain" })).action(() => {});
 

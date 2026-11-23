@@ -10,6 +10,7 @@ import {
 } from "@crustjs/core";
 import { isCompiledExecutable } from "@crustjs/utils/artifacts";
 import { shellQuote } from "@crustjs/utils/process";
+import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
 
 import { type McpServerOptions, serveStdio } from "./server.ts";
 import { MCP_COMMAND_NAME } from "./tools.ts";
@@ -78,6 +79,19 @@ export function renderClaudeAddCommand(name: string, launch: McpLaunch): string 
 
 const CLIENT_FLAG_DESCRIPTION = "Client whose configuration format to print";
 
+const TEXT_JSON_SCHEMA = { type: "string" };
+
+/** `mcp config` returns the snippet it prints, so `--json` prints it once, as a JSON string. */
+const textOutput: StandardSchema<string> & StandardJSONSchema<string> = {
+	"~standard": {
+		version: 1,
+		vendor: "crust",
+		// SAFETY: only the `mcp config` action returns here, and TypeScript checks that it returns text.
+		validate: (value) => ({ value: value as string }),
+		jsonSchema: { input: () => TEXT_JSON_SCHEMA, output: () => TEXT_JSON_SCHEMA },
+	},
+};
+
 /** Flags of `mcp config`. */
 export type McpConfigFlags = {
 	readonly client: {
@@ -96,7 +110,7 @@ export type McpConfigFlags = {
 export type McpCommandDefinition = CommandDefinition<
 	typeof MCP_COMMAND_NAME,
 	readonly [],
-	CommandShape<[], {}, { config: CommandShape<[], McpConfigFlags, {}, void, {}> }, void, {}>
+	CommandShape<[], {}, { config: CommandShape<[], McpConfigFlags, {}, string, {}> }, void, {}>
 >;
 
 /**
@@ -130,14 +144,17 @@ export const mcpExtension: ExtensionFactory<
 											description: CLIENT_FLAG_DESCRIPTION,
 										},
 									})
+									.output(textOutput)
 									.action((context) => {
 										const name = context.rootCommand.meta.name;
 										const launch = options.launch ?? currentLaunch();
 										const client = context.flags.client;
-										context.stdout(renderClientConfig(client, name, launch));
+										const config = renderClientConfig(client, name, launch);
+										context.stdout(config);
 										if (client === "claude") {
 											context.stderr(`Or run: ${renderClaudeAddCommand(name, launch)}`);
 										}
+										return config;
 									}),
 						),
 					)

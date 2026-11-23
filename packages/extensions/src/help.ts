@@ -13,6 +13,7 @@ import {
 } from "@crustjs/core";
 
 import { withTypedColorFlag } from "./no-color.ts";
+import { textOutput } from "./text-output.ts";
 
 const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
 
@@ -63,7 +64,7 @@ type HelpCommandDefinition = CommandDefinition<
 		],
 		{},
 		{},
-		void,
+		string | undefined,
 		{}
 	>
 >;
@@ -120,14 +121,15 @@ const helpFactory: ExtensionFactory<
 					variadic: true,
 					description: COMMAND_ARG_DESCRIPTION,
 				})
+				.output(textOutput)
 				.action(async ({ args, rootCommand, stdout }) => {
 					const { resolveCommand } = await import("./resolve-command.ts");
 					const { command, path } = resolveCommand(rootCommand, args.command);
-					stdout(
-						await renderHelp(command, [rootCommand.meta.name, ...path], {
-							columns: stdout.columns,
-						}),
-					);
+					const text = await renderHelp(command, [rootCommand.meta.name, ...path], {
+						columns: stdout.columns,
+					});
+					stdout(text);
+					return text;
 				}),
 		),
 	);

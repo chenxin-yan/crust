@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { type CommandSnapshot, Crust, defineCommand, defineContext } from "@crustjs/core";
-import { confirm } from "@crustjs/extensions";
+import { confirmation } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -404,13 +404,13 @@ describe(".auth() reads the Contexts .use()d before it", () => {
 			}),
 		);
 		const acme = api
-			.use(confirm)
+			.use(confirmation)
 			.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
 			.override({ deleteZones: { confirm: "Delete every zone?" } })
 			.add("zones", whoami);
 		const app = new Crust("acme")
 			.provide(profile())
-			.extend(confirm(), acme.extension)
+			.extend(confirmation(), acme.extension)
 			.add(...acme.commands)
 			.add(
 				defineCommand("me", (command) =>

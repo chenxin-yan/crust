@@ -7,11 +7,12 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
-const CONFIRM: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:confirm");
+const CONFIRMATION: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:confirmation");
 
 const yesFlags = {
 	yes: {
 		type: "boolean",
+		short: "y",
 		description: "Confirm without asking",
 	},
 } as const;
@@ -32,20 +33,20 @@ const confirmContext = /* @__PURE__ */ defineContext("confirm")
 	.flags(yesFlags)
 	.setup(({ flags }): Confirm => async (message) => {
 		if (flags.yes === true) return;
-		const confirmed = await (await import("./confirm-prompt.ts")).promptConfirmation(message);
+		const confirmed = await (await import("./confirmation-prompt.ts")).promptConfirmation(message);
 		if (confirmed === undefined) throw new ConfirmationRequiredError(message);
 		if (!confirmed) throw new Error(`Not confirmed: ${message} Nothing was changed.`);
 	});
 
 /**
- * Provides the `confirm` Context, which owns the `--yes` flag. Commands that
- * `.use(confirm)` await `ctx.confirm` for the function, then await it with the
+ * Provides the `confirm` Context, which owns the `--yes` (`-y`) flag. Commands that
+ * `.use(confirmation)` await `ctx.confirm` for the function, then await it with the
  * message before a destructive change.
  */
-export const confirm: ExtensionFactory<
+export const confirmation: ExtensionFactory<
 	[],
 	{},
 	readonly [ContextInstance<"confirm", Confirm, typeof yesFlags, {}>]
-> = /* @__PURE__ */ defineExtension(CONFIRM).factory((extension) =>
+> = /* @__PURE__ */ defineExtension(CONFIRMATION).factory((extension) =>
 	extension.provide(confirmContext()),
 );

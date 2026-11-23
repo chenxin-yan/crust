@@ -803,6 +803,8 @@ describe("toolResultFromOutcome", () => {
 		["shared reference in arrays", [shared, [shared]], { result: [shared, [shared]] }],
 		["null-prototype object", Object.assign(Object.create(null), { a: 1 }), { a: 1 }],
 		["own __proto__ key", JSON.parse('{"__proto__":{"a":1}}'), JSON.parse('{"__proto__":{"a":1}}')],
+		// Left out, as JSON.stringify leaves it out.
+		["object holding undefined", { a: undefined, b: 1 }, { b: 1 }],
 	])("structures faithful JSON: %s", (_label, result, structured) => {
 		expect(toolResultFromOutcome(completed(result))).toEqual({
 			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -826,7 +828,6 @@ describe("toolResultFromOutcome", () => {
 		["Date", new Date(0)],
 		["Map", new Map()],
 		["URL", new URL("https://example.com")],
-		["object holding undefined", { a: undefined }],
 		["object with symbol key", { [Symbol("s")]: 1 }],
 		[
 			"cycle",

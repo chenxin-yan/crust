@@ -20,13 +20,13 @@ $ my-cli --llms
 …
 ```
 
-`schema()` adds a `schema [path...]` command and a root-only boolean `--llms` flag.
+`schema()` adds a `schema [path...]` command and a root-only boolean `--llms` flag. An application with its own `schema` command renames this one with `command`, such as `schema({ command: "describe" })`; a literal name keeps the command tree typed, as in [`search()`](/docs/modules/extensions/search#search-task).
 
 ## `schema [path...]`
 
 Prints one line of JSON describing the command at `path`, or the root command when `path` is omitted:
 
-- `input`: the JSON Schema of the command's arguments and flags as one flat object, from [`commandInputSchema()`](/docs/modules/core#tooling-subpath). This is the object [`input()`](/docs/modules/extensions/input)'s `--input` and the [MCP](/docs/modules/mcp) server accept.
+- `input`: the JSON Schema of the command's arguments and flags as one flat object, from [`commandInputSchema()`](/docs/modules/core#tooling-subpath). This is the object [`jsonInput()`](/docs/modules/extensions/json-input)'s `--input` and the [MCP](/docs/modules/mcp) server accept.
 - `output`: the draft 2020-12 JSON Schema of the result, from the command's [`.output()`](/docs/api/crust#outputschema) schema. It is omitted when the command has no `.output()` or its schema cannot produce JSON Schema (see [`standardJsonSchema()`](/docs/modules/core#tooling-subpath)), rather than replaced by an empty `{}` schema; a converter's own result is printed as is.
 
 Path segments are canonical command names or aliases, like routing; hidden commands resolve too. An unknown segment fails with a [`COMMAND_NOT_FOUND`](/docs/api/errors) error naming the path up to it, such as `Unknown command "remote ad".`; [`didYouMean()`](/docs/modules/extensions/did-you-mean) presents it like any unknown command.
@@ -48,3 +48,11 @@ Prints a compact Markdown index of every visible command. Each command gets:
 - its [documentation sections](/docs/guide/extensions#section-consumers) as `### ` headings, except those with `except: [schema]` or an `only` list without `schema`.
 
 Hidden commands are left out. `--llms` takes over the invocation like `--help`. It is root-only, so `my-cli deploy --llms` is an unknown flag.
+
+`renderCommandIndex(root)` returns the same Markdown for a [Command Snapshot](/docs/api/types#commandsnapshot) without running the app, for example to write it to a file at build time. It includes the sections visible to `schema()`, and loads the renderer on the first call:
+
+```ts
+import { renderCommandIndex } from "@crustjs/extensions";
+
+const markdown = await renderCommandIndex(await app.snapshot());
+```

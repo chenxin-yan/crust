@@ -1,12 +1,12 @@
 ---
-title: Input
+title: JSON Input
 description: Accept a command's arguments and flags as one JSON object.
 ---
 
 ## Usage
 
 <include lang="ts" meta='title="cli.ts"'>
-  ../../../../examples/modules/extensions/input.ts
+  ../../../../examples/modules/extensions/json-input.ts
 </include>
 
 ```sh
@@ -17,7 +17,7 @@ $ my-cli deploy --input @deploy.json
 $ echo '{"target":"prod"}' | my-cli deploy --input -
 ```
 
-`input()` adds a recursive string `--input` flag. Without the flag, nothing changes.
+`jsonInput()` adds a recursive string `--input` flag. Without the flag, nothing changes.
 
 - It adds a "JSON input" section to the root command's help, man page, and generated skills, so an agent reading the CLI's documentation knows what `--input` takes.
 - `--input` is read and bound in `setup`, before any flag handler or `preRun`, so every `preRun` check sees its values whatever the `.extend()` order.

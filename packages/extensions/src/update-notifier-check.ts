@@ -19,6 +19,7 @@ export interface UpdateCheck {
 	readonly packageName: string;
 	readonly timeoutMs: number;
 	readonly registryUrl: string;
+	readonly latestVersion: UpdateNotifierOptions["latestVersion"];
 	readonly intervalMs: number;
 	readonly updateCommand: UpdateNotifierOptions["updateCommand"];
 	readonly updateDocsUrl: string | undefined;
@@ -111,6 +112,31 @@ export async function fetchLatestVersion(
 		return typeof latest === "string" && latest.length > 0 ? latest : null;
 	} catch {
 		// Network error, abort, JSON parse failure — all soft failures
+		return null;
+	}
+}
+
+/**
+ * The application's own lookup, bounded like the registry request: it stops waiting
+ * when `timeoutMs` passes or `signal` aborts, even if the lookup ignores its signal.
+ * Returns `null` on any failure.
+ *
+ * @internal
+ */
+export async function lookUpLatestVersion(
+	lookup: NonNullable<UpdateNotifierOptions["latestVersion"]>,
+	timeoutMs: number,
+	signal?: AbortSignal,
+): Promise<string | null> {
+	const timeout = AbortSignal.timeout(timeoutMs);
+	const bound = signal ? AbortSignal.any([signal, timeout]) : timeout;
+	try {
+		const aborted = new Promise<never>((_resolve, reject) =>
+			bound.addEventListener("abort", () => reject(bound.reason), { once: true }),
+		);
+		const latest = await Promise.race([lookup(bound), aborted]);
+		return typeof latest === "string" && latest.length > 0 ? latest : null;
+	} catch {
 		return null;
 	}
 }
@@ -245,6 +271,7 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 		packageName,
 		timeoutMs,
 		registryUrl,
+		latestVersion: lookup,
 		intervalMs,
 		updateCommand,
 		updateDocsUrl,
@@ -301,7 +328,9 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 		}
 
 		// ── Network check: fetch latest version ──────────────────
-		const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs, signal);
+		const latestVersion = lookup
+			? await lookUpLatestVersion(lookup, timeoutMs, signal)
+			: await fetchLatestVersion(packageName, registryUrl, timeoutMs, signal);
 
 		if (latestVersion === null) {
 			// Soft failure — update timestamp to avoid retrying too soon

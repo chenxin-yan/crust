@@ -167,7 +167,13 @@ export function renderNextSteps(
 ): { readonly notes: readonly string[]; readonly text: string } {
 	const notes: string[] = [];
 	const lines: string[] = [];
+	const print = (line: string, description: string | undefined) =>
+		lines.push(...(description ? [`  ${description}:`, `    ${line}`] : [`  ${line}`]));
 	for (const step of steps) {
+		if (typeof step.command === "string") {
+			print(step.command, step.description);
+			continue;
+		}
 		let path: readonly string[] | undefined;
 		let argv: string[];
 		try {
@@ -179,8 +185,7 @@ export function renderNextSteps(
 			notes.push(`skipped "${name}": ${error instanceof Error ? error.message : String(error)}`);
 			continue;
 		}
-		const line = [root.meta.name, ...argv].map(shellQuote).join(" ");
-		lines.push(...(step.description ? [`  ${step.description}:`, `    ${line}`] : [`  ${line}`]));
+		print([root.meta.name, ...argv].map(shellQuote).join(" "), step.description);
 	}
 	return { notes, text: lines.length > 0 ? ["Next steps:", ...lines].join("\n") : "" };
 }
