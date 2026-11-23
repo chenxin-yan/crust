@@ -24,7 +24,7 @@ See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/co
 | ------------------- | ----------------------------------------------------------------------------------------------- |
 | `DEFINITION`        | Malformed definition or collision, recipe, Extension, Context, or documentation-section failure |
 | `PARSE`             | Argv syntax, structured input binding (`run()`, `bindInput`), or built-in value parsing failed  |
-| `VALIDATION`        | Required-value or Standard Schema validation failed                                             |
+| `VALIDATION`        | Required-value, exclusive-group, `requires`, or Standard Schema validation failed               |
 | `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)             |
 | `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                           |
 | `OUTPUT`            | A Command Action result failed its [`.output()`](/docs/api/crust#outputschema) schema           |

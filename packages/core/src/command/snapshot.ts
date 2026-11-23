@@ -110,8 +110,6 @@ export interface FlagSnapshot {
 	readonly hidden?: boolean;
 	/** Why the flag is deprecated, and what to use instead. */
 	readonly deprecated?: string;
-	/** Flags of the same record this one needs when given. */
-	readonly requires?: readonly string[];
 	/** An exclusive group's members (`type: "exclusive"`), keyed by their canonical names. */
 	readonly flags?: Readonly<Record<string, FlagSnapshot>>;
 	/**
@@ -246,7 +244,6 @@ function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSna
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 		hidden: def.hidden,
 		deprecated: def.deprecated,
-		requires: def.requires,
 		flags:
 			def.flags &&
 			Object.freeze(

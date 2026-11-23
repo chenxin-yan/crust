@@ -41,6 +41,20 @@ describe("walkCommand", () => {
 		});
 	});
 
+	it("completes an exclusive group's members and leaves hidden flags out", async () => {
+		const app = new Crust("mycli").flags({
+			secret: { type: "boolean", hidden: true },
+			scope: {
+				type: "exclusive",
+				flags: { "org-id": { type: "string" }, all: { type: "boolean" } },
+			},
+		});
+		expect((await walk(app)).flags.map((flag) => flag.spellings)).toEqual([
+			["--org-id"],
+			["--all"],
+		]);
+	});
+
 	it("completes a count as a repeatable switch and an integer as a number", async () => {
 		const app = new Crust("mycli").flags({
 			verbose: { type: "count", short: "v" },

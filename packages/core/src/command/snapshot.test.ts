@@ -116,7 +116,7 @@ describe("snapshotCommand", () => {
 		expect(JSON.stringify(snapshot)).not.toContain(JSON.stringify(process.env.HOME));
 	});
 
-	it("projects hidden, deprecated, requires, and an exclusive group's members", async () => {
+	it("projects hidden, deprecated, and an exclusive group's members", async () => {
 		const snapshot = await new Crust("cli")
 			.flags({
 				old: { type: "string", hidden: true, deprecated: "Use --new.", requires: ["scope"] },
@@ -134,7 +134,6 @@ describe("snapshotCommand", () => {
 				negatable: false,
 				hidden: true,
 				deprecated: "Use --new.",
-				requires: ["scope"],
 			},
 			scope: {
 				type: "exclusive",

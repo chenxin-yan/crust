@@ -52,6 +52,16 @@ describe("toolsFromSnapshot", () => {
 		expect(tools[0]?.description).toBe("Deploy");
 	});
 
+	it("ends a deprecated command's description with its marker", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("deploy", { description: "Deploy", deprecated: "Use ship." }, (c) =>
+				c.action(noop),
+			),
+		);
+		const [tool] = toolsFromSnapshot(await app.snapshot());
+		expect(tool?.description).toBe("Deploy [deprecated: Use ship.]");
+	});
+
 	it("rejects exclude paths that are not canonical command paths, listing each", async () => {
 		const app = new Crust("cli")
 			.add(defineCommand("deploy", { aliases: ["d"] }, (c) => c.action(noop)))

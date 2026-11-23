@@ -131,7 +131,8 @@ function coerceValue(value: string, def: ArgDef | FlagDef, label: string) {
 /**
  * Validate a raw argv string against a flag/arg `choices` list. Throws
  * `CrustError("PARSE", …)` when the value is not in the allowed set; like
- * every Core value error, the message names the definition, never the value.
+ * every Core value error, the message names the definition, never the value
+ * (except the `-t=vue` hint in `coerceFlagValue`, for command-line values only).
  *
  * Runs *before* any `parse` transform so the user-facing comparison is on
  * the raw token, not the post-`parse` value.
@@ -249,9 +250,9 @@ function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): Par
 			return coerceToken(def, value, label, index);
 		} catch (error) {
 			// `-t=vue` keeps the `=`, as POSIX tools do; say how to write what was likely meant.
-			if (env !== undefined || !value.startsWith("=") || !(error instanceof CrustError))
-				throw error;
 			const meant = value.slice(1);
+			if (env !== undefined || !value.startsWith("=") || !meant || !(error instanceof CrustError))
+				throw error;
 			const spelling = def.short === undefined ? `--${name}` : `-${def.short}`;
 			// The error is this call's own, so amending its message touches nothing shared.
 			error.message = `${error.message.replace(/\.?$/, ".")} Write ${spelling} ${meant} or --${name}=${meant}.`;
@@ -430,20 +431,25 @@ function validateRequiredFlags<F extends FlagsDef>(
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (def.required === true && def.default === undefined) {
 			if (resolvedFlags[name] === undefined) {
+				const names = def.flags ? listedMembers(def.flags) : [name];
 				throw new CrustError(
 					"VALIDATION",
-					def.flags
-						? `Missing one of the required flags ${memberNames(def.flags)}`
-						: `Missing required flag "--${name}"`,
+					names.length === 1
+						? `Missing required flag "--${names[0]}"`
+						: `Missing one of the required flags ${quoteFlags(names)}`,
 				);
 			}
 		}
 	}
 }
 
-/** A group's listed members, for its errors: `"--org-id", "--all"`. */
-function memberNames(members: Readonly<Record<string, FlagDef>>): string {
-	const names = Object.keys(members).filter((name) => !members[name]!.hidden);
+/** A group's members that its errors may name: hidden ones are left out. */
+function listedMembers(members: Readonly<Record<string, FlagDef>>): string[] {
+	return Object.keys(members).filter((name) => !members[name]!.hidden);
+}
+
+/** `"--org-id", "--all"` */
+function quoteFlags(names: readonly string[]): string {
 	return names.map((name) => `"--${name}"`).join(", ");
 }
 
@@ -462,7 +468,8 @@ function validateRequires(flagsDef: FlagsDef, parsed: ArgvParseResult): void {
 		const needed = def.requires.find((required) => !given(required));
 		if (needed === undefined) continue;
 		const members = flagsDef[needed]?.flags;
-		const target = members ? `one of ${memberNames(members)}` : `"--${needed}"`;
+		const names = members ? listedMembers(members) : [needed];
+		const target = names.length === 1 ? quoteFlags(names) : `one of ${quoteFlags(names)}`;
 		throw new CrustError("VALIDATION", `Flag "--${name}" requires ${target}`);
 	}
 }
@@ -823,7 +830,7 @@ function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue):
 		if (typeof flag !== "string" || !Object.hasOwn(def.flags, flag)) {
 			throw new CrustError(
 				"PARSE",
-				`Expected ${STRUCTURED_EXPECTATIONS.exclusive} for ${label}, with flag one of: ${Object.keys(def.flags).join(", ")}`,
+				`Expected ${STRUCTURED_EXPECTATIONS.exclusive} for ${label}, with flag one of: ${listedMembers(def.flags).join(", ")}`,
 			);
 		}
 		const boolean = def.flags[flag]!.type === "boolean";

@@ -50,9 +50,14 @@ function formatCommandLabel(command: CommandDocumentation): string {
 }
 
 function formatCommandDescription(command: CommandDocumentation): string {
-	const description = command.description ?? "";
-	if (command.deprecated === undefined) return description;
-	return `${description} ${dim(`[deprecated: ${command.deprecated}]`)}`.trim();
+	return formatDescription(
+		command.description,
+		undefined,
+		undefined,
+		dim,
+		undefined,
+		command.deprecated,
+	);
 }
 
 export function renderHelpText(

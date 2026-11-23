@@ -246,6 +246,10 @@ describe("parseArgs — values that start with a dash or `=`", () => {
 		expect(() => parseAndValidate(cmd, ["--lines==3"])).toThrow(
 			"Expected an integer for --lines. Write -n 3 or --lines=3.",
 		);
+		// Nothing after the `=` is nothing to suggest.
+		expect(() => parseAndValidate(cmd, ["-t="])).toThrow(
+			/^Invalid value for --template\. Expected one of: vue, react$/,
+		);
 	});
 
 	it("names a boolean short given `=value`", () => {
@@ -345,6 +349,25 @@ describe("parseArgs — exclusive groups", () => {
 			flag: "org-id",
 			value: "acme",
 		});
+	});
+
+	it("names only listed members in its errors, and one alone without 'one of'", () => {
+		const scope = {
+			type: "exclusive",
+			flags: { all: { type: "boolean" }, legacy: { type: "boolean", hidden: true } },
+		} as const;
+		const hiddenMember = makeNode({
+			meta: "test",
+			flags: { jq: { type: "string", requires: ["scope"] }, scope },
+		});
+		expect(() => parseAndValidate(hiddenMember, ["--jq", "."], {})).toThrow(
+			'Flag "--jq" requires "--all"',
+		);
+		expect(() =>
+			parseStructured(hiddenMember, { flags: { scope: { flag: "team", value: "x" } } }),
+		).toThrow("Expected { flag, value } for --scope, with flag one of: all");
+		const required = makeNode({ meta: "test", flags: { scope: { ...scope, required: true } } });
+		expect(() => parseAndValidate(required, [], {})).toThrow('Missing required flag "--all"');
 	});
 });
 
