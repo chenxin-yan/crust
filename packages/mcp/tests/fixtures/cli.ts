@@ -24,9 +24,9 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 			"whoami",
 			{ description: "Show the configured token", mcp: { readOnlyHint: true } },
 			(command) =>
-			command
-				.flags({ token: { type: "string", env: "DEMO_TOKEN", required: true } })
-				.action(({ flags }) => ({ token: flags.token })),
+				command
+					.flags({ token: { type: "string", env: "DEMO_TOKEN", required: true } })
+					.action(({ flags }) => ({ token: flags.token })),
 		),
 	)
 	.add(defineCommand("login", { mcp: false }, (command) => command.action(() => "signed in")))

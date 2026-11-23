@@ -58,7 +58,7 @@ function _typecheckOmittedNameKeepsDefault(options: { command?: "agents" }) {
 	const app = host().extend(skills({ command: undefined }));
 	void app.run(["skill", "repair"]);
 	// @ts-expect-error -- an explicit name argument cannot rename the runtime default
-	skill<"agents">({});
+	skills<"agents">({});
 	// An optional literal may be absent at runtime, so the tree stays open.
 	void host().extend(skills(options)).run(["skills"]);
 }
