@@ -271,7 +271,7 @@ The same streams are passed to the Command Action, every Context setup, and ever
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="InputStream" />
 
-`stdin`: the process's stdin, or the async iterable passed as `execute({ io: { stdin } })`. A read stops with the invocation's `signal.reason` once it is aborted, and continues where the last read stopped.
+`stdin`: the process's stdin, or the async iterable passed as `execute({ io: { stdin } })`; under `run()` and `runCommand()`, the `stdin` option's text or bytes, else empty input. A read stops with the invocation's `signal.reason` once it is aborted, and continues where the last read stopped.
 
 ### `OutputSink`
 
@@ -302,7 +302,7 @@ The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions).
 
 `ctx` is a lazy `ContextBag` of the Contexts available on the command path. `rootCommand` is the root snapshot, including Extension contributions. `exitCode(n)` sets the invocation's exit code for when the action completes; the action carries on, the last call wins, and a throw replaces it (see [exit status](/docs/guide/error-handling#exit-status)).
 
-`runCommand(path, input?, options?)` runs a command of the same application as [`run()`](/docs/api/crust#runpath-input-options) does and resolves to its [`RunOutcome`](#runoutcomeresult-events), without throwing. It is a fresh invocation, with its own Contexts, Extension hooks, and captured output, so the caller's `provide` replacements don't apply. It is cancelled with the caller's invocation unless `options.signal` is given. It is untyped (paths are `string[]`, input is unchecked until it runs), because a command is defined before the application that holds it. An Extension's command can pair it with `rootCommand` to find and run the app's commands.
+`runCommand(path, input?, options?)` runs a command of the same application as [`run()`](/docs/api/crust#runpath-input-options) does and resolves to its [`RunOutcome`](#runoutcomeresult-events), without throwing. It is a fresh invocation, with its own Contexts, Extension hooks, and captured output, so the caller's `provide` replacements don't apply. It is cancelled with the caller's invocation unless `options.signal` is given, and its `stdin` is empty unless `options.stdin` is given. It is untyped (paths are `string[]`, input is unchecked until it runs), because a command is defined before the application that holds it. An Extension's command can pair it with `rootCommand` to find and run the app's commands.
 
 ## Context types
 

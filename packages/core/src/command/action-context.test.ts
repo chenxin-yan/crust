@@ -89,6 +89,19 @@ describe("runCommand", () => {
 		expect(parentOut).toEqual([]);
 	});
 
+	it("passes stdin to the command, which is empty without it", async () => {
+		const outcome = await new Crust("cli")
+			.command("cat", (c) => c.action(({ stdin }) => stdin.text()))
+			.action(async ({ runCommand }) => [
+				await runCommand(["cat"], {}, { stdin: "piped" }),
+				await runCommand(["cat"]),
+			])
+			.run([], {}, { stdin: "parent" });
+		expect(outcome).toMatchObject({
+			result: [{ result: "piped" }, { result: "" }],
+		});
+	});
+
 	it("resolves to a failed outcome without failing the caller", async () => {
 		const outcome = await app()
 			.action(async ({ runCommand }) => [

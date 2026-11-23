@@ -28,7 +28,8 @@ export interface OutputStream {
 /**
  * One invocation's standard input. Each read continues where the last one stopped, and throws
  * the invocation's `signal.reason` once it is cancelled, such as by Ctrl-C while waiting for input.
- * A read throws while another reader consumes the stream, such as an MCP stdio server.
+ * A read throws while another reader consumes the stream: an earlier read that has not finished,
+ * or a `data` listener on the process's stdin.
  */
 export interface InputStream {
 	/** Whether the stream is a terminal. */
@@ -64,9 +65,14 @@ export interface OutputSink {
 /**
  * Caller options for one programmatic `run()` invocation: output callbacks, action events, and cancellation.
  * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
- * Its output streams are no terminal, and its `stdin` is the process's.
+ * Its output streams are no terminal, and its `stdin` holds `stdin`, else nothing.
  */
 export interface InvocationOptions<Event = unknown, Replacement = AnyContextInstance> {
+	/**
+	 * What the command reads from `stdin`, which reports no terminal, as a pipe does.
+	 * Default: no input.
+	 */
+	stdin?: string | Uint8Array | undefined;
 	/** Receives each stdout write live, as it was made: `stdout(text)` arrives as `text` and a newline. */
 	stdout?: (chunk: string | Uint8Array) => void;
 	/** Receives each stderr write live, as it was made. */

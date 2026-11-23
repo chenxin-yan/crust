@@ -955,6 +955,14 @@ describe("Invocation pipeline — streams", () => {
 		expect(live).toHaveLength(5);
 	});
 
+	it("gives run() an empty stdin unless the caller passes one", async () => {
+		const app = new Crust("app").action(async ({ stdin }) => [stdin.isTTY, await stdin.text()]);
+		expect(await app.run([])).toMatchObject({ result: [false, ""] });
+		expect(await app.run([], {}, { stdin: "piped" })).toMatchObject({ result: [false, "piped"] });
+		const bytes = new TextEncoder().encode("é");
+		expect(await app.run([], {}, { stdin: bytes })).toMatchObject({ result: [false, "é"] });
+	});
+
 	it("gives Contexts and Extension hooks the invocation's streams", async () => {
 		const seen: unknown[] = [];
 		const terminal = { write() {}, isTTY: true, columns: 90 };
