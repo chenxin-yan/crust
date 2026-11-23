@@ -73,6 +73,7 @@ export type TuiObservation = {
 	keypressListenersBefore?: number;
 	stdinDataListeners?: number;
 	closedOnSettle?: boolean;
+	mounts?: number;
 };
 
 async function settle(result: Promise<void>, mountFailure?: Error): Promise<TuiOutcome> {
@@ -96,7 +97,8 @@ export type TuiScenario =
 	| "ctrl-c-without-exit"
 	| "waits-for-close"
 	| "output-failure"
-	| "signal-aborts";
+	| "signal-aborts"
+	| "signal-aborts-during-creation";
 
 /** Ctrl+C on a non-Latin (Cyrillic) layout, where only `baseCode` identifies the physical C key. */
 function baseCodeCtrlC(baseCode: 99 | 67) {
@@ -241,6 +243,20 @@ const scenarios = {
 			),
 		);
 		return { outcome, rendererDestroyed: renderer?.isDestroyed };
+	},
+	"signal-aborts-during-creation": async () => {
+		const { config } = createTtyConfig();
+		const controller = new AbortController();
+		let mounts = 0;
+		const result = runTui(
+			() => {
+				mounts++;
+			},
+			{ ...config, signal: controller.signal },
+		);
+		// runTui is now awaiting createCliRenderer.
+		controller.abort(new Error("cancelled"));
+		return { outcome: await settle(result), mounts };
 	},
 } satisfies Record<TuiScenario, () => Promise<TuiObservation>>;
 

@@ -112,6 +112,13 @@ describe("runTui", () => {
 		expect(rendererDestroyed).toBe(true);
 	});
 
+	it("skips mount and rejects with the reason when the signal aborts during renderer creation", () => {
+		const { outcome, mounts } = observe("signal-aborts-during-creation");
+
+		expect(outcome).toMatchObject({ status: "rejected", message: "cancelled" });
+		expect(mounts).toBe(0);
+	});
+
 	it("rejects before creating a renderer when the signal has already aborted", async () => {
 		const stdin = Object.assign(new PassThrough(), { isTTY: true });
 		const stdout = Object.assign(new Writable({ write() {} }), { isTTY: true });

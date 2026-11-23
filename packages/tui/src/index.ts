@@ -96,14 +96,17 @@ export async function runTui(mount: TuiMount, options: RunTuiConfig = {}): Promi
 	// The app may destroy the renderer while `mount` is still pending (e.g. mount awaits the
 	// app's lifetime), so settle on destroy rather than on mount completion.
 	let mountFailure: { error: unknown } | undefined;
-	void (async () => {
-		try {
-			await mount(renderer);
-		} catch (error) {
-			mountFailure = { error };
-			if (!renderer.isDestroyed) renderer.destroy();
-		}
-	})();
+	// Not on a renderer the signal already destroyed.
+	if (!cancelled) {
+		void (async () => {
+			try {
+				await mount(renderer);
+			} catch (error) {
+				mountFailure = { error };
+				if (!renderer.isDestroyed) renderer.destroy();
+			}
+		})();
+	}
 
 	try {
 		await destroyed;
