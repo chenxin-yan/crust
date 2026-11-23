@@ -668,6 +668,8 @@ describe("renderSkill", () => {
 					watch: { type: "boolean", default: true },
 					entry: { type: "string", multiple: true, default: ["src/index.ts", "src/cli.ts"] },
 					root: { type: "path" },
+					workers: { type: "integer" },
+					verbose: { type: "count" },
 				},
 				run() {},
 			});
@@ -681,6 +683,8 @@ describe("renderSkill", () => {
 			expect(serve).toContain('| `--host` | string | No | `[default: "localhost"]` |');
 			expect(serve).toContain("| `--port` | number | No | `[default: 8080]` |");
 			expect(serve).toContain("| `--root` | string | No | - |");
+			expect(serve).toContain("| `--workers` | number | No | - |");
+			expect(serve).toContain("| `--verbose` | number | No | - |");
 			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | `[default: true]` |");
 		});
 	});

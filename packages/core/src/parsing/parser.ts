@@ -105,13 +105,8 @@ function checkNumber(def: ArgDef | FlagDef, value: number, label: string): numbe
 function coerceValue(value: string, def: ArgDef | FlagDef, label: string) {
 	const { type } = def;
 	if (type === "number" || type === "integer") {
-		if (!(type === "integer" ? INTEGER : DECIMAL).test(value)) {
-			throw new CrustError(
-				"PARSE",
-				`Expected ${type === "integer" ? "an integer" : "a number"} for ${label}.`,
-			);
-		}
-		return checkNumber(def, Number(value), label);
+		const valid = (type === "integer" ? INTEGER : DECIMAL).test(value);
+		return checkNumber(def, valid ? Number(value) : Number.NaN, label);
 	}
 	if (type === "boolean") {
 		// Positional booleans arrive as text; option booleans are already native values.

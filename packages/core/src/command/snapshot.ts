@@ -214,8 +214,8 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
-		min: "min" in def ? def.min : undefined,
-		max: "max" in def ? def.max : undefined,
+		min: def.min,
+		max: def.max,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 	});
 }
