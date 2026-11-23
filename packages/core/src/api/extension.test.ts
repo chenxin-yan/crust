@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import { unwrap } from "../../tests/helpers.ts";
+import { lineSink, unwrap } from "../../tests/helpers.ts";
 import {
 	Crust,
 	CrustError,
@@ -246,7 +246,7 @@ describe("defineExtension", () => {
 			})
 				.extend(instance)
 				.action(() => {})
-				.run([], {}, { stdout: (line) => output.push(line) }),
+				.run([], {}, { stdout: lineSink(output).write }),
 		);
 		expect(output).toEqual(["release:1.2.3"]);
 	});

@@ -1,7 +1,7 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import type { BuildReport, InvocationIO } from "@crustjs/core";
+import type { BuildReport } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
@@ -623,6 +623,12 @@ export type BuildArtifact =
 	| { kind: "executable"; path: string; command: string; target: string }
 	| { kind: "bundle"; path: string; command: string };
 
+/** Where `crust build` and `crust publish` report progress, one line at a time. */
+export interface LineIO {
+	readonly stdout: (line: string) => void;
+	readonly stderr: (line: string) => void;
+}
+
 /**
  * Stages the npm tree in `plan.stageDir`. `build` is each command's Extension
  * build hook report, recorded in `manifest.json`; omit it when the hooks did not run.
@@ -631,7 +637,7 @@ export type BuildArtifact =
 export async function runDistributeBuild<T extends string>(
 	plan: DistributeBuildPlan,
 	distribution: Distribution<T>,
-	io: InvocationIO,
+	io: LineIO,
 	build?: Record<string, BuildReport>,
 ): Promise<BuildArtifact[]> {
 	const sourceMetadata = resolveDistributionMetadata(plan.userPackageJson, plan.external);

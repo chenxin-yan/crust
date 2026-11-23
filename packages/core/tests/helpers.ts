@@ -6,7 +6,7 @@ import type { AnyCrust } from "../src/command/crust.ts";
 import type { CommandAction, CommandNode } from "../src/command/node.ts";
 import { createCommandNode, registerFlag } from "../src/command/node.ts";
 import type { RunOutcome } from "../src/command/typed-run.ts";
-import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
+import type { ArgsDef, CommandMeta, FlagsDef, OutputSink } from "../src/types.ts";
 
 export type Expect<T extends true> = T;
 export type Equal<A, B> =
@@ -73,6 +73,16 @@ export function ensureDist(): void {
 	}
 }
 
+/** An `execute()` output sink collecting each write without one final newline, as the line `stdout(text)` wrote. */
+export function lineSink(lines: string[]): OutputSink {
+	return {
+		write: (chunk) =>
+			void lines.push(
+				(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)).replace(/\n$/, ""),
+			),
+	};
+}
+
 export interface RunResult {
 	stdout: string;
 	stderr: string;
@@ -104,10 +114,7 @@ export async function executeCrust(builder: AnyCrust, argv?: string[]): Promise<
 	try {
 		exitCode = await builder.execute({
 			argv,
-			io: {
-				stdout: (text) => stdoutChunks.push(text),
-				stderr: (text) => stderrChunks.push(text),
-			},
+			io: { stdout: lineSink(stdoutChunks), stderr: lineSink(stderrChunks) },
 		});
 	} finally {
 		process.exitCode = originalExitCode ?? 0;

@@ -1,6 +1,5 @@
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
 import { input } from "@crustjs/extensions";
-import { readStdin } from "@crustjs/utils/process";
 
 import { mcpExtension } from "../../src/index.ts";
 
@@ -28,7 +27,7 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 	.add(
 		// Reads stdin like `--body -` would; under `mcp`, stdin carries protocol frames.
 		defineCommand("slurp", { description: "Read stdin" }, (command) =>
-			command.action(async ({ signal }) => ({ text: await readStdin(signal) })),
+			command.action(async ({ stdin }) => ({ text: await stdin.text() })),
 		),
 	)
 	.extend(input(), mcpExtension({ app: (): AnyCrust => app }));

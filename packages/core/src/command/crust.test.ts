@@ -2,7 +2,7 @@ import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import { unwrap } from "../../tests/helpers.ts";
+import { lineSink, unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { type ExtensionContext, defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
@@ -843,7 +843,7 @@ describe("Extension named hooks", () => {
 				const stderr: string[] = [];
 				const exitCode = await app.execute({
 					argv,
-					io: { stdout: () => {}, stderr: (line) => void stderr.push(line) },
+					io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 				});
 				return { exitCode, stderr: stderr.join("\n") };
 			}
@@ -959,7 +959,9 @@ describe("Extension named hooks", () => {
 					),
 				)
 				.action(() => {});
-			expect(await app.execute({ argv: ["--mode", "good"], io: { stderr: () => {} } })).toBe(0);
+			expect(await app.execute({ argv: ["--mode", "good"], io: { stderr: { write() {} } } })).toBe(
+				0,
+			);
 			// One parse each from argv binding: the argv value and the two untouched defaults.
 			expect(calls.toSorted()).toEqual(["good", "here", "low"]);
 		});
@@ -999,7 +1001,7 @@ describe("Extension named hooks", () => {
 					)
 					.action(({ flags }) => void regions.push(flags.region));
 			const stderr: string[] = [];
-			const io = { stdout: () => {}, stderr: (line: string) => void stderr.push(line) };
+			const io = { stdout: { write() {} }, stderr: lineSink(stderr) };
 			expect(await app({ flags: { region: "eu" } }).execute({ argv: [], io })).toBe(0);
 			expect(await app({}).execute({ argv: [], io })).toBe(2);
 			expect(regions).toEqual(["eu"]);
@@ -1021,9 +1023,7 @@ describe("Extension named hooks", () => {
 					.extend(binder)
 					.action(() => void actions.push("ran"));
 				const stderr: string[] = [];
-				expect(
-					await app.execute({ argv: [], io: { stderr: (line) => void stderr.push(line) } }),
-				).toBe(2);
+				expect(await app.execute({ argv: [], io: { stderr: lineSink(stderr) } })).toBe(2);
 				expect(errors).toEqual([expect.objectContaining({ code: "PARSE" })]);
 				expect(stderr.join("\n")).toContain("Expected a number for --port.");
 				expect(outcomes).toEqual(["failed"]);
@@ -1094,7 +1094,7 @@ describe("Extension named hooks", () => {
 			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp();
 			const argv = ["a", "-V", "--no-color", "--tags", "", "--", "b", "--x"];
-			expect(await app.execute({ argv, io: { stdout: () => {} } })).toBe(0);
+			expect(await app.execute({ argv, io: { stdout: { write() {} } } })).toBe(0);
 			expect(seen[0]).toEqual({
 				args: { source: "argv", target: "argv" },
 				flags: { name: "default", verbose: "argv", color: "argv", port: "env", tags: "argv" },
@@ -1182,7 +1182,7 @@ describe("Extension named hooks", () => {
 
 		it("is empty in the routing-failure onError context", async () => {
 			const { app, seen } = recordingApp();
-			await app.execute({ argv: ["--nope"], io: { stderr: () => {} } });
+			await app.execute({ argv: ["--nope"], io: { stderr: { write() {} } } });
 			expect(seen).toEqual([{ args: {}, flags: {}, raw: undefined }]);
 		});
 	});
@@ -1244,7 +1244,7 @@ describe("Extension named hooks", () => {
 				const stderr: string[] = [];
 				const exitCode = await app.execute({
 					argv,
-					io: { stdout: () => {}, stderr: (line) => void stderr.push(line) },
+					io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 				});
 				return { exitCode, stderr: stderr.join("\n") };
 			}
@@ -1307,7 +1307,7 @@ describe("Extension named hooks", () => {
 				.flags({ stop: { type: "boolean" } })
 				.handle("stop", () => {});
 			const app = new Crust("cli").extend(owner, gate).action(() => void seen.push("action"));
-			const io = { stdout: () => {}, stderr: () => {} };
+			const io = { stdout: { write() {} }, stderr: { write() {} } };
 
 			expect(await app.execute({ argv: ["--port", "abc", "--stop"], io })).toBe(0);
 			expect(await app.execute({ argv: ["--port", "abc"], io })).toBe(2);
@@ -1349,7 +1349,7 @@ describe("Extension named hooks", () => {
 			.extend(probe)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 
-		await unwrap(app.run(["known"], undefined, { stdout: (line) => lines.push(line) }));
+		await unwrap(app.run(["known"], undefined, { stdout: lineSink(lines).write }));
 		expect(lines).toEqual(["probe:known"]);
 		preRunCalled = false;
 		// @ts-expect-error -- deliberately exercise an unknown command path.
@@ -1421,7 +1421,7 @@ describe("Extension setup, flag handlers, and noAction", () => {
 				const lines: string[] = [];
 				await app.execute({
 					argv,
-					io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+					io: { stdout: lineSink(lines), stderr: { write() {} } },
 				});
 				return lines.join("\n");
 			}),
@@ -1472,7 +1472,7 @@ describe("Extension setup, flag handlers, and noAction", () => {
 		const lines: string[] = [];
 		await listed.execute({
 			argv: ["--mode", ""],
-			io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+			io: { stdout: lineSink(lines), stderr: { write() {} } },
 		});
 		expect(lines).toEqual(["action"]);
 	});
@@ -1491,7 +1491,7 @@ describe("Extension setup, flag handlers, and noAction", () => {
 		const lines: string[] = [];
 		await app.execute({
 			argv: ["--mode", "[]"],
-			io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+			io: { stdout: lineSink(lines), stderr: { write() {} } },
 		});
 		expect(lines).toEqual(["handled"]);
 	});
@@ -1515,7 +1515,7 @@ describe("Extension setup, flag handlers, and noAction", () => {
 		const lines: string[] = [];
 		await app.execute({
 			argv: ["publish", "--version", "2.0.0"],
-			io: { stdout: (line) => void lines.push(line), stderr: () => {} },
+			io: { stdout: lineSink(lines), stderr: { write() {} } },
 		});
 		expect(lines).toEqual(["publishing 2.0.0"]);
 	});
@@ -1672,8 +1672,8 @@ describe("Extension renderer", () => {
 	/** A renderer that tags every member call, so tests read one ordered transcript. */
 	function tagging(lines: string[]) {
 		return {
-			text: (line: string) => void lines.push(`text:${line}`),
-			diag: (line: string) => void lines.push(`diag:${line}`),
+			text: (chunk: string | Uint8Array) => void lines.push(`text:${String(chunk).trimEnd()}`),
+			diag: (chunk: string | Uint8Array) => void lines.push(`diag:${String(chunk).trimEnd()}`),
 			result: (value: unknown) => void lines.push(`result:${JSON.stringify(value)}`),
 			error: (error: unknown) => void lines.push(`error:${(error as Error).message}`),
 		};
@@ -1684,8 +1684,8 @@ describe("Extension renderer", () => {
 		return app.execute({
 			argv,
 			io: {
-				stdout: (line) => void lines.push(`stdout:${line}`),
-				stderr: (line) => void lines.push(`stderr:${line}`),
+				stdout: { write: (chunk) => void lines.push(`stdout:${String(chunk).trimEnd()}`) },
+				stderr: { write: (chunk) => void lines.push(`stderr:${String(chunk).trimEnd()}`) },
 			},
 		});
 	}
@@ -1762,8 +1762,8 @@ describe("Extension renderer", () => {
 			.renderer((ctx) =>
 				ctx.flags.tagged === true
 					? {
-							text: (line) => void lines.push(`text:${line}`),
-							diag: (line) => void lines.push(`diag:${line}`),
+							text: (chunk) => void lines.push(`text:${String(chunk).trimEnd()}`),
+							diag: (chunk) => void lines.push(`diag:${String(chunk).trimEnd()}`),
 						}
 					: undefined,
 			);
@@ -2315,8 +2315,8 @@ describe("Crust .run()", () => {
 
 		const result = await unwrap(
 			app.run([], undefined, {
-				stdout: (text) => out.push(text),
-				stderr: (text) => err.push(text),
+				stdout: lineSink(out).write,
+				stderr: lineSink(err).write,
 			}),
 		);
 
@@ -2399,8 +2399,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("keeps extension hooks and the action inside explicitly injected IO", async () => {
-		const stdout = () => {};
-		const stderr = () => {};
+		const written: string[] = [];
 		const observed: (ReturnType<typeof getAmbientTerminalIO> | undefined)[] = [];
 		const observer = defineExtension(defineExtensionId("ambient-observer"))
 			.preRun(() => {
@@ -2417,13 +2416,17 @@ describe("Crust .execute()", () => {
 			throw new Error("expected failure");
 		});
 
-		await app.execute({ argv: [], io: { stdout, stderr } });
+		await app.execute({ argv: [], io: { stdout: lineSink(written), stderr: lineSink(written) } });
 
 		expect(observed).toHaveLength(4);
 		for (const io of observed) {
-			expect(io?.stdout).toBe(stdout);
-			expect(io?.stderr).toBe(stderr);
+			io?.stdout("out");
+			io?.stderr("err");
 		}
+		expect(written).toEqual([
+			"Error: expected failure",
+			...Array.from({ length: 4 }, () => ["out", "err"]).flat(),
+		]);
 		expect(getAmbientTerminalIO()).toBeUndefined();
 	});
 
@@ -2753,7 +2756,7 @@ describe("value errors never echo the raw value", () => {
 			const stderr: string[] = [];
 			const exitCode = await app.execute({
 				argv,
-				io: { stdout: () => {}, stderr: (line) => void stderr.push(line) },
+				io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 			});
 			return { exitCode, stderr: stderr.join("\n"), error: errors.at(-1) };
 		}

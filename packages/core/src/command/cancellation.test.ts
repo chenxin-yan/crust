@@ -1,9 +1,10 @@
 import { getTerminalSignal } from "@crustjs/utils/terminal";
 import { describe, expect, it, beforeEach, afterEach, onTestFinished, vi } from "vite-plus/test";
 
+import { lineSink } from "../../tests/helpers.ts";
 import { Crust, defineContext, defineExtension, defineExtensionId } from "../index.ts";
 
-const quiet = { stdout() {}, stderr() {} };
+const quiet = { stdout: { write() {} }, stderr: { write() {} } };
 
 /** Resolves once the action has started and is awaiting `ctx.signal`. */
 function awaitingSignal() {
@@ -78,7 +79,7 @@ describe("invocation cancellation signal", () => {
 		const stderr: string[] = [];
 		const exitCode = new Crust("cli").action(action).execute({
 			argv: [],
-			io: { stdout() {}, stderr: (text) => stderr.push(text) },
+			io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 			signal: controller.signal,
 		});
 
@@ -119,7 +120,7 @@ describe("invocation cancellation signal", () => {
 		const stderr: string[] = [];
 		const exitCode = new Crust("cli").action(action).execute({
 			argv: [],
-			io: { stdout() {}, stderr: (text) => stderr.push(text) },
+			io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 			signal: controller.signal,
 		});
 
@@ -155,7 +156,7 @@ describe("invocation cancellation signal", () => {
 					await ctx.ctx.resource;
 					return action(ctx);
 				})
-				.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });
+				.execute({ argv: [], io: { stdout: { write() {} }, stderr: lineSink(stderr) } });
 
 			await ready;
 			// Invoke Core's listener directly: emitting a real signal would reach the test runner.
@@ -192,8 +193,8 @@ describe("invocation cancellation signal", () => {
 				.provide(resource())
 				.extend(
 					defineExtension(defineExtensionId("render")).renderer((ctx) => ({
-						text: ctx.stdout,
-						diag: ctx.stderr,
+						text: ctx.stdout.write,
+						diag: ctx.stderr.write,
 						cleanup: (error) => cleanups.push(error),
 					})),
 				)
@@ -201,7 +202,7 @@ describe("invocation cancellation signal", () => {
 					await ctx.ctx.resource;
 					return action(ctx);
 				})
-				.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });
+				.execute({ argv: [], io: { stdout: { write() {} }, stderr: lineSink(stderr) } });
 
 			await ready;
 			// Invoke Core's listener directly: emitting a real signal would reach the test runner.
@@ -232,7 +233,7 @@ describe("invocation cancellation signal", () => {
 			})
 			.execute({
 				argv: [],
-				io: { stdout() {}, stderr: (text) => stderr.push(text) },
+				io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 				signal: controller.signal,
 			});
 
@@ -260,8 +261,8 @@ describe("invocation cancellation signal", () => {
 			const exitCode = new Crust("cli")
 				.extend(
 					defineExtension(defineExtensionId("render")).renderer((ctx) => ({
-						text: ctx.stdout,
-						diag: ctx.stderr,
+						text: ctx.stdout.write,
+						diag: ctx.stderr.write,
 						error: (error) => rendered.push(error),
 						...(withCleanup && { cleanup: (error: unknown) => cleanups.push(error) }),
 					})),
@@ -272,7 +273,7 @@ describe("invocation cancellation signal", () => {
 				})
 				.execute({
 					argv: [],
-					io: { stdout() {}, stderr: (text) => stderr.push(text) },
+					io: { stdout: { write() {} }, stderr: lineSink(stderr) },
 					signal: controller.signal,
 				});
 
@@ -315,7 +316,7 @@ describe("invocation cancellation signal", () => {
 				await using _connection = failingConnection();
 				throw new Error("query failed");
 			})
-			.execute({ argv: [], io: { stdout() {}, stderr: (text) => stderr.push(text) } });
+			.execute({ argv: [], io: { stdout: { write() {} }, stderr: lineSink(stderr) } });
 
 		expect(exitCode).toBe(1);
 		expect(process.exitCode).toBe(1);

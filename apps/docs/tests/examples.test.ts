@@ -12,6 +12,7 @@ import { expect, it } from "vite-plus/test";
 import { database } from "../examples/guide/contexts-setup";
 import { debug } from "../examples/guide/error-handling";
 import { audited, list } from "../examples/guide/extensions-provider-flags";
+import * as terminalIO from "../examples/guide/terminal-io";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
 const read = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
@@ -52,6 +53,32 @@ it("the audited confirmation example reads its Context only after a completed ru
 	expect(outcome.status).toBe("completed");
 	expect(outcome.stdout.trim()).toBe("a b");
 	expect(outcome.stderr).toContain("confirmation skipped with --yes");
+});
+
+it("the terminal I/O examples write bytes, answer for the terminal, and read stdin", async () => {
+	expect((await captureExecute(terminalIO.list, ["-0"], { raw: true })).stdout).toBe(
+		"a.txt\0b.txt\0",
+	);
+	expect((await captureExecute(terminalIO.status, [])).stdout).toBe(
+		"api\trunning\nworker\tstopped",
+	);
+	expect((await captureExecute(terminalIO.status, [], { isTTY: true, columns: 40 })).stdout).toBe(
+		[
+			"NAME".padEnd(20) + "STATE",
+			"api".padEnd(20) + "running",
+			"worker".padEnd(20) + "stopped",
+		].join("\n"),
+	);
+	expect(await captureExecute(terminalIO.lines, [], { stdin: "a\nb\n" })).toMatchObject({
+		stdout: "2",
+		exitCode: 0,
+	});
+	expect(await captureExecute(terminalIO.lines, ["-"], { isTTY: true })).toMatchObject({
+		stderr: "Error: Pass a file, or pipe text to stdin.",
+		exitCode: 2,
+	});
+	expect((await captureExecute(terminalIO.upper, [], { stdin: "shout" })).stdout).toBe("SHOUT");
+	expect((await captureExecute(terminalIO.log, [])).stdout).toMatch(/^line 1\n[^]*line 500$/);
 });
 
 it("extensions example prints the version for `--version` on the actionless root", async () => {

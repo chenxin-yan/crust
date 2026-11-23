@@ -17,7 +17,13 @@ export interface CaptureOptions {
 }
 
 /** Captured text as the helpers return it: plain unless `raw` keeps escape sequences. */
-export function captureText(lines: readonly string[], options: CaptureOptions | undefined): string {
-	const text = lines.join("\n");
+export function captureText(text: string, options: CaptureOptions | undefined): string {
 	return options?.raw ? text : stripVTControlCharacters(text);
+}
+
+/** Every chunk written, as UTF-8 text without the final newline a last `stdout(text)` adds, like `run()`. */
+export function joinChunks(chunks: readonly (string | Uint8Array)[]): string {
+	return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
+		.toString("utf8")
+		.replace(/\n$/, "");
 }

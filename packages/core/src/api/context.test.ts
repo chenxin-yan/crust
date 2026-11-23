@@ -6,6 +6,7 @@ import { Crust, defineCommand } from "../command/crust.ts";
 import type { RunOutcome } from "../command/typed-run.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import type { OutputStream } from "../types.ts";
 import { type AnyContextFactory, type ContextSetup, defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -452,13 +453,13 @@ describe("Context-owned flags", () => {
 
 	it("builds behavior capabilities with the action's injected io", async () => {
 		const verbose = defineFlag({ type: "boolean" });
-		let setupStdout: ((text: string) => void) | undefined;
-		let setupStderr: ((text: string) => void) | undefined;
+		let setupStdout: OutputStream | undefined;
+		let setupStderr: OutputStream | undefined;
 		const logging = defineContext("logging")
 			.flags({ verbose })
 			.setup(({ flags, stdout, stderr }) => {
-				type _Stdout = Expect<Equal<typeof stdout, (text: string) => void>>;
-				type _Stderr = Expect<Equal<typeof stderr, (text: string) => void>>;
+				type _Stdout = Expect<Equal<typeof stdout, OutputStream>>;
+				type _Stderr = Expect<Equal<typeof stderr, OutputStream>>;
 				setupStdout = stdout;
 				setupStderr = stderr;
 				return {
@@ -468,8 +469,8 @@ describe("Context-owned flags", () => {
 				};
 			});
 		const messages: string[] = [];
-		const stdout = (_message: string) => {};
-		const stderr = (message: string) => messages.push(message);
+		const stdout = () => {};
+		const stderr = (chunk: string | Uint8Array) => messages.push(String(chunk));
 		const app = new Crust("cli").provide(logging()).action(async ({ ctx, stdout, stderr }) => {
 			const log = await ctx.logging;
 			expect(setupStdout).toBe(stdout);
@@ -478,7 +479,7 @@ describe("Context-owned flags", () => {
 		});
 
 		await unwrap(app.run([], { flags: { verbose: true } }, { stdout, stderr }));
-		expect(messages).toEqual(["debug"]);
+		expect(messages).toEqual(["debug\n"]);
 	});
 
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
@@ -552,7 +553,7 @@ describe("Context-owned flags at use sites", () => {
 		await unwrap(app.run(["deploy"], { flags: { "api-key": "one" } }));
 		await unwrap(app.run(["inline"], { flags: { "api-key": "two" } }));
 		expect(seen).toEqual(["one", "two"]);
-		const io = { stdout: () => {}, stderr: () => {} };
+		const io = { stdout: { write() {} }, stderr: { write() {} } };
 		expect(await app.execute({ argv: ["status", "--api-key", "x"], io })).toBe(2);
 		expect(await app.execute({ argv: ["--api-key", "x", "status"], io })).toBe(2);
 		await expect(
@@ -1886,9 +1887,12 @@ describe("Context setup defer()", () => {
 			});
 			return "value";
 		});
-		// Structural typing lets a pre-declared io object smuggle extra keys past
-		// Partial<InvocationIO>; execute() spreads it through as-is (run() rebuilds it).
-		const io = { stdout: () => {}, stderr: () => {}, defer: () => log.push("hijacked") };
+		// Structural typing lets a pre-declared io object smuggle extra keys; none reaches a setup.
+		const io = {
+			stdout: { write() {} },
+			stderr: { write() {} },
+			defer: () => log.push("hijacked"),
+		};
 		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
 			await ctx.res;
 		});

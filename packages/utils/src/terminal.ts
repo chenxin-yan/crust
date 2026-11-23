@@ -25,6 +25,68 @@ export interface TerminalIO {
 	readonly signal?: AbortSignal;
 }
 
+/**
+ * The chunks `input` delivers from now until it ends. Read asynchronously: a synchronous read
+ * would block the event loop, so Ctrl-C could not cancel a read waiting on an open pipe or
+ * terminal. Throws `signal.reason` once `signal` aborts. Input an earlier consumer already read
+ * to its end yields nothing, since its `end` event cannot fire again. Throws while another
+ * reader consumes `input` (a flowing stream with a `data` listener), such as an MCP stdio
+ * transport whose protocol frames arrive there: reading would steal them, and the read would
+ * end only when that reader's peer hangs up. Pauses `input` between chunks and once done, so a
+ * slow consumer holds back the writer and a stopped read no longer keeps the process alive.
+ */
+export async function* readInput(
+	input: TerminalInput,
+	signal: AbortSignal,
+): AsyncGenerator<Uint8Array, void, undefined> {
+	signal.throwIfAborted();
+	if (input.readableEnded || input.destroyed) return;
+	if (input.readableFlowing === true && input.listenerCount("data") > 0) {
+		throw new Error("stdin is in use by another reader");
+	}
+	const chunks: Uint8Array[] = [];
+	let ended = false;
+	let failure: { error: unknown } | undefined;
+	let wake: (() => void) | undefined;
+	const notify = () => wake?.();
+	// Strings arrive when something already called `setEncoding()`.
+	const onData = (chunk: Uint8Array | string) => {
+		chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
+		input.pause();
+		notify();
+	};
+	const onEnd = () => {
+		ended = true;
+		notify();
+	};
+	const onError = (error: unknown) => {
+		failure = { error };
+		notify();
+	};
+	input.on("data", onData).once("end", onEnd).once("error", onError);
+	signal.addEventListener("abort", notify);
+	try {
+		for (;;) {
+			signal.throwIfAborted();
+			if (failure) throw failure.error;
+			const chunk = chunks.shift();
+			if (chunk !== undefined) {
+				yield chunk;
+				continue;
+			}
+			if (ended) return;
+			const arrived = new Promise<void>((resolve) => (wake = resolve));
+			// A `data` listener does not restart a stream an earlier consumer paused.
+			input.resume();
+			await arrived;
+		}
+	} finally {
+		signal.removeEventListener("abort", notify);
+		input.off("data", onData).off("end", onEnd).off("error", onError);
+		input.pause();
+	}
+}
+
 /** `CI` counts as set unless it is unset, empty, `0`, or `false` in any letter case. */
 export function isCI(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
 	const ci = env.CI;

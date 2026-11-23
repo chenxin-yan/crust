@@ -385,7 +385,10 @@ const repairErrors: string[] = [];
 await new Crust("demo")
   .extend(skill({}))
   .action(() => {})
-  .execute({ argv: [], io: { stderr: (text) => repairErrors.push(text) } });
+  .execute({
+    argv: [],
+    io: { stderr: { write: (chunk) => repairErrors.push(String(chunk).trimEnd()) } },
+  });
 
 const installErrors: string[] = [];
 await new Crust("demo")
@@ -393,7 +396,7 @@ await new Crust("demo")
   .action(() => {})
   .execute({
     argv: ["skill", "--all", "--scope", "project"],
-    io: { stderr: (text) => installErrors.push(text) },
+    io: { stderr: { write: (chunk) => installErrors.push(String(chunk).trimEnd()) } },
   });
 
 const traeCnTarget = await readlink(join(process.cwd(), ".trae-cn", "skills", "demo"));

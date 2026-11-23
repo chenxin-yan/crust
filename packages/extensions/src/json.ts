@@ -28,14 +28,14 @@ function errorData(error: unknown, detailsKey: symbol): unknown {
 	return details === undefined ? { message: error.message } : { message: error.message, details };
 }
 
-/** Per invocation: writes the `stdout()` lines its renderer still holds to stderr. */
+/** Per invocation: writes the stdout text its renderer still holds to stderr. */
 const flushHeld = /* @__PURE__ */ new WeakMap<ExtensionContext, () => void>();
 
 /**
  * Adds a recursive `--json` flag. With it, the Command Action's result is
  * printed to stdout as one line of JSON (nothing for an `undefined` result),
- * the action's and Contexts' `stderr()` lines go to stderr, and failures are
- * written to stderr as JSON. Their `stdout()` lines go to stderr too, live,
+ * what the action and Contexts write to `stderr` goes to stderr, and failures are
+ * written to stderr as JSON. What they write to `stdout` goes to stderr too, live,
  * except in a command that declares `.output()`: it returns data, so its JSON
  * result replaces that text, and the text is written to stderr only when the
  * command returns nothing, fails, or is cancelled. An async generator action
@@ -86,15 +86,15 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			let streaming = false;
 			let ended = false;
 			// A `.output()` command's result is its data, so its `stdout()` text is held: dropped once a
-			// result is out, written to stderr otherwise. shortcut: held lines stay in memory until the
+			// result is out, written to stderr otherwise. shortcut: held text stays in memory until the
 			// invocation ends; add a size cap that flushes to stderr if anyone hits it.
-			let held: string[] | undefined = ctx.command.output ? [] : undefined;
+			let held: (string | Uint8Array)[] | undefined = ctx.command.output ? [] : undefined;
 			let dropped = false;
 			const flush = () => {
 				if (!held) return;
-				const lines = held;
+				const chunks = held;
 				held = undefined;
-				for (const text of lines) ctx.stderr(text);
+				for (const chunk of chunks) ctx.stderr.write(chunk);
 			};
 			/** Write a serialized result line and drop held text. A serialization failure never gets here, so `error` flushes it. */
 			const emit = (data: string) => {
@@ -107,11 +107,11 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			// Cancellations, `run()` failures and claimed errors never reach `result` or `error`.
 			flushHeld.set(ctx, flush);
 			return {
-				text(text) {
-					if (held) held.push(text);
-					else if (!dropped) ctx.stderr(text);
+				text(chunk) {
+					if (held) held.push(chunk);
+					else if (!dropped) ctx.stderr.write(chunk);
 				},
-				diag: ctx.stderr,
+				diag: ctx.stderr.write,
 				stream() {
 					streaming = true;
 				},

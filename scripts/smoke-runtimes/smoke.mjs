@@ -126,7 +126,10 @@ await new Crust("ambient-dist")
 	})
 	.execute({
 		argv: [],
-		io: { stdout: () => {}, stderr: (text) => ambientErrors.push(text) },
+		io: {
+			stdout: { write() {} },
+			stderr: { write: (chunk) => ambientErrors.push(String(chunk).replace(/\n$/, "")) },
+		},
 	});
 assert.deepEqual(ambientErrors, ["✓ Dist bridge"]);
 

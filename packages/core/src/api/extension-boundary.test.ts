@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { type Equal, type Expect, unwrap } from "../../tests/helpers.ts";
+import { type Equal, type Expect, lineSink, unwrap } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ExecuteOptions } from "../types.ts";
@@ -134,7 +134,7 @@ it("rejects dynamically named Extension commands that collide with another root 
 		const stderr: string[] = [];
 		const originalExitCode = process.exitCode;
 		try {
-			const io = { stdout: () => {}, stderr: (text: string) => stderr.push(text) };
+			const io = { stdout: { write() {} }, stderr: lineSink(stderr) };
 			expect(await app.execute({ argv: ["deploy"], io })).toBe(1);
 		} finally {
 			process.exitCode = originalExitCode ?? 0;

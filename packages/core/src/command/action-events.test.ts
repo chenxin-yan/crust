@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
-import { executeCrust } from "../../tests/helpers.ts";
+import { executeCrust, lineSink } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineExtension,
@@ -10,13 +10,13 @@ import {
 	type Renderer,
 } from "../index.ts";
 
-const quiet = { stdout() {}, stderr() {} };
+const quiet = { stdout: { write() {} }, stderr: { write() {} } };
 
 /** An Extension whose renderer logs its stream signals and passes text through. */
 function loggingRenderer(log: string[], overrides: Partial<Renderer> = {}) {
 	return defineExtension(defineExtensionId("observe")).renderer((ctx) => ({
-		text: ctx.stdout,
-		diag: ctx.stderr,
+		text: ctx.stdout.write,
+		diag: ctx.stderr.write,
 		stream: () => void log.push("stream"),
 		event: (event) => void log.push(`renderer ${String(event)}`),
 		result: (value) => void log.push(`result ${String(value)}`),
@@ -256,7 +256,7 @@ describe("async generator actions", () => {
 		try {
 			const exitCode = await app.execute({
 				argv: [],
-				io: { ...quiet, stderr: (text) => stderr.push(text) },
+				io: { ...quiet, stderr: lineSink(stderr) },
 				signal: controller.signal,
 				onEvent: () => controller.abort(new DOMException("Caller cancelled.", "AbortError")),
 			});
@@ -301,7 +301,7 @@ describe("async generator actions", () => {
 
 		const exitCode = await app.execute({
 			argv: [],
-			io: { ...quiet, stdout: (text) => stdout.push(text) },
+			io: { ...quiet, stdout: lineSink(stdout) },
 			onEvent: (event) => events.push(event),
 		});
 

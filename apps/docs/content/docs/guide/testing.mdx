@@ -36,7 +36,7 @@ See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 <include lang="ts">../../../examples/guide/testing.ts#capture-execute</include>
 
-`captureExecute()` returns what `execute()` would print and the exit code it would set, including Extension error rendering. It restores the prior process exit state afterwards; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
+`captureExecute()` returns what `execute()` would print and the exit code it would set, including Extension error rendering. It restores the prior process exit state afterwards. Its `stdin`, `isTTY`, and `columns` options set what the action reads from [`stdin`](/docs/guide/terminal-io) and whether its output is a terminal; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
 
 <Callout type="warn">
   Patching `process.stdout.write` doesn't capture Crust's output: outside Windows, `execute()`

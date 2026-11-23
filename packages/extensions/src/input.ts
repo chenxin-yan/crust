@@ -1,4 +1,5 @@
 import {
+	type ExtensionContext,
 	type ExtensionFactory,
 	type ExtensionId,
 	CrustError,
@@ -16,11 +17,12 @@ const inputFlags = {
 } as const;
 
 /** Inline JSON, `@path` (relative to the working directory, `~` expanded), or `-` (all of stdin). */
-async function readInput(value: string, signal: AbortSignal): Promise<string> {
+async function readInput(value: string, context: ExtensionContext): Promise<string> {
 	if (value !== "-" && !value.startsWith("@")) return value;
+	const { signal } = context;
 	try {
 		return value === "-"
-			? await (await import("@crustjs/utils/process")).readStdin(signal)
+			? await context.stdin.text()
 			: process
 					.getBuiltinModule("node:fs")
 					.readFileSync((await import("@crustjs/utils/path")).expandHome(value.slice(1)), "utf8");
@@ -58,7 +60,7 @@ export const input: ExtensionFactory<[], {}, [], typeof inputFlags> =
 			.setup(async (context) => {
 				if (typeof context.flags.input !== "string") return;
 				const inputValue = context.flags.input;
-				const text = await readInput(inputValue, context.signal);
+				const text = await readInput(inputValue, context);
 				let values: unknown;
 				try {
 					values = JSON.parse(text);

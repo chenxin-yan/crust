@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
-import type { InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
@@ -12,7 +11,7 @@ import {
 	which,
 } from "@crustjs/utils/process";
 
-import { validatePackageIdentity } from "./distribute.ts";
+import { type LineIO, validatePackageIdentity } from "./distribute.ts";
 
 /** Only the persisted fields publishing consumes; build reports remain informational. */
 type PublishManifest = {
@@ -365,7 +364,7 @@ function defaultRunNpm(): RunNpm {
 	return (dir, args, options) => runProcess(npm, args, { cwd: dir, ...options });
 }
 
-function printProcessOutput({ stdout, stderr }: RunProcessResult, io: InvocationIO): void {
+function printProcessOutput({ stdout, stderr }: RunProcessResult, io: LineIO): void {
 	if (stdout) io.stdout(stdout.replace(/\r?\n$/, ""));
 	if (stderr) io.stderr(stderr.replace(/\r?\n$/, ""));
 }
@@ -428,7 +427,7 @@ function listDirs(dirs: string[]): string {
 export async function publishStagedPackages(
 	manifest: PublishManifest,
 	options: PublishOptions,
-	io: InvocationIO,
+	io: LineIO,
 ): Promise<void> {
 	const staged = validatePublishManifest(options.stageDir, manifest);
 

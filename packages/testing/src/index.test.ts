@@ -58,6 +58,26 @@ describe("captureExecute", () => {
 		}
 	});
 
+	it("gives the action stdin and terminal answers from its options", async () => {
+		const app = new Crust("test-cli").action(async ({ stdin, stdout, stderr }) => {
+			stderr(`${stdin.isTTY} ${stdout.isTTY} ${stdout.columns} ${stderr.columns}`);
+			stdout.write(new TextEncoder().encode(await stdin.text()));
+		});
+		expect(await captureExecute(app, [])).toEqual({
+			stdout: "",
+			stderr: "false false undefined undefined",
+			exitCode: 0,
+		});
+		expect(await captureExecute(app, [], { isTTY: true })).toMatchObject({
+			stderr: "true true 80 80",
+		});
+		expect(await captureExecute(app, [], { isTTY: true, columns: 120, stdin: "a\0b" })).toEqual({
+			stdout: "a\0b",
+			stderr: "false true 120 120",
+			exitCode: 0,
+		});
+	});
+
 	it("captures exit code 1 without leaking it to the process", async () => {
 		process.exitCode = 7;
 		const app = new Crust("test-cli").action(() => {

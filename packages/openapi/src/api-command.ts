@@ -5,6 +5,7 @@ import {
 	type ContextMap,
 	CrustError,
 	type FlagsDef,
+	type InputStream,
 	defineCommand,
 } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
@@ -258,11 +259,11 @@ function parseHeader(header: string): [string, string] {
 }
 
 /** Inline text, `@path` (relative to the working directory, `~` expanded), or `-` (all of stdin). */
-async function readBody(value: string, signal: AbortSignal): Promise<string> {
+async function readBody(value: string, signal: AbortSignal, stdin: InputStream): Promise<string> {
 	if (value !== "-" && !value.startsWith("@")) return value;
 	try {
 		return value === "-"
-			? await (await import("@crustjs/utils/process")).readStdin(signal)
+			? await stdin.text()
 			: process
 					.getBuiltinModule("node:fs")
 					.readFileSync((await import("@crustjs/utils/path")).expandHome(value.slice(1)), "utf8");
@@ -325,7 +326,7 @@ export async function passThroughRequest(
 		readonly body?: string | undefined;
 	},
 	signal: AbortSignal,
-	readBodyFrom: (value: string, signal: AbortSignal) => Promise<string> = readBody,
+	readBodyFrom: (value: string, signal: AbortSignal) => Promise<string>,
 ): Promise<PassThroughRequest> {
 	let url: URL;
 	try {
@@ -441,7 +442,7 @@ export function createApiCommand(
 				.add(preview)
 				.args(pathArg)
 				.flags({ ...browseFlags, ...requestFlags, ...paginateFlag })
-				.action(async ({ args, flags, ctx, signal, stdout, stderr }) => {
+				.action(async ({ args, flags, ctx, signal, stdin, stdout, stderr }) => {
 					// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
 					const json = (flags as { json?: unknown }).json === true;
 					if (flags.list) {
@@ -473,7 +474,9 @@ export function createApiCommand(
 						method,
 						headers,
 						body: requestBody,
-					} = await passThroughRequest(baseUrl, args.path, flags, signal);
+					} = await passThroughRequest(baseUrl, args.path, flags, signal, (value) =>
+						readBody(value, signal, stdin),
+					);
 
 					const api = await ctx.api;
 					/** The response and body of each page: just one without --paginate. Fails after a non-2xx page. */
@@ -503,25 +506,20 @@ export function createApiCommand(
 
 					/** Prints each page's body; under --json, yields a successful page's body as JSON data instead. */
 					async function* bodies(): AsyncGenerator<JsonValue, undefined> {
-						const { getAmbientTerminalIO, writeProcessOutput } =
-							await import("@crustjs/utils/terminal");
-						// Why a body can only be printed as text; undefined when stdout is the process's own
-						// pipe or file, which gets every body's exact bytes, like gh api and curl. A page is
-						// one NDJSON line, JSON cannot hold bytes, injected output (`run()`) takes text lines,
-						// and raw bytes can garble a terminal.
+						// Why a body can only be printed as text; undefined when stdout is a pipe or file, which
+						// gets every body's exact bytes, like gh api and curl. A page is one NDJSON line, JSON
+						// cannot hold bytes, and raw bytes can garble a terminal.
 						let refusal: string | undefined;
 						if (flags.paginate) refusal = "--paginate prints only text and JSON bodies";
 						else if (json) {
 							refusal =
 								"--json prints only text and JSON bodies, so run without it to write the bytes to stdout";
-						} else if (getAmbientTerminalIO() !== undefined) {
-							refusal = "its bytes go only to the process's stdout, not to captured output";
-						} else if (process.getBuiltinModule("node:tty").isatty(1)) {
+						} else if (stdout.isTTY) {
 							refusal = "redirect or pipe stdout to save it instead of printing it to the terminal";
 						}
 						for await (const { response, bytes } of pages()) {
 							if (refusal === undefined) {
-								writeProcessOutput(1, bytes);
+								stdout.write(bytes);
 								continue;
 							}
 							const text = bodyText(bytes);

@@ -8,6 +8,7 @@
     "contexts",
     "extensions",
     "error-handling",
+    "terminal-io",
     "agents",
     "login",
     "testing",

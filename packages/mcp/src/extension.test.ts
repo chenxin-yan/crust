@@ -20,7 +20,10 @@ async function capture(argv: string[]) {
 	const stderr: string[] = [];
 	const exitCode = await app.execute({
 		argv,
-		io: { stdout: (text) => stdout.push(text), stderr: (text) => stderr.push(text) },
+		io: {
+			stdout: { write: (chunk) => void stdout.push(String(chunk).replace(/\n$/, "")) },
+			stderr: { write: (chunk) => void stderr.push(String(chunk).replace(/\n$/, "")) },
+		},
 	});
 	return { exitCode, stdout, stderr };
 }
@@ -56,7 +59,10 @@ describe("mcpExtension", () => {
 		expect(
 			await custom.execute({
 				argv: ["mcp", "config"],
-				io: { stdout: (text) => stdout.push(text), stderr: (text) => stderr.push(text) },
+				io: {
+					stdout: { write: (chunk) => void stdout.push(String(chunk).replace(/\n$/, "")) },
+					stderr: { write: (chunk) => void stderr.push(String(chunk).replace(/\n$/, "")) },
+				},
 			}),
 		).toBe(0);
 		expect(stdout).toEqual([renderClientConfig("claude", "custom", launch)]);

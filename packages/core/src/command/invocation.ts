@@ -1,8 +1,10 @@
 import { isSignalIgnored } from "@crustjs/utils/signals";
 import {
+	readInput,
 	withAmbientTerminalIO,
 	withProcessTerminalSignal,
 	writeProcessOutput,
+	type TerminalInput,
 } from "@crustjs/utils/terminal";
 
 import { validateContextAvailability } from "../api/context.ts";
@@ -27,7 +29,15 @@ import {
 	type FlagEnvironment,
 } from "../parsing/parser.ts";
 import { applyOutputSchema, applySchemas } from "../parsing/schema.ts";
-import type { ExecuteOptions, InvocationIO, InvocationOptions, RunInputPayload } from "../types.ts";
+import type {
+	ExecuteOptions,
+	InputStream,
+	InvocationIO,
+	InvocationOptions,
+	OutputSink,
+	OutputStream,
+	RunInputPayload,
+} from "../types.ts";
 import { createContextResolver } from "./context-resolver.ts";
 import type { CommandDefinition, CrustCommandContext } from "./crust.ts";
 import {
@@ -57,10 +67,57 @@ import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts"
 import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
 import type { CommandShape, ShapeRunOutcome } from "./typed-run.ts";
 
-const DEFAULT_IO: InvocationIO = {
-	stdout: (text) => writeProcessOutput(1, `${text}\n`),
-	stderr: (text) => writeProcessOutput(2, `${text}\n`),
-};
+/** The process's stdout or stderr. Only a terminal has a width, and reading it needs the stream. */
+function processOutput(fd: 1 | 2): OutputSink {
+	const isTTY = () => process.getBuiltinModule("node:tty").isatty(fd);
+	return {
+		write: (chunk) => writeProcessOutput(fd, chunk),
+		get isTTY() {
+			return isTTY();
+		},
+		get columns() {
+			return isTTY() ? (fd === 1 ? process.stdout : process.stderr).columns : undefined;
+		},
+	};
+}
+
+function outputStream(
+	sink: OutputSink,
+	write: (chunk: string | Uint8Array) => void = (chunk) => sink.write(chunk),
+): OutputStream {
+	// SAFETY: the properties defined below complete the callable to the OutputStream shape.
+	return Object.defineProperties((text: string) => write(`${text}\n`), {
+		write: { value: write },
+		isTTY: { get: () => sink.isTTY === true },
+		columns: { get: () => sink.columns },
+	}) as unknown as OutputStream;
+}
+
+type InputSource = NonNullable<NonNullable<ExecuteOptions["io"]>["stdin"]>;
+
+/** The process's stdin when `input` is omitted. Neither stream is created until the first read. */
+function inputStream(input: InputSource | undefined, signal: AbortSignal): InputStream {
+	let readable: TerminalInput | undefined;
+	// One stream for every read, so each read continues where the last one stopped.
+	const stream = () =>
+		readInput(
+			(readable ??= input
+				? process.getBuiltinModule("node:stream").Readable.from(input)
+				: process.stdin),
+			signal,
+		);
+	return {
+		get isTTY() {
+			return input ? input.isTTY === true : process.getBuiltinModule("node:tty").isatty(0);
+		},
+		stream,
+		async text() {
+			const chunks: Uint8Array[] = [];
+			for await (const chunk of stream()) chunks.push(chunk);
+			return Buffer.concat(chunks).toString("utf8");
+		},
+	};
+}
 
 /** A flag handler with the Extension that registered it. */
 interface BoundHandler extends ExtensionHandler<any, any, any> {
@@ -100,25 +157,28 @@ interface InvocationOutput {
 }
 
 function createInvocationOutput(io: InvocationIO): InvocationOutput {
-	let waiting: (readonly [kind: "text" | "diag", line: string])[] = [];
+	let waiting: (readonly [kind: "text" | "diag", chunk: string | Uint8Array])[] = [];
 	let renderer: Renderer | undefined;
-	const write = (kind: "text" | "diag", line: string) => {
-		if (renderer) renderer[kind](line);
-		else waiting.push([kind, line]);
+	const write = (kind: "text" | "diag", chunk: string | Uint8Array) => {
+		if (renderer) renderer[kind](chunk);
+		else waiting.push([kind, chunk]);
 	};
 	return {
 		io,
-		// Spread first, as Context setups receive it: injected io may carry runtime extras.
-		routed: { ...io, stdout: (line) => write("text", line), stderr: (line) => write("diag", line) },
+		routed: {
+			stdin: io.stdin,
+			stdout: outputStream(io.stdout, (chunk) => write("text", chunk)),
+			stderr: outputStream(io.stderr, (chunk) => write("diag", chunk)),
+		},
 		get renderer() {
 			return renderer;
 		},
 		choose(selected) {
-			const chosen = selected ?? { text: io.stdout, diag: io.stderr };
+			const chosen = selected ?? { text: io.stdout.write, diag: io.stderr.write };
 			renderer = chosen;
 			const flushed = waiting;
 			waiting = [];
-			for (const [kind, line] of flushed) chosen[kind](line);
+			for (const [kind, chunk] of flushed) chosen[kind](chunk);
 		},
 	};
 }
@@ -817,6 +877,7 @@ async function dispatch(
 		bindInput(payload: RunInputPayload) {
 			bound = bindStructuredInput(resolvedNode, parsed, payload);
 		},
+		stdin: output.io.stdin,
 		stdout: output.io.stdout,
 		stderr: output.io.stderr,
 		defer(cleanup: () => void | PromiseLike<void>) {
@@ -854,6 +915,7 @@ async function dispatch(
 				get rootCommand() {
 					return snapshots.rootCommand;
 				},
+				stdin: output.routed.stdin,
 				stdout: output.routed.stdout,
 				stderr: output.routed.stderr,
 				exitCode: (code: number) => {
@@ -1052,6 +1114,7 @@ async function renderFailure(
 			rawArgs: [],
 			sources: Object.freeze({ args: Object.freeze({}), flags: Object.freeze({}), raw: undefined }),
 			signal,
+			stdin: output.io.stdin,
 			stdout: output.io.stdout,
 			stderr: output.io.stderr,
 			// No action runs after a failure this early, so there is nothing to bind.
@@ -1106,8 +1169,15 @@ function renderCleanupFailure(error: CaughtError, output: InvocationOutput, labe
 }
 
 /** Explicitly injected IO opts an invocation into the ambient terminal scope. */
-function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
+function hasInjectedIO(io: ExecuteOptions["io"]): boolean {
 	return io !== undefined && Object.keys(io).length > 0;
+}
+
+/** `run()`'s captured text: every chunk as UTF-8, without the final newline a last `stdout(text)` adds. */
+function capturedText(chunks: readonly (string | Uint8Array)[]): string {
+	return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
+		.toString("utf8")
+		.replace(/\n$/, "");
 }
 
 /** Quiet programmatic boundary: capture output and the failure escaping the complete lifecycle. */
@@ -1117,22 +1187,28 @@ export async function runInvocation(
 	options: InvocationOptions | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<ShapeRunOutcome<CommandShape>> {
-	const stdout: string[] = [];
-	const stderr: string[] = [];
+	const stdout: (string | Uint8Array)[] = [];
+	const stderr: (string | Uint8Array)[] = [];
 	const stream: ActionEventStream = { onEvent: options?.onEvent };
 	let failed: { error: CaughtError; exitCode: number } | undefined;
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
-		const { signal = new AbortController().signal, env, ...sinks } = options ?? {};
+		const { signal = new AbortController().signal, env, ...live } = options ?? {};
+		// Captured output is no terminal; input stays the process's.
 		const resolvedIO: InvocationIO = {
-			stdout(text) {
-				stdout.push(text);
-				sinks.stdout?.(text);
-			},
-			stderr(text) {
-				stderr.push(text);
-				sinks.stderr?.(text);
-			},
+			stdin: inputStream(undefined, signal),
+			stdout: outputStream({
+				write(chunk) {
+					stdout.push(chunk);
+					live.stdout?.(chunk);
+				},
+			}),
+			stderr: outputStream({
+				write(chunk) {
+					stderr.push(chunk);
+					live.stderr?.(chunk);
+				},
+			}),
 		};
 		const outcome = await withAmbientTerminalIO(
 			resolvedIO,
@@ -1154,15 +1230,15 @@ export async function runInvocation(
 			},
 			signal,
 		);
-		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+		return { ...outcome, stdout: capturedText(stdout), stderr: capturedText(stderr) };
 	} catch (error) {
 		return {
 			status: "failed",
 			error,
 			exitCode: failed && Object.is(error, failed.error) ? failed.exitCode : failureExitCode(error),
 			...eventsOf(stream),
-			stdout: stdout.join("\n"),
-			stderr: stderr.join("\n"),
+			stdout: capturedText(stdout),
+			stderr: capturedText(stderr),
 		};
 	}
 }
@@ -1179,7 +1255,8 @@ export async function executeInvocation(
 	// guide/arguments-and-flags.mdx documents the `-- --` workaround. Drop that callout once fixed.
 	const argv = options?.argv ?? process.argv.slice(2);
 	const env = options?.env ?? process.env;
-	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
+	const stdoutSink = options?.io?.stdout ?? processOutput(1);
+	const stderr = outputStream(options?.io?.stderr ?? processOutput(2));
 	// One controller per invocation so SIGINT, SIGTERM and a caller signal share `ctx.signal`.
 	const controller = new AbortController();
 	const signal = options?.signal
@@ -1197,7 +1274,7 @@ export async function executeInvocation(
 			await writeSnapshotProtocol(node, snapshotPath, materializeCommandDefinition);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			io.stderr(message);
+			stderr(message);
 			return process.exit(1);
 		}
 		return process.exit(0);
@@ -1216,7 +1293,7 @@ export async function executeInvocation(
 		} catch (error) {
 			// Extension-application failures render directly: hooks belong to
 			// Extensions that just failed to apply.
-			if (!isAbortError(error)) io.stderr(describeFailure(error));
+			if (!isAbortError(error)) stderr(describeFailure(error));
 			return failureExitCode(error);
 		}
 
@@ -1264,15 +1341,16 @@ export async function executeInvocation(
 			if (closed) cancel("SIGPIPE", closed);
 		};
 		const output = createInvocationOutput({
-			...io,
-			stdout(text) {
+			stdin: inputStream(options?.io?.stdin, signal),
+			stdout: outputStream(stdoutSink, (chunk) => {
 				try {
-					io.stdout(text);
+					stdoutSink.write(chunk);
 				} catch (error) {
 					onStdoutClosed(error);
 					throw error;
 				}
-			},
+			}),
+			stderr,
 		});
 		let extensionContext: ExtensionContext | undefined;
 		let rendered: { error: CaughtError; exitCode: number } | undefined;
@@ -1351,7 +1429,7 @@ export async function executeInvocation(
 
 	// Prompts, spinners and `runSteps()` cancel with the invocation unless given their own signal.
 	const code = await (inProcess
-		? withAmbientTerminalIO(io, invoke, signal)
+		? withAmbientTerminalIO({ stdout: outputStream(stdoutSink), stderr }, invoke, signal)
 		: withProcessTerminalSignal(signal, invoke));
 	// The one write: hooks and the action cannot change the status by assigning `process.exitCode`.
 	process.exitCode = code;

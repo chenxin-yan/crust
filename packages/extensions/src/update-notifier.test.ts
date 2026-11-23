@@ -158,10 +158,10 @@ describe("fetchLatestVersion", () => {
 
 describe("updateNotifier post-run hook", () => {
 	const originalFetch = globalThis.fetch;
-	const stderrIsTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
 	// Each test gets its own state directory, so one package name serves every test.
 	const pkgName = "my-cli";
 	let stderrChunks: string[];
+	let stderrIsTTY: boolean;
 	let cachedState: UpdateNotifierState | undefined;
 	let tempDirs: string[];
 
@@ -177,7 +177,7 @@ describe("updateNotifier post-run hook", () => {
 		// The check runs only in an interactive, non-CI terminal; the runner may be neither.
 		vi.stubEnv("CI", undefined);
 		vi.stubEnv("NO_UPDATE_NOTIFIER", undefined);
-		setStderrIsTTY(true);
+		stderrIsTTY = true;
 
 		stderrChunks = [];
 	});
@@ -186,17 +186,11 @@ describe("updateNotifier post-run hook", () => {
 		globalThis.fetch = originalFetch;
 		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
-		if (stderrIsTTY) Object.defineProperty(process.stderr, "isTTY", stderrIsTTY);
-		else Reflect.deleteProperty(process.stderr, "isTTY");
 		await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 	});
 
 	function getOutput() {
 		return stderrChunks.join("");
-	}
-
-	function setStderrIsTTY(isTTY: boolean): void {
-		Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: isTTY });
 	}
 
 	/**
@@ -226,7 +220,7 @@ describe("updateNotifier post-run hook", () => {
 	 * Defaults to `pkgName` at 1.0.0 with `memoryCache`; `cache: undefined` selects the built-in store.
 	 */
 	async function runNotifier(options: Partial<UpdateNotifierOptions> = {}) {
-		const outcome = await new Crust(pkgName)
+		const exitCode = await new Crust(pkgName)
 			.extend(
 				updateNotifier({
 					currentVersion: "1.0.0",
@@ -236,8 +230,14 @@ describe("updateNotifier post-run hook", () => {
 				}),
 			)
 			.action(() => {})
-			.run([], {}, { stdout: () => {}, stderr: (text) => stderrChunks.push(text) });
-		if (outcome.status === "failed") throw outcome.error;
+			.execute({
+				argv: [],
+				io: {
+					stdout: { write() {} },
+					stderr: { write: (chunk) => void stderrChunks.push(String(chunk)), isTTY: stderrIsTTY },
+				},
+			});
+		expect(exitCode).toBe(0);
 	}
 
 	describe("built-in cache adapter", () => {
@@ -301,7 +301,7 @@ describe("updateNotifier post-run hook", () => {
 		});
 
 		it("skips the check when stderr is not a TTY", async () => {
-			setStderrIsTTY(false);
+			stderrIsTTY = false;
 			await expectSkipped();
 		});
 
@@ -652,9 +652,9 @@ describe("updateNotifier post-run hook", () => {
 					throw new Error("command failed");
 				});
 
-			expect(await app.run([])).toMatchObject({
-				status: "failed",
-				error: new Error("command failed"),
+			expect(await captureExecute(app, [], { isTTY: true })).toMatchObject({
+				stderr: "Error: command failed",
+				exitCode: 1,
 			});
 
 			expect(fetchFn).not.toHaveBeenCalled();
@@ -674,7 +674,7 @@ describe("updateNotifier post-run hook", () => {
 					commandExecuted = true;
 				});
 
-			const { stderr } = await captureExecute(app, []);
+			const { stderr } = await captureExecute(app, [], { isTTY: true });
 
 			expect(commandExecuted).toBe(true);
 			expect(stderr).toContain("Update available");
@@ -691,7 +691,7 @@ describe("updateNotifier post-run hook", () => {
 					commandExecuted = true;
 				});
 
-			const { stderr, exitCode } = await captureExecute(app, []);
+			const { stderr, exitCode } = await captureExecute(app, [], { isTTY: true });
 
 			expect(commandExecuted).toBe(true);
 			expect(exitCode).toBe(0);

@@ -198,9 +198,9 @@ export function createContextResolver(
 						Object.keys(context.ownedFlags).map((flag) => [flag, validatedFlags?.[flag]]),
 					);
 					const value = await context.setup({
-						// Spread first: injected io is only typed as stdout/stderr, but runtime
-						// extras must not shadow the lifecycle fields below.
-						...io,
+						stdin: io.stdin,
+						stdout: io.stdout,
+						stderr: io.stderr,
 						signal,
 						flags: ownedFlags,
 						ctx: makeBag(context.use, current),

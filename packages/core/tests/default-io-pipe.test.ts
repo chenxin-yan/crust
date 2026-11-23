@@ -260,7 +260,7 @@ await new Crust("pipe-cli")
 		process.kill(process.pid, "SIGINT");
 		await sleep(500);
 	})
-	.execute({ argv: [], io: { stderr: (text) => console.error(text) } });
+	.execute({ argv: [], io: { stderr: { write: (chunk) => process.stderr.write(chunk) } } });
 console.error(\`resolved \${code}\`);
 process.exitCode = 0;
 `;
@@ -278,6 +278,58 @@ process.exitCode = 0;
 					stdout: "0 0\n",
 					stderr: "resolved 141\n",
 					status: 0,
+				});
+			},
+		);
+
+		it(`reads piped stdin and answers for the process's pipes (${runtime})`, () => {
+			const source = `${importCore("dist/index.js")}await new Crust("cat")
+	.action(async ({ stdin, stdout, stderr }) => {
+		stderr(\`\${stdin.isTTY} \${stdout.isTTY} \${stdout.columns}\`);
+		stdout.write(new TextEncoder().encode(await stdin.text()));
+	})
+	.execute({ argv: [] });
+`;
+			const { stdout, stderr, status } = spawnSync(
+				runtime,
+				["--input-type=module", "--eval", source],
+				{ input: "a\0b\0", encoding: "utf8", timeout: 5_000 },
+			);
+			expect({ stdout, stderr, status }).toEqual({
+				stdout: "a\0b\0",
+				stderr: "false false undefined\n",
+				status: 0,
+			});
+		});
+
+		it.runIf(fdWriter)(
+			`stops waiting on stdin at Ctrl-C and dies by SIGINT (${runtime})`,
+			async () => {
+				const source = `${importCore("dist/index.js")}await new Crust("cat")
+	.action(async ({ stdin, stderr }) => {
+		const text = stdin.text();
+		process.kill(process.pid, "SIGINT");
+		try {
+			await text;
+		} catch (error) {
+			stderr(\`\${error.name} \${error.cause}\`);
+			throw error;
+		}
+	})
+	.execute({ argv: [] });
+`;
+				// stdin stays open: the read ends only by cancellation.
+				const proc = spawn(runtime, ["--input-type=module", "--eval", source], {
+					stdio: ["pipe", "ignore", "pipe"],
+					timeout: 5_000,
+				});
+				const stderr = text(proc.stderr);
+				const [code, signal] = await once(proc, "close");
+				proc.stdin.destroy();
+				expect({ stderr: await stderr, code, signal }).toEqual({
+					stderr: "AbortError SIGINT\n",
+					code: null,
+					signal: "SIGINT",
 				});
 			},
 		);

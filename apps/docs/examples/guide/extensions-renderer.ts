@@ -4,8 +4,8 @@ export const quiet = defineExtension(defineExtensionId("acme:quiet"))
 	.flags({ quiet: { type: "boolean" } })
 	// [!code highlight:4]
 	.renderer((ctx) =>
-		// Drop the action's stdout lines; keep its diagnostics.
-		ctx.flags.quiet === true ? { text: () => {}, diag: ctx.stderr } : undefined,
+		// Drop what the action writes to stdout; keep its diagnostics.
+		ctx.flags.quiet === true ? { text: () => {}, diag: ctx.stderr.write } : undefined,
 	);
 
 const app = new Crust("app").extend(quiet).action(({ stdout }) => {

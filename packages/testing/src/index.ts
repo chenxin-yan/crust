@@ -1,11 +1,8 @@
-import type { ExecuteOptions, InvocationIO } from "@crustjs/core";
+import type { ExecuteOptions, OutputSink } from "@crustjs/core";
 
-import { type CaptureOptions, captureText } from "./capture.ts";
+import { type CaptureOptions, captureText, joinChunks } from "./capture.ts";
 
 export type { CaptureOptions } from "./capture.ts";
-
-/** Structural io shape accepted by {@link captureExecute}. */
-export type CaptureIO = Partial<InvocationIO>;
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
 export interface ExecutableApp {
@@ -13,6 +10,23 @@ export interface ExecutableApp {
 	// `exactOptionalPropertyTypes`.
 	execute(options?: ExecuteOptions): Promise<number>;
 }
+
+/** {@link CaptureOptions} plus the streams the action sees. */
+export type CaptureExecuteOptions = CaptureOptions & {
+	/**
+	 * What the action reads from `stdin`, which then reports no terminal, as a pipe does.
+	 * Default: no input.
+	 */
+	stdin?: string | Uint8Array | undefined;
+} & (
+		| {
+				/** Make `stdout` and `stderr`, and `stdin` without the `stdin` option, report a terminal. */
+				isTTY: true;
+				/** The width `stdout.columns` and `stderr.columns` report. Default: 80. */
+				columns?: number | undefined;
+		  }
+		| { isTTY?: false | undefined; columns?: undefined }
+	);
 
 export interface CapturedExecute {
 	readonly stdout: string;
@@ -32,33 +46,41 @@ let exitCodeBeforeExecuteCaptures: typeof process.exitCode;
  * Drive the terminal `execute()` path in-process: exit-code protocol,
  * Extension `onError` rendering, and cancellation (130, or 143 after SIGTERM) are all observable
  * without spawning a subprocess. Flags' `env` fallbacks read `options.env` when given, and
- * captured text is plain unless `options.raw` is set.
+ * captured text is plain unless `options.raw` is set. The action's streams are no terminal
+ * unless `options.isTTY` is set, and its `stdin` holds `options.stdin`, else nothing.
  */
 export async function captureExecute(
 	app: ExecutableApp,
 	argv: readonly string[],
-	options?: CaptureOptions,
+	options?: CaptureExecuteOptions,
 ): Promise<CapturedExecute> {
-	const stdoutLines: string[] = [];
-	const stderrLines: string[] = [];
+	const stdoutChunks: (string | Uint8Array)[] = [];
+	const stderrChunks: (string | Uint8Array)[] = [];
+	const isTTY = options?.isTTY === true;
+	const columns = isTTY ? (options.columns ?? 80) : undefined;
+	const sink = (chunks: (string | Uint8Array)[]): OutputSink => ({
+		write: (chunk) => void chunks.push(chunk),
+		isTTY,
+		columns,
+	});
+	const input = options?.stdin;
+	const stdin = Object.assign(
+		(async function* () {
+			if (input !== undefined) yield input;
+		})(),
+		{ isTTY: isTTY && input === undefined },
+	);
 	if (activeExecuteCaptures === 0) exitCodeBeforeExecuteCaptures = process.exitCode;
 	activeExecuteCaptures++;
 	try {
 		const exitCode = await app.execute({
 			argv,
 			...(options?.env !== undefined && { env: options.env }),
-			io: {
-				stdout: (text) => {
-					stdoutLines.push(text);
-				},
-				stderr: (text) => {
-					stderrLines.push(text);
-				},
-			},
+			io: { stdin, stdout: sink(stdoutChunks), stderr: sink(stderrChunks) },
 		});
 		return {
-			stdout: captureText(stdoutLines, options),
-			stderr: captureText(stderrLines, options),
+			stdout: captureText(joinChunks(stdoutChunks), options),
+			stderr: captureText(joinChunks(stderrChunks), options),
 			exitCode,
 		};
 	} finally {

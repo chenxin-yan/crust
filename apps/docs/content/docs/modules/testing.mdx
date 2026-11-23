@@ -18,11 +18,21 @@ npm install -D @crustjs/testing
 
 `captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output. `app` is anything with Crust's `execute({ argv, io, env })` method (`ExecutableApp`).
 
-`stdout` and `stderr` hold each `stdout()` or `stderr()` call's text joined with newlines, like `run()`'s outcome: the newline `execute()` appends to every line in a terminal is between lines, not after the last one, so a single line compares as `"Error: …"`, not `"Error: …\n"`.
+`stdout` and `stderr` hold what was written, decoded as UTF-8, without one final newline, like `run()`'s outcome: a single line compares as `"Error: …"`, not `"Error: …\n"`.
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
-An optional third argument takes [`CaptureOptions`](#captureoptions).
+An optional third argument takes [`CaptureOptions`](#captureoptions), plus the streams the action sees:
+
+- `stdin` is the text the action reads from [`stdin`](/docs/guide/terminal-io#read-stdin); `stdin.isTTY` is then `false`, as for a pipe. Without it, stdin is empty.
+- `isTTY: true` makes `stdout.isTTY` and `stderr.isTTY` `true`, and `stdin.isTTY` too unless `stdin` is given. `columns` sets their width, `80` by default, and needs `isTTY: true`. Without `isTTY`, the streams are no terminal and `columns` is `undefined`.
+
+```ts
+await captureExecute(app, ["-"], { stdin: "a\nb\n" });
+await captureExecute(app, [], { isTTY: true, columns: 120 });
+```
+
+<auto-type-table path="../../../../../packages/testing/src/index.ts" name="CaptureExecuteOptions" />
 
 ## `runInteractive(app, path, input?)`
 
@@ -36,7 +46,7 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 
 The action's `stdout()` output stays off the screen; read it with the handle's `stdout()` method.
 
-The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. It does not inject stdin: test `readStdin()` and `--input -` in a subprocess.
+The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. It does not inject stdin: test reading stdin and `--input -` with `captureExecute()`'s `stdin` option.
 
 <auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
 

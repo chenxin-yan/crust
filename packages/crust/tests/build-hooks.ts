@@ -33,8 +33,10 @@ export async function runBuildHooks(
 			await app.execute({
 				argv: [],
 				io: {
-					stderr: (message) => {
-						error = message;
+					stderr: {
+						write(chunk) {
+							error = String(chunk).replace(/\n$/, "");
+						},
 					},
 				},
 			});
