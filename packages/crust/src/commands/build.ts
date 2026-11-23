@@ -12,8 +12,7 @@ import { HOST_TARGET } from "../targets.ts";
  * @example
  * ```sh
  * crust build --artifact package               # Stage a root-only runtime package
- * crust build --artifact binary                # Stage binaries for every target of the compiler
- * crust build --artifact binary --target host  # Stage only this machine's target
+ * crust build --artifact binary                # Stage binaries for crust.targets, or this machine
  * crust build --target bun-linux-x64           # Stage only Linux x64 (crust.artifact: binary)
  * crust build --no-minify                      # Disable minification
  * crust build --env-file .env.production       # Inline PUBLIC_* constants from a file
@@ -34,7 +33,7 @@ export const buildCommand = defineCommand(
 				target: {
 					type: "string",
 					multiple: true,
-					description: `Canonical compiler target(s) for binaries, or "${HOST_TARGET}" for this machine; repeatable. Omit to stage package.json crust.targets, or every target`,
+					description: `Canonical compiler target(s) for binaries, or "${HOST_TARGET}" for this machine; repeatable. Omit to stage package.json crust.targets, or this machine's target`,
 					short: "t",
 				},
 				"env-file": {

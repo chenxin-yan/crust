@@ -9,7 +9,7 @@ import { type RunProcessResult, runProcess } from "@crustjs/utils/process";
 import satisfies from "semver/functions/satisfies.js";
 import validVersion from "semver/functions/valid.js";
 
-import crustPackage from "../package.json" with { type: "json" };
+import { optionalDependencies } from "../package.json" with { type: "json" };
 import { type BundleSettings, execScriptBuild, runBuildProcess } from "./bundle.ts";
 import {
 	assertCompilerSatisfiesEngines,
@@ -169,7 +169,7 @@ export async function resolveNodeExeBackend(
 		// Read @tsdown/exe only after tsdown passes, so a mismatched tsdown reports the guidance first.
 		const installed = name === "tsdown" ? tsdownPackage : readPackage(path);
 		const version = isVersionedPackageJson(installed) ? installed.version : "without a version";
-		const pinned = crustPackage.optionalDependencies[name];
+		const pinned = optionalDependencies[name];
 		if (!satisfies(version, pinned)) {
 			throw new Error(
 				`${name} ${version} (${path}) is not the ${name} ${pinned} that crust builds node standalone binaries with.\n${reinstall}`,
@@ -345,7 +345,9 @@ export async function execNodeBinaryBuild(
 			);
 		}
 		await copyFile(join(exeDir, produced[0]!), outfilePath);
-		if (output) onWarning(output);
+		// Node's --build-sea (LIEF) reports ELF notes it cannot name; the executable is fine.
+		const warnings = output.replace(/^Unknown section name for note '[^'\n]*'$\n?/gm, "").trim();
+		if (warnings) onWarning(warnings);
 	} finally {
 		await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}

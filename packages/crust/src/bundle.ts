@@ -1,6 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { chmod, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import {
+	chmod,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rename,
+	rm,
+	writeFile,
+} from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { runProcess } from "@crustjs/utils/process";
@@ -49,7 +59,15 @@ type BunPluginDriverBuild = {
 			bytecode?: true;
 			format?: "esm";
 	  }
-	| { target: "bun" | "node"; format: "esm"; external: readonly string[] }
+	| {
+			target: "bun" | "node";
+			format: "esm";
+			external: readonly string[];
+			/** With `outdir` and `naming`: Bun writes the entry and its chunks there. */
+			splitting?: boolean;
+			outdir?: string;
+			naming?: { entry: string; chunk: string };
+	  }
 );
 
 export type BunPluginDriverOptions = {
@@ -98,7 +116,7 @@ if (!result.success) {
 	for (const log of result.logs) console.error(log);
 	process.exit(1);
 }
-if (!options.build.compile) {
+if (!options.build.compile && !options.build.outdir) {
 	if (result.outputs.length !== 1) {
 		// Same refusal as \`bun build --outfile\`: a file-type asset import yields entry + asset.
 		console.error("error: cannot write multiple output files without an output directory");
@@ -239,6 +257,10 @@ export function createBunCompileArgs(
 	];
 }
 
+/** Chunks of a split runtime package bundle, flat beside it in `bin/` so `artifactPath` still finds the package root. */
+const CHUNK_NAMING = "chunk-[hash].[ext]";
+const CHUNK_PATTERN = /^chunk-\w+\.js$/;
+
 /** Runs one compiler step; returns its output, which a successful step may still print (warnings). */
 export async function runBuildProcess(
 	runner: BuildRunner,
@@ -282,43 +304,85 @@ export async function execScriptBuild(
 		target === "node" && /^#![^\n]*\bbun\b/.test(await readFile(entryPath, "utf8"))
 			? [entryPath, await realpath(entryPath)]
 			: undefined;
-	if (settings.bunPlugins.length > 0 || stripShebang !== undefined) {
-		await runBunPluginDriver(
-			{
-				entrypoints: [entryPath],
-				minify,
-				env: "PUBLIC_*",
-				target,
-				format: "esm",
-				external,
-			},
-			outfilePath,
-			settings,
-			runner,
-			stripShebang,
-		);
-	} else {
-		await runBuildProcess(
-			runner,
-			[
-				"build",
-				...toBunEnvFileArgs(envFiles),
-				"--env=PUBLIC_*",
-				"--define",
-				CRUST_BUILD_DEFINE_ARG,
-				"--target",
-				target,
-				"--format",
-				"esm",
-				...external.flatMap((name) => ["--external", name]),
-				"--outfile",
+	// A bundle inlines an `import()`ed module and hoists its external imports to the
+	// top, so every command would load them. Split instead: each `import()` becomes a
+	// chunk that imports its externals itself, written beside the bundle.
+	let outdir: string | undefined;
+	if (external.length > 0) {
+		await mkdir(dirname(outfilePath), { recursive: true });
+		outdir = await mkdtemp(join(dirname(outfilePath), ".crust-split-"));
+	}
+	const entryName = basename(outfilePath);
+	try {
+		if (settings.bunPlugins.length > 0 || stripShebang !== undefined) {
+			await runBunPluginDriver(
+				{
+					entrypoints: [entryPath],
+					minify,
+					env: "PUBLIC_*",
+					target,
+					format: "esm",
+					external,
+					...(outdir !== undefined
+						? {
+								splitting: true,
+								outdir,
+								naming: { entry: entryName, chunk: CHUNK_NAMING },
+							}
+						: {}),
+				},
 				outfilePath,
-				...(minify ? ["--minify"] : []),
-				entryPath,
-			],
-			outfilePath,
-			cwd,
-		);
+				settings,
+				runner,
+				stripShebang,
+			);
+		} else {
+			await runBuildProcess(
+				runner,
+				[
+					"build",
+					...toBunEnvFileArgs(envFiles),
+					"--env=PUBLIC_*",
+					"--define",
+					CRUST_BUILD_DEFINE_ARG,
+					"--target",
+					target,
+					"--format",
+					"esm",
+					...external.flatMap((name) => ["--external", name]),
+					...(outdir !== undefined
+						? [
+								"--splitting",
+								"--outdir",
+								outdir,
+								"--entry-naming",
+								entryName,
+								"--chunk-naming",
+								CHUNK_NAMING,
+							]
+						: ["--outfile", outfilePath]),
+					...(minify ? ["--minify"] : []),
+					entryPath,
+				],
+				outfilePath,
+				cwd,
+			);
+		}
+		if (outdir !== undefined) {
+			const outputs = await readdir(outdir);
+			const asset = outputs.find((name) => name !== entryName && !CHUNK_PATTERN.test(name));
+			if (asset !== undefined) {
+				// Bun refers to an emitted file by a path relative to the working directory, not the bundle.
+				throw new Error(
+					`Build failed for ${outfilePath}: an import emits ${asset} beside the bundle, which the installed CLI cannot locate.\n  Move the file into a crust.include directory and read it with artifactPath().`,
+				);
+			}
+			for (const name of outputs) {
+				await rename(join(outdir, name), join(dirname(outfilePath), name));
+			}
+		}
+	} finally {
+		if (outdir !== undefined) await rm(outdir, { recursive: true, force: true });
 	}
 
 	const output = (await readFile(outfilePath, "utf8")).replace(/^#![^\n]*(?:\n|$)/, "");

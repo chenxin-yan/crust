@@ -3,7 +3,7 @@ import {
 	mkdirSync,
 	readFileSync,
 	realpathSync,
-	rmdirSync,
+	renameSync,
 	rmSync,
 	statSync,
 } from "node:fs";
@@ -52,7 +52,7 @@ import {
 	type BuildRuntime,
 	BUN_TARGETS,
 	type BunTarget,
-	type HOST_TARGET,
+	HOST_TARGET,
 	NODE_TARGETS,
 	type NodeTarget,
 	resolveTargets,
@@ -218,10 +218,10 @@ function validateExternal(
 	external: readonly string[],
 	pkg: JsonObject,
 	runtime: BuildRuntime,
-	artifact: ArtifactKind,
+	configuredArtifact: ArtifactKind | undefined,
 ): void {
 	if (external.length === 0) return;
-	if (artifact === "binary") {
+	if (configuredArtifact === "binary") {
 		throw new Error(
 			"package.json crust.external is not supported for standalone binaries (artifact binary).\n  A binary bundles every dependency; remove crust.external or use artifact package.",
 		);
@@ -420,9 +420,9 @@ export type BuildOptions = {
 	artifact?: ArtifactKind;
 	/**
 	 * Canonical compiler targets, or `"host"` for this machine. Overrides
-	 * package.json `crust.targets`; omit both to stage every target of the
-	 * binary compiler. Rejected for runtime packages. Known names are completion
-	 * hints only; any string is checked at build time.
+	 * package.json `crust.targets`; omit both to stage this machine's target only.
+	 * Rejected for runtime packages. Known names are completion hints only; any
+	 * string is checked at build time.
 	 */
 	targets?: readonly (BunTarget | NodeTarget | typeof HOST_TARGET | (string & {}))[];
 	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. */
@@ -506,7 +506,9 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			"--target cannot be used with runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; drop --target or use artifact binary.",
 		);
 	}
-	if (artifact === "package" && config.targets !== undefined) {
+	// crust.targets and crust.external that do not apply to an artifact chosen by the
+	// option are ignored; they conflict only with crust.artifact itself.
+	if (config.artifact === "package" && config.targets !== undefined) {
 		throw new Error(
 			'package.json crust.targets is not supported for runtime packages (artifact package).\n  A runtime package is one portable JavaScript bundle; remove crust.targets or set "artifact": "binary".',
 		);
@@ -524,7 +526,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 			"package.json crust.bunPlugins is not supported for node standalone binaries.\n  Remove crust.bunPlugins, or use artifact package or the bun runtime.",
 		);
 	}
-	validateExternal(external, userPackageJson, runtime, artifact);
+	validateExternal(external, userPackageJson, runtime, config.artifact);
 
 	const stageDir = resolve(cwd, CRUST_DIR);
 	const common = {
@@ -535,7 +537,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 		envFiles,
 		bunPlugins,
 		include: config.include ?? [],
-		external,
+		external: artifact === "package" ? external : [],
 		outDir: join(stageDir, "artifacts"),
 		stageDir,
 		validate: options.validate ?? true,
@@ -544,7 +546,10 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	};
 
 	if (artifact === "package") return { ...common, runtime, artifact };
-	const targetInputs = options.targets?.length ? options.targets : config.targets;
+	// This machine by default; a release stages crust.targets or every target (`crust publish` checks).
+	const targetInputs = options.targets?.length
+		? options.targets
+		: (config.targets ?? [HOST_TARGET]);
 	if (runtime === "bun") {
 		return {
 			...common,
@@ -569,8 +574,8 @@ type SelectedCompilers = {
 };
 
 /**
- * Selects every compiler the build uses, once, before `.crust/` is wiped, so a
- * missing tool or an engines mismatch keeps the previous stage. Binaries use
+ * Selects every compiler the build uses, once, before anything is staged, so a
+ * missing tool or an engines mismatch fails before any work. Binaries use
  * the selected compiler's own version (`resolveBinaryCompiler`, or
  * `resolveNodeBinaryCompiler` with tsdown's requirements for node, whose
  * targets' embedded Node binaries are also provisioned here); runtime
@@ -700,17 +705,16 @@ async function prepareEntries(
  * executable), so this works under Node as well when Bun is installed; Node
  * binaries need a node on PATH that Crust's tsdown can build executables with.
  *
- * Throws on any failure. Planning and compiler-selection failures (bad
- * options or package.json, a missing or hung compiler, an engines mismatch) leave the
- * previous `.crust/` stage untouched; later failures leave a wiped stage
- * without a completion `manifest.json`. Overlapping calls for the same real
- * project directory are rejected across processes before staging. An interrupted
- * process may leave `.crust.lock`; remove it only when no build is running.
+ * Throws on any failure, leaving the previous `.crust/` stage untouched: the
+ * tree is staged in `.crust.lock/stage` and replaces `.crust/` only once the
+ * build succeeds. Overlapping calls for the same real project directory are
+ * rejected across processes before staging. An interrupted process may leave
+ * `.crust.lock`; remove it only when no build is running.
  */
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	const cwd = resolve(options.cwd ?? process.cwd());
 	const project = realpathSync(cwd);
-	// Outside the stage so wiping .crust cannot release another process's exclusion.
+	// Outside the stage so replacing .crust cannot release another process's exclusion.
 	const lockDir = join(project, `${CRUST_DIR}.lock`);
 	try {
 		mkdirSync(lockDir);
@@ -723,12 +727,17 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 		);
 	}
 	try {
+		const staging = join(lockDir, "stage");
+		const planned = planBuild(options, cwd);
+		const stageDir = planned.stageDir;
+		const plan: BuildPlan = { ...planned, stageDir: staging, outDir: join(staging, "artifacts") };
+		// Paths are reported where they end up once `staging` replaces .crust/.
+		const staged = (text: string) => text.replaceAll(staging, stageDir);
 		const onLog = options.onLog ?? (() => {});
 		const io: LineIO = {
-			stdout: (line) => onLog(line, "stdout"),
-			stderr: (line) => onLog(line, "stderr"),
+			stdout: (line) => onLog(staged(line), "stdout"),
+			stderr: (line) => onLog(staged(line), "stderr"),
 		};
-		const plan = planBuild(options, cwd);
 		io.stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
 		io.stdout(`${dim("Artifact:")} ${plan.artifact}`);
 		for (const { entryPath } of plan.entries) {
@@ -741,15 +750,19 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 			}
 		}
 		const compilers = await selectCompilers(plan, io);
-		// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
-		rmSync(plan.stageDir, { recursive: true, force: true });
 		// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.
 		const reports = plan.validate
 			? await prepareEntries(plan, io, compilers.snapshotRunner)
 			: undefined;
 		const artifacts = await compilers.stage(reports);
-		return { stageDir: plan.stageDir, artifacts, ...(reports ? { reports } : {}) };
+		rmSync(stageDir, { recursive: true, force: true });
+		renameSync(staging, stageDir);
+		return {
+			stageDir,
+			artifacts: artifacts.map((artifact) => ({ ...artifact, path: staged(artifact.path) })),
+			...(reports ? { reports } : {}),
+		};
 	} finally {
-		rmdirSync(lockDir);
+		rmSync(lockDir, { recursive: true, force: true });
 	}
 }

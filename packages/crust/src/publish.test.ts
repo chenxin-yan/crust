@@ -167,7 +167,8 @@ describe("publish manifest validation", () => {
 		const writeProject = (pkg: object) =>
 			writeFileSync(join(projectDir, "package.json"), JSON.stringify(pkg));
 
-		writeProject({ name: "@scope/demo", version: "1.2.3", private: false });
+		const targets = ["bun-darwin-arm64", "bun-linux-x64"];
+		writeProject({ name: "@scope/demo", version: "1.2.3", private: false, crust: { targets } });
 		expect(() => assertStageMatchesProject(projectDir, manifest)).not.toThrow();
 
 		writeProject({ name: "@scope/demo", version: "1.2.4" });
@@ -182,6 +183,40 @@ describe("publish manifest validation", () => {
 		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
 			`Could not read ${join(projectDir, "package.json")} to check the staged packages against it`,
 		);
+	});
+
+	it("rejects binaries missing a release target: crust.targets, or every target without it", () => {
+		const projectDir = join(tmpDir, "project");
+		mkdirSync(projectDir);
+		const writeProject = (crust?: object) =>
+			writeFileSync(
+				join(projectDir, "package.json"),
+				JSON.stringify({ name: "@scope/demo", version: "1.2.3", crust }),
+			);
+
+		writeProject({ targets: ["bun-linux-x64", "bun-windows-x64", "bun-darwin-arm64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"Stage is incomplete: .crust/ holds linux-x64, darwin-arm64, but a release ships every target in package.json crust.targets; missing bun-windows-x64.\n  crust build stages only this machine's target by default.",
+		);
+		writeProject();
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"but a release ships every Bun target; missing bun-linux-arm64, bun-linux-x64-musl, bun-linux-arm64-musl, bun-darwin-x64, bun-windows-x64, bun-windows-arm64.",
+		);
+		const nodeManifest: DistributionManifest = {
+			...manifest,
+			runtime: "node",
+			packages: manifest.packages.map((pkg) => ({ ...pkg, bins: {} })),
+		};
+		expect(() => assertStageMatchesProject(projectDir, nodeManifest)).toThrow(
+			"but a release ships every Node target; missing linux-arm64, darwin-x64, win-x64, win-arm64.",
+		);
+		writeProject({ targets: ["linux-x64", "darwin-arm64"] });
+		expect(() => assertStageMatchesProject(projectDir, nodeManifest)).not.toThrow();
+		// A runtime package has no targets to check.
+		writeProject();
+		expect(() =>
+			assertStageMatchesProject(projectDir, { ...nodeManifest, packages: [] }),
+		).not.toThrow();
 	});
 
 	it("validates a root-only Node manifest and publishes just the root", async () => {

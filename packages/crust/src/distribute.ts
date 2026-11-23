@@ -10,7 +10,7 @@ import { collectArtifacts, collectIncludeDirs } from "./artifacts.ts";
 import { binaryFilename, generateLauncher, LAUNCHER_NODE_RANGE } from "./launcher.ts";
 import type { BuildRuntime, TargetInfo, TargetTable } from "./targets.ts";
 
-/** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
+/** Project-relative directory that `crust build` owns: replaced per build, read by `crust publish`. */
 export const CRUST_DIR = ".crust";
 
 /**
@@ -551,8 +551,8 @@ function stageDistributionPackages(
 	targets: readonly DistributionTarget[],
 	options: StagingOptions,
 ): void {
-	// No wipe here: the build command clears stageDir before Extension hooks fill
-	// stageDir/artifacts, which this function reads.
+	// No wipe here: the build command stages into a fresh directory, where Extension
+	// hooks already filled stageDir/artifacts, which this function reads.
 	const rootDir = join(stageDir, "root");
 	const rootBinDir = join(rootDir, "bin");
 	mkdirSync(rootBinDir, { recursive: true });
@@ -665,7 +665,13 @@ export async function runDistributeBuild<T extends string>(
 
 	const artifactOutDir = plan.validate ? plan.outDir : undefined;
 	const artifacts = collectArtifacts(artifactOutDir);
-	const includeDirs = collectIncludeDirs(plan.cwd, plan.stageDir, plan.include, artifacts.names);
+	// The build stages outside .crust/ and then replaces it, so both are output directories.
+	const includeDirs = collectIncludeDirs(
+		plan.cwd,
+		[plan.stageDir, resolve(plan.cwd, CRUST_DIR)],
+		plan.include,
+		artifacts.names,
+	);
 	stageDistributionPackages(
 		plan.cwd,
 		plan.stageDir,

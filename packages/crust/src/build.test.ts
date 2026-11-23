@@ -134,7 +134,9 @@ describe("planBuild", () => {
 	});
 
 	it("plans node standalone binaries over Node's own target table", () => {
-		writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
+		writePackageJson({
+			crust: { runtime: "node", artifact: "binary", targets: [...NODE_TARGETS.targets] },
+		});
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "node",
 			artifact: "binary",
@@ -161,6 +163,18 @@ describe("planBuild", () => {
 		});
 	});
 
+	it.skipIf(host === null || hostTarget(NODE_TARGETS) === null)(
+		"stages only this machine's target without --target or crust.targets",
+		() => {
+			expect(planBuild(binary, tmpDir)).toMatchObject({ runtime: "bun", targets: [host] });
+			writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
+			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+				runtime: "node",
+				targets: [hostTarget(NODE_TARGETS)],
+			});
+		},
+	);
+
 	it("stages package.json crust.targets unless --target is passed", () => {
 		writePackageJson({ crust: { targets: ["bun-linux-x64", "bun-darwin-arm64"] } });
 		expect(planBuild(binary, tmpDir)).toMatchObject({
@@ -180,6 +194,10 @@ describe("planBuild", () => {
 				"package.json crust.targets is not supported for runtime packages (artifact package)",
 			);
 		}
+		// --artifact package overriding crust.artifact binary ignores the binaries' targets.
+		writePackageJson({ crust: { artifact: "binary", targets: ["bun-linux-x64"] } });
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({ artifact: "package" });
+		expect(planBuild(runtimePackage, tmpDir)).not.toHaveProperty("targets");
 	});
 
 	it("infers the runtime from @types/node, never from lockfiles", () => {
@@ -324,14 +342,25 @@ describe("planBuild", () => {
 		flags?: BuildOptions;
 		error: string;
 	};
+	it("ignores crust.external for binaries chosen by the artifact option", () => {
+		const dependencies = { "fake-native": "^1.0.0" };
+		const crusts: JsonValue[] = [
+			{ runtime: "node", artifact: "package", external: ["fake-native"] },
+			{ runtime: "node", external: ["fake-native"] },
+		];
+		for (const crust of crusts) {
+			writePackageJson({ dependencies, crust });
+			expect(planBuild({ ...binary, targets: ["linux-x64"] }, tmpDir).external).toEqual([]);
+		}
+	});
+
 	const externalRejectedCases: ExternalRejectedCase[] = [
 		{
-			name: "--artifact binary overriding crust.artifact package",
+			name: "crust.artifact binary",
 			pkg: {
 				dependencies: { "fake-native": "^1.0.0" },
-				crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
+				crust: { runtime: "node", artifact: "binary", external: ["fake-native"] },
 			},
-			flags: { artifact: "binary" },
 			error:
 				"package.json crust.external is not supported for standalone binaries (artifact binary)",
 		},
@@ -684,6 +713,29 @@ describe("build", () => {
 			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
 		);
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+	}, 30_000);
+
+	it("keeps the previous stage when bundling fails and reports final paths on success", async () => {
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("first");\n',
+		);
+		const logged: string[] = [];
+		const result = await build({
+			cwd: tmpDir,
+			validate: false,
+			onLog: (line) => logged.push(line),
+		});
+		const bundlePath = join(stageDir, "root", "bin", "node-cli.js");
+		expect(result.artifacts.map(({ path }) => path)).toContain(bundlePath);
+		expect(logged.some((line) => line.includes(".crust.lock"))).toBe(false);
+		expect(logged).toContain(`  ${join(stageDir, "root")}`);
+
+		writeFileSync(join(tmpDir, "src", "cli.ts"), 'import "missing-package-for-crust-test";\n');
+		await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow("Build failed for");
+		expect(readFileSync(bundlePath, "utf8")).toContain("first");
+		expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
+		expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
 	}, 30_000);
 
 	it("warns when an entry's shebang names another runtime than crust.runtime", async () => {
@@ -1046,10 +1098,10 @@ describe("buildCommand", () => {
 			const result = await build([]);
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain('both bin "greet" and "admin"');
-			expect(readFileSync(join(tmpDir, ".crust/artifacts/shared/Config.json"), "utf8")).toBe(
-				"first",
-			);
-			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+			// The failed build keeps the previous stage, from the --no-validate build above.
+			expect(existsSync(join(tmpDir, ".crust", "artifacts"))).toBe(false);
+			expect(readManifest(join(tmpDir, ".crust", "manifest.json"))).not.toHaveProperty("build");
+			expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
 		});
 	});
 });

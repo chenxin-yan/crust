@@ -97,7 +97,7 @@ export function artifactPath(path: string): string {
 	}
 
 	if (isCrustBundle()) {
-		// import.meta.url is the bundle itself (everything is inlined) and Node
+		// import.meta.url is the bundle or one of its chunks, all in `bin/`, and Node
 		// realpaths it, unlike process.argv[1] through a node_modules/.bin symlink.
 		return resolve(
 			process.getBuiltinModule("node:url").fileURLToPath(import.meta.url),

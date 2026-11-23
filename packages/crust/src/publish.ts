@@ -11,13 +11,18 @@ import {
 	which,
 } from "@crustjs/utils/process";
 
+import { readCrustConfig } from "./build.ts";
 import { type LineIO, validatePackageIdentity } from "./distribute.ts";
+import { BUN_TARGETS, NODE_TARGETS, resolveTargets, type TargetTable } from "./targets.ts";
 
 /** Only the persisted fields publishing consumes; build reports remain informational. */
 type PublishManifest = {
 	version: string;
+	runtime: "bun" | "node";
 	root: { name: string; dir: string; bins: string[] };
 	packages: Array<{
+		/** Platform alias, such as `linux-x64`. */
+		target: string;
 		name: string;
 		dir: string;
 		os: string;
@@ -63,6 +68,7 @@ function assertPublishManifest(value: JsonValue): asserts value is PublishManife
 	if (
 		!isRecord(value) ||
 		!isNonemptyString(value.version) ||
+		(value.runtime !== "bun" && value.runtime !== "node") ||
 		!isRecord(value.root) ||
 		!isNonemptyString(value.root.name) ||
 		!isNonemptyString(value.root.dir) ||
@@ -72,6 +78,7 @@ function assertPublishManifest(value: JsonValue): asserts value is PublishManife
 		!value.packages.every(
 			(pkg: JsonValue) =>
 				isRecord(pkg) &&
+				isNonemptyString(pkg.target) &&
 				isNonemptyString(pkg.name) &&
 				isNonemptyString(pkg.dir) &&
 				isNonemptyString(pkg.os) &&
@@ -145,7 +152,12 @@ export function readPublishManifest(stageDir: string): PublishManifest {
 	return manifest;
 }
 
-/** Rejects a stage built before the project's name or version changed, which would publish the old release. */
+/**
+ * Rejects a stage built before the project's name or version changed, which
+ * would publish the old release, and binaries missing a release target:
+ * `crust build` stages only this machine by default, while a release ships
+ * package.json `crust.targets`, or every target of the compiler without it.
+ */
 export function assertStageMatchesProject(projectDir: string, manifest: PublishManifest): void {
 	const packageJsonPath = join(projectDir, "package.json");
 	let project: JsonValue;
@@ -162,6 +174,19 @@ export function assertStageMatchesProject(projectDir: string, manifest: PublishM
 	if (name !== manifest.root.name || version !== manifest.version) {
 		throw new Error(
 			`Stage is stale: .crust/ holds ${manifest.root.name}@${manifest.version}, but package.json is ${String(name)}@${String(version)}.\n  Run \`crust build\` before \`crust publish\`.`,
+		);
+	}
+	if (manifest.packages.length === 0 || !isRecord(project)) return;
+	const table: TargetTable<string> = manifest.runtime === "node" ? NODE_TARGETS : BUN_TARGETS;
+	const configured = readCrustConfig(project).targets;
+	const staged = new Set(manifest.packages.map((pkg) => pkg.target));
+	const missing = resolveTargets(table, configured).filter(
+		(target) => !staged.has(table.info[target]!.alias),
+	);
+	if (missing.length > 0) {
+		throw new Error(
+			`Stage is incomplete: .crust/ holds ${[...staged].join(", ")}, but a release ships ${configured ? "every target in package.json crust.targets" : `every ${table.runtime} target`}; missing ${missing.join(", ")}.\n` +
+				"  crust build stages only this machine's target by default. List your release targets in package.json crust.targets (or pass each with --target), then run `crust build` again.",
 		);
 	}
 }
