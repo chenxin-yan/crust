@@ -49,6 +49,7 @@ const SETTING_PROPERTIES = {
 	parse: true,
 	default: true,
 	required: true,
+	valueName: true,
 	flag: true,
 	hidden: true,
 	deprecated: true,

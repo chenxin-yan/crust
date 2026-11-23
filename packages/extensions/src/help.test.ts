@@ -14,6 +14,22 @@ import { help, renderHelp } from "./help.ts";
 
 const stripAnsi = stripVTControlCharacters;
 
+/** A Standard Schema for a string token: one of `values`, or `fallback` when missing; required without one. */
+function stringSchema(values?: readonly string[], fallback?: string) {
+	const json = () => ({ type: "string", ...(values && { enum: values }), default: fallback });
+	return {
+		"~standard": {
+			version: 1 as const,
+			vendor: "test",
+			validate: (value: unknown) =>
+				value === undefined && fallback === undefined
+					? { issues: [{ message: "Required" }] }
+					: { value: value ?? fallback },
+			jsonSchema: { input: json, output: json },
+		},
+	};
+}
+
 afterEach(() => {
 	vi.unstubAllEnvs();
 });
@@ -98,8 +114,9 @@ describe("help", () => {
 		expect(usageLine).toContain("[dir]"); // arg token present, yellow+dim
 	});
 
-	it("renderHelp shows a value placeholder after value flags only", async () => {
+	it("renderHelp shows a value placeholder after value flags only, and ... after repeatable ones", async () => {
 		const command = new Crust("app").flags({
+			memory: { type: "string", valueName: "bytes", description: "Memory limit" },
 			count: { type: "number", short: "c", description: "Number of times", default: 1 },
 			mode: { type: "string", choices: ["fast", "slow"], description: "Execution mode" },
 			tag: { type: "string", short: "t", multiple: true, description: "Tag" },
@@ -114,11 +131,12 @@ describe("help", () => {
 
 		expect(lines).toContain("  -c, --count <number>         Number of times [default: 1]");
 		expect(lines).toContain("  --mode <string>              Execution mode [choices: fast, slow]");
-		expect(lines).toContain("  -t, --tag <string>           Tag");
+		expect(lines).toContain("  --memory <bytes>             Memory limit");
+		expect(lines).toContain("  -t, --tag <string>...        Tag");
 		expect(lines).toContain("  --out <path>                 Output file");
 		expect(lines).toContain("  -f, --force                  Force it");
 		expect(lines).toContain("  --cache, --no-cache          Use the cache [default: true]");
-		expect(lines).toContain("  -v, --verbose                More output");
+		expect(lines).toContain("  -v, --verbose...             More output");
 		expect(lines).toContain("  --port <integer>             Port [env: APP_PORT, PORT]");
 	});
 
@@ -430,5 +448,144 @@ describe("help", () => {
 		// HOME is set in every test environment; help must show the name only.
 		expect(process.env.HOME).toBeTruthy();
 		expect(plain).not.toContain(process.env.HOME as string);
+	});
+
+	it("renderHelp leads with examples and the command's own aliases, and shows a schema's choices and default", async () => {
+		const snapshot = await new Crust("app")
+			.add(
+				defineCommand(
+					"install",
+					{ aliases: ["i"], examples: ["app install react", "app i -D vitest"] },
+					(cmd) =>
+						cmd
+							.args({ name: "pkg", schema: stringSchema() })
+							.flags({ save: { type: "string", schema: stringSchema(["prod", "dev"], "prod") } })
+							.action(() => {}),
+				),
+			)
+			.snapshot();
+		const plain = stripAnsi(await renderHelp(snapshot.subCommands.install!, ["app", "install"]));
+		expect(plain).toContain(
+			[
+				"Usage:",
+				"  app install <pkg> [options]",
+				"",
+				"Examples:",
+				"  app install react",
+				"  app i -D vitest",
+				"",
+				"Aliases:",
+				"  i",
+			].join("\n"),
+		);
+		expect(plain).toContain('--save <string>              [default: "prod"] [choices: prod, dev]');
+	});
+
+	it("renderHelp lists .group() headings in code order, then Additional commands, Options, and Global options", async () => {
+		const leaf = (name: string) =>
+			defineCommand(name, { description: `The ${name} command` }, (cmd) => cmd.action(() => {}));
+		const app = new Crust("app")
+			.extend(help())
+			.add(leaf("misc"))
+			.group("Core commands", (g) => g.add(leaf("deploy"), leaf("logs")))
+			.group("Resources", (g) => g.flags({ memory: { type: "string", description: "Memory" } }))
+			.flags({ verbose: { type: "boolean", description: "Verbose" } })
+			.action(() => {});
+		const plain = stripAnsi((await captureExecute(app, ["--help"])).stdout);
+		const headings = plain.split("\n").filter((line) => /^\S.*:$/.test(line));
+		expect(headings).toEqual([
+			"Usage:",
+			"Core commands:",
+			"Additional commands:",
+			"Options:",
+			"Resources:",
+			"Global options:",
+		]);
+		expect(plain).toContain("Global options:\n  -h, --help                   Show help");
+		expect(plain).toContain("Options:\n  --verbose                    Verbose");
+	});
+
+	it("renderHelp wraps descriptions to the given width", async () => {
+		const snapshot = await new Crust("app")
+			.flags({ name: { type: "string", description: "one two three four five six seven" } })
+			.snapshot();
+		const plain = stripAnsi(await renderHelp(snapshot, undefined, { columns: 50 }));
+		expect(plain).toContain(
+			"  --name <string>              one two three four\n                               five six seven",
+		);
+	});
+
+	it("drops an Extension section's own colors under NO_COLOR", async () => {
+		vi.stubEnv("FORCE_COLOR", undefined);
+		vi.stubEnv("NO_COLOR", "1");
+		const snapshot = await new Crust("app")
+			.extend(
+				defineExtension(defineExtensionId("docs")).sections(() => [
+					{ command: [], title: "Templates", body: "\x1b[34mvue-ts\x1b[39m" },
+				]),
+			)
+			.snapshot();
+		expect(await renderHelp(snapshot)).toContain("Templates:\n  vue-ts");
+	});
+
+	it("help wins over a mistyped flag when -h or --help is its own word before --", async () => {
+		const app = new Crust("app")
+			.extend(help())
+			.command("deploy", { description: "Deploy" }, (cmd) =>
+				cmd.flags({ force: { type: "boolean" } }).action(() => {}),
+			);
+
+		for (const argv of [
+			["deploy", "--forc", "--help"],
+			["deploy", "-h", "--forc"],
+		]) {
+			const { stdout, stderr, exitCode } = await captureExecute(app, argv);
+			expect(stripAnsi(stdout), argv.join(" ")).toContain("app deploy - Deploy");
+			expect(stderr).toBe("");
+			expect(exitCode).toBe(2);
+		}
+		const afterSeparator = await captureExecute(app, ["deploy", "--forc", "--", "--help"]);
+		expect(afterSeparator.stdout).toBe("");
+		expect(afterSeparator.stderr).toContain("--forc");
+		expect(afterSeparator.exitCode).toBe(2);
+		const unknownCommand = await captureExecute(app, ["deplyo", "--help"]);
+		expect(unknownCommand.stdout).toBe("");
+		expect(unknownCommand.exitCode).toBe(2);
+	});
+
+	it("help({ command: true }) adds help [command...], which prints what --help prints", async () => {
+		const app = new Crust("app")
+			.extend(help({ command: true }))
+			.command("db", (db) =>
+				db.command("migrate", { aliases: ["m"], description: "Run migrations" }, (cmd) =>
+					cmd.action(() => {}),
+				),
+			);
+
+		const viaCommand = await captureExecute(app, ["help", "db", "m"]);
+		const viaFlag = await captureExecute(app, ["db", "migrate", "--help"]);
+		expect(viaCommand.exitCode).toBe(0);
+		expect(viaCommand.stdout).toBe(viaFlag.stdout);
+		const root = stripAnsi((await captureExecute(app, ["help"])).stdout);
+		expect(root).toBe(stripAnsi((await captureExecute(app, ["--help"])).stdout));
+		expect(root).toMatch(/help\s+Show help for a command/);
+		expect(stripAnsi((await captureExecute(app, ["help", "--help"])).stdout)).toContain(
+			"app help [command...] [options]",
+		);
+		const unknown = await captureExecute(app, ["help", "nope"]);
+		expect(unknown.stderr).toContain('Unknown command "nope"');
+		expect(unknown.exitCode).toBe(2);
+
+		const typed = await app.run(["help"], { args: { command: ["db"] } });
+		expect(stripAnsi(typed.stdout)).toContain("app db");
+		const withoutCommand = await captureExecute(
+			new Crust("app")
+				.extend(help())
+				.args({ name: "file", type: "string" })
+				.action(() => {}),
+			["help"],
+		);
+		expect(withoutCommand.exitCode).toBe(0);
+		expect(withoutCommand.stdout).toBe("");
 	});
 });

@@ -89,7 +89,9 @@ const flags = {
 
 A boolean flag takes no value: `--color=false` is a `PARSE` error. `--no-<name>` and `--no-<alias>` exist only for a flag with `default: true` or `negatable: true`, and help, man pages, completion, and generated skills list them only for `default: true`. `negatable` on any other type is a compile error.
 
-`type: "count"` counts occurrences: `-vvv` is `3`, and an omitted flag is `0`, typed `number`. It takes only `description`, `short`, and `aliases`: no value, negation, `default`, `required`, `multiple`, or `env`.
+`type: "count"` counts occurrences: `-vvv` is `3`, and an omitted flag is `0`, typed `number`. It takes only `description`, `short`, and `aliases`: no value, negation, `default`, `required`, `multiple`, `env`, or `valueName`.
+
+`valueName` names a value-taking flag's value in help, man pages, skills, and the `--llms` index: `--memory <bytes>` for `valueName: "bytes"`, else the type, `--memory <string>`. On a flag that takes no value (`boolean`, `count`, an exclusive group's key) it is a compile error.
 
 `env` names a variable, or lists variables of which the first that is set wins. It is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`; an empty variable counts as unset for a boolean. Variables come from `process.env`; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
 
@@ -196,7 +198,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. Key
 
 Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details build pending commands only when read. A child's `meta`, except `meta.sections`, comes from its `defineCommand()` config, so reading it never runs the recipe. Reading the child's `meta.sections`, `hasAction`, `args`, `flags`, `outputSchema`, `output`, or `subCommands` builds it and throws any recipe error. `app.snapshot()` builds the full tree up front.
 
-`flags` contains effective local and Context-owned flags. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
+`flags` contains effective local and Context-owned flags; those the command does not declare itself have `inherited: true`. `groups` lists the command's [`.group()`](/docs/api/crust#grouptitle-block) headings in code order, each with the names of its `commands` or its `flags`. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
 ### `ArgSnapshot`
 
@@ -206,7 +208,7 @@ Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name or names, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
+`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. For a schema-backed arg or flag it is `true` when the schema rejects a missing value; a schema that validates asynchronously is shown as optional. `URL` defaults become strings. `env` records the variable name or names, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 

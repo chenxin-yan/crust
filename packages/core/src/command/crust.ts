@@ -98,7 +98,7 @@ import {
 	registerFlag,
 } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
-import type { CommandSnapshot } from "./snapshot.ts";
+import type { CommandGroup, CommandSnapshot } from "./snapshot.ts";
 import type {
 	CheckedRunInput,
 	CommandHandle,
@@ -188,7 +188,10 @@ export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "
 }
 
 /** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usage"> & {
+export type RootCommandMeta = Pick<
+	CommandMeta,
+	"description" | "version" | "usage" | "examples"
+> & {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly CommandSectionInput[];
 };
@@ -1377,6 +1380,139 @@ type ExplicitTypeArgumentsError = {
 	readonly FIX_EXPLICIT_TYPE_ARGUMENTS: "Builder methods infer their type arguments; remove the explicit type arguments";
 } & { readonly [K in keyof BuilderState]: never };
 
+/** The builder a `.group()` block's last call left, rebuilt from its state. */
+type GroupResult<State extends BuilderState> = Crust<
+	State["flags"],
+	State["args"],
+	State["ctx"],
+	State["tree"],
+	State["ctxFlags"],
+	State["facts"],
+	State["result"],
+	State["meta"],
+	string,
+	State["caps"]
+>;
+
+/** What a `.group()` block receives: its first call makes it a command group or a flag group. */
+export interface GroupBuilder<State> extends CommandGroupBuilder<State> {
+	/** Define local flags listed under this group's heading; see `Crust.flags`. */
+	flags<const F extends FlagsInput, S extends BuilderState = ExplicitTypeArgumentsError>(
+		this: StateReceiver<S>,
+		flags: F & FlagRecordErrors<F>,
+	): FlagGroupBuilder<AfterFlags<S, DefinedFlags<F>>["_state"]>;
+}
+
+/** A `.group()` block that registers commands; it takes no flags. */
+export interface CommandGroupBuilder<State> {
+	/** @internal */
+	readonly _state: State;
+	/** @internal */
+	readonly _stateIn: (state: State) => void;
+	/** Register command definitions listed under this group's heading; see `Crust.add`. */
+	add<
+		const Ds extends readonly CommandDefinition<any, any, any, any>[] = never,
+		S extends BuilderState = ExplicitTypeArgumentsError,
+	>(
+		this: StateReceiver<S>,
+		...definitions: Ds &
+			ValidateDeclaredDeps<S["ctx"], Ds, KnownDepsAt<S>> &
+			DefinitionDescendantValuesBrand<Ds, S["facts"]["demands"]>
+	): CommandGroupBuilder<AfterAdd<S, Ds>["_state"]>;
+	/** Define a subcommand inline, listed under this group's heading; see `Crust.command`. */
+	command<
+		const N extends string,
+		B extends AnyCommandDefinitionBuilder,
+		S extends BuilderState = ExplicitTypeArgumentsError,
+	>(
+		this: StateReceiver<S>,
+		name: N,
+		recipe: InlineCommandRecipe<S, N, B>,
+	): CommandGroupBuilder<
+		AfterAdd<
+			S,
+			readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+			S["ctxFlags"]
+		>["_state"]
+	>;
+	command<
+		const N extends string,
+		const C extends CommandConfig,
+		B extends AnyCommandDefinitionBuilder,
+		S extends BuilderState = ExplicitTypeArgumentsError,
+	>(
+		this: StateReceiver<S>,
+		name: N,
+		config: C & LocalCommandConfigBrand<C>,
+		recipe: InlineCommandRecipe<S, N, B>,
+	): CommandGroupBuilder<
+		AfterAdd<
+			S,
+			readonly [CommandDefinition<N, AliasesOf<C>, ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+			S["ctxFlags"]
+		>["_state"]
+	>;
+}
+
+/** A `.group()` block that defines flags; it takes no commands. */
+export interface FlagGroupBuilder<State> {
+	/** @internal */
+	readonly _state: State;
+	/** @internal */
+	readonly _stateIn: (state: State) => void;
+	/** Define more local flags listed under this group's heading; see `Crust.flags`. */
+	flags<const F extends FlagsInput, S extends BuilderState = ExplicitTypeArgumentsError>(
+		this: StateReceiver<S>,
+		flags: F & FlagRecordErrors<F>,
+	): FlagGroupBuilder<AfterFlags<S, DefinedFlags<F>>["_state"]>;
+}
+
+/** Each group handle's builder and what its block registered so far; handles stay immutable, like builders. */
+const groupHandles = new WeakMap<
+	object,
+	{ readonly builder: AnyRuntimeCrust; readonly group: CommandGroup }
+>();
+
+// The runtime-erased builder methods a group handle forwards to.
+type AnyRuntimeCrust = {
+	_node: CommandNode;
+	add(...definitions: readonly CommandDefinition[]): AnyRuntimeCrust;
+	command(name: string, ...rest: readonly unknown[]): AnyRuntimeCrust;
+	flags(record: object): AnyRuntimeCrust;
+	_clone<Out>(nodeOverrides: Partial<CommandNode>): Out;
+};
+
+function groupHandle(builder: AnyRuntimeCrust, group: CommandGroup): object {
+	const { title } = group;
+	const commands = (next: AnyRuntimeCrust, names: readonly string[]) =>
+		groupHandle(
+			next,
+			Object.freeze({
+				title,
+				commands: Object.freeze([...("commands" in group ? group.commands : []), ...names]),
+			}),
+		);
+	const handle = {
+		add: (...definitions: readonly CommandDefinition[]) =>
+			commands(
+				builder.add(...definitions),
+				definitions.map(({ name }) => name),
+			),
+		command: (name: string, ...rest: readonly unknown[]) =>
+			commands(builder.command(name, ...rest), [name]),
+		flags: (record: object) =>
+			groupHandle(
+				builder.flags(record),
+				Object.freeze({
+					title,
+					flags: Object.freeze([...("flags" in group ? group.flags : []), ...Object.keys(record)]),
+				}),
+			),
+	};
+	groupHandles.set(handle, { builder, group });
+	return handle;
+}
+
 /** Completed applications expose inspection and invocation, not authoring after erasure. */
 export type AnyCrust = Pick<
 	Crust<
@@ -1513,7 +1649,7 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
-	 * @param metadata - Optional root description, version, usage, and documentation sections.
+	 * @param metadata - Optional root description, version, usage, examples, and documentation sections.
 	 */
 	constructor(
 		nameInput: Name &
@@ -1538,6 +1674,7 @@ export class Crust<
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.version !== undefined) this._node.meta.version = meta.version;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
+		if (meta.examples !== undefined) this._node.meta.examples = [...meta.examples];
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = validateCommandSections(name, meta.sections);
 		}
@@ -1979,6 +2116,37 @@ export class Crust<
 			inline: true as const,
 		});
 		return this._addDefinitions([{ ...definition, [commandDefinitionInternal]: internal }]);
+	}
+
+	/**
+	 * List the commands or the flags a block registers under one heading in help and the other
+	 * documentation surfaces. The block's first call decides: `g.add()` and `g.command()` make a
+	 * command group, `g.flags()` a flag group, and the other kind is then a compile error. Blocks
+	 * do not nest. A group changes documentation only, never routing, parsing, or types; the
+	 * parent decides it, so one definition can sit in different groups under different parents.
+	 *
+	 * @example
+	 * ```ts
+	 * new Crust("app")
+	 *   .group("Core commands", (g) => g.add(deploy).command("logs", (c) => c.action(() => {})))
+	 *   .group("Resources", (g) => g.flags({ memory: { type: "string", valueName: "bytes" } }));
+	 * ```
+	 */
+	group<
+		R extends CommandGroupBuilder<BuilderState> | FlagGroupBuilder<BuilderState>,
+		State extends BuilderState = ExplicitTypeArgumentsError,
+	>(
+		this: StateReceiver<State>,
+		title: string,
+		block: (group: GroupBuilder<State>) => R,
+	): GroupResult<R["_state"]>;
+
+	group(title: string, block: (group: any) => object): unknown {
+		// SAFETY: the types let a block return only a handle groupHandle created.
+		const { builder, group } = groupHandles.get(block(groupHandle(this, { title, commands: [] })))!;
+		const names = "commands" in group ? group.commands : group.flags;
+		if (names.length === 0) return builder;
+		return builder._clone({ groups: Object.freeze([...(builder._node.groups ?? []), group]) });
 	}
 
 	private _addDefinitions<Out>(definitions: readonly CommandDefinition[]): Out {

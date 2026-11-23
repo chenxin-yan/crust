@@ -71,6 +71,7 @@ describe("snapshotCommand", () => {
 
 		expect(snapshot.args[0]).toEqual({
 			name: "level",
+			required: true,
 			inputSchema: {
 				$schema: "https://json-schema.org/draft/2020-12/schema",
 				type: "string",
@@ -79,6 +80,9 @@ describe("snapshotCommand", () => {
 		});
 		expect(snapshot.flags.port?.inputSchema).toMatchObject({ type: "number" });
 		expect(snapshot.flags.mode).not.toHaveProperty("inputSchema");
+		// A schema that rejects a missing value makes it required; one that accepts it does not.
+		expect(snapshot.flags.port?.required).toBe(true);
+		expect(snapshot.flags.mode).not.toHaveProperty("required");
 		expect(snapshot.flags.plain).not.toHaveProperty("inputSchema");
 		expect(JSON.parse(JSON.stringify(snapshot)).args).toEqual(snapshot.args);
 	});

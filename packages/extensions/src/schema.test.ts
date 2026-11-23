@@ -35,21 +35,24 @@ function buildCli() {
 	return new Crust("mycli", { description: "Test CLI" })
 		.extend(schema(), help())
 		.add(
-			defineCommand("deploy", { description: "Deploy the app" }, (cmd) =>
-				cmd
-					.args({
-						name: "target",
-						type: "string",
-						required: true,
-						description: "Where to deploy",
-						choices: ["staging", "production"],
-					})
-					.flags({
-						force: { type: "boolean", short: "f", description: "Skip checks", default: false },
-						tag: { type: "string", multiple: true, env: "DEPLOY_TAG" },
-					})
-					.output(outputSchema(deployResult))
-					.action(() => ({ id: "dep_1" })),
+			defineCommand(
+				"deploy",
+				{ description: "Deploy the app", examples: ["mycli deploy staging -f"] },
+				(cmd) =>
+					cmd
+						.args({
+							name: "target",
+							type: "string",
+							required: true,
+							description: "Where to deploy",
+							choices: ["staging", "production"],
+						})
+						.flags({
+							force: { type: "boolean", short: "f", description: "Skip checks", default: false },
+							tag: { type: "string", multiple: true, env: "DEPLOY_TAG", valueName: "name" },
+						})
+						.output(outputSchema(deployResult))
+						.action(() => ({ id: "dep_1" })),
 			),
 			defineCommand("remote", { description: "Manage remotes" }, (cmd) =>
 				cmd.add(
@@ -172,7 +175,7 @@ describe("schema", () => {
 				"",
 				"Test CLI",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"- `--llms` (boolean): Print a Markdown index of all commands for LLMs",
@@ -181,6 +184,12 @@ describe("schema", () => {
 				"",
 				"Deploy the app",
 				"",
+				"Examples:",
+				"",
+				"```",
+				"mycli deploy staging -f",
+				"```",
+				"",
 				"Arguments:",
 				"",
 				"- `<target>` (string): Where to deploy [choices: staging, production]",
@@ -188,14 +197,17 @@ describe("schema", () => {
 				"Flags:",
 				"",
 				"- `-f`, `--force` (boolean): Skip checks [default: false]",
-				"- `--tag` (string, multiple): [env: DEPLOY_TAG]",
+				"- `--tag <name>` (string, multiple): [env: DEPLOY_TAG]",
+				"",
+				"Global flags:",
+				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
 				"## `mycli remote <command> [options]`",
 				"",
 				"Manage remotes",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
@@ -205,7 +217,7 @@ describe("schema", () => {
 				"",
 				"- `<url>` (url)",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
@@ -217,7 +229,7 @@ describe("schema", () => {
 				"",
 				"- `[path...]` (string): Command path, e.g. `remote add`; omit for the root command",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",

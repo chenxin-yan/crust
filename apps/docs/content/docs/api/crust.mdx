@@ -271,7 +271,7 @@ Registers definitions under their carried names, deferring their recipes until f
 
 ## `.command(name, config?, recipe)`
 
-Defines a child like `.add(defineCommand(name, config?, recipe))`, for short inline commands. `config` takes the same [`CommandConfig`](#definecommandname-config-recipe) as `defineCommand()`: description, aliases, `hidden`, `deprecated`, usage, and sections. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
+Defines a child like `.add(defineCommand(name, config?, recipe))`, for short inline commands. `config` takes the same [`CommandConfig`](#definecommandname-config-recipe) as `defineCommand()`: description, aliases, `hidden`, `deprecated`, usage, examples, and sections. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
@@ -283,6 +283,23 @@ const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
 ```
 
 The recipe sees the Contexts and Context-owned flags available before the call, so its `ctx` is typed without `.use()` and the command parses those Contexts' flags; its action's `flags` type includes them. Inside a recipe, those are the Contexts the parent declared with `.use()` or `.provide()`. Contexts provided after `.command()` are not visible to it.
+
+## `.group(title, block)`
+
+Lists the commands or flags a block registers under `title` in help, man pages, skills, and the `--llms` index. The block receives a handle with `add()`, `command()`, and `flags()`, which work as the builder methods of the same name; its first call decides the kind, and the other kind is then a compile error. Return the handle the last call gives.
+
+```ts
+const app = new Crust("my-cli")
+  .group("Core commands", (g) =>
+    g.add(deploy).command("logs", (command) => command.action(() => {})),
+  )
+  .group("Resources", (g) => g.flags({ memory: { type: "string", valueName: "bytes" } }));
+```
+
+- A group changes documentation only, never routing, parsing, or types. The snapshot records it in [`CommandSnapshot.groups`](/docs/api/types#commandsnapshot).
+- Blocks do not nest. Two groups with the same title list as one, where the first stood.
+- Only the command's own flags can be grouped: Context and Extension flags are listed under "Global options".
+- See [Group commands and flags in help](/docs/guide/commands#group-commands-and-flags-in-help) for the order help uses.
 
 ## `.snapshot()`
 

@@ -88,7 +88,7 @@ port 1 (given for this run)
 
 ## Settings
 
-A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env` (a variable name or a list of names), `multiple`, `delimiter`, `choices`, `negatable`, `min`, `max`, `parse`, `hidden` and `deprecated`, with the same types as on a flag. Values are inferred as the flag's would be: `required` and `default` remove `undefined`, `choices` give a union, and `parse` gives its return type.
+A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env` (a variable name or a list of names), `multiple`, `delimiter`, `choices`, `negatable`, `min`, `max`, `parse`, `valueName`, `hidden` and `deprecated`, with the same types as on a flag. Values are inferred as the flag's would be: `required` and `default` remove `undefined`, `choices` give a union, and `parse` gives its return type.
 
 What differs from a flag:
 

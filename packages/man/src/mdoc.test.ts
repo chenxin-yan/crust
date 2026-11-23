@@ -137,12 +137,13 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain(".It Fl v , Fl Fl verbose\n");
 	});
 
-	it("marks the value argument of value flags with Ar", async () => {
+	it("marks the value argument of value flags with Ar, by its valueName, and repeatable flags with ...", async () => {
 		const root = await new Crust("demo")
 			.flags({
 				count: { type: "number", short: "c" },
 				yes: { type: "boolean", default: true },
 				level: { type: "count", short: "l" },
+				memory: { type: "string", valueName: "bytes", multiple: true },
 			})
 			.action(() => {})
 			.snapshot();
@@ -150,8 +151,47 @@ describe("renderManPageMdoc", () => {
 
 		expect(mdoc).toContain(".It Fl c , Fl Fl count Ar number\n");
 		expect(mdoc).toContain(".It Fl Fl yes , Fl Fl no-yes\n");
-		expect(mdoc).toContain(".It Fl l , Fl Fl level\n");
+		expect(mdoc).toContain(".It Fl l , Fl Fl level ...\n");
+		expect(mdoc).toContain(".It Fl Fl memory Ar bytes ...\n");
 		expect(mdoc).toContain(".Bl -tag -width 18n");
+	});
+
+	it("renders .group() headings as subsections and examples as an EXAMPLES section", async () => {
+		const leaf = (name: string) => defineCommand(name, (cmd) => cmd.action(() => {}));
+		const root = await new Crust("demo", { examples: ["demo deploy prod"] })
+			.add(leaf("misc"))
+			.group("Core", (g) => g.add(leaf("deploy")))
+			.group("Resources", (g) => g.flags({ memory: { type: "string" } }))
+			.flags({ verbose: { type: "boolean" } })
+			.action(() => {})
+			.snapshot();
+		const mdoc = renderManPageMdoc({ root, section: 1 });
+
+		expect(mdoc).toContain(
+			[
+				".Sh SUBCOMMANDS",
+				".Ss Core",
+				".Bl -tag -width 8n",
+				".It Nm deploy",
+				".El",
+				".Ss Additional commands",
+				".Bl -tag -width 8n",
+				".It Nm misc",
+				".El",
+				".Sh OPTIONS",
+				".Bl -tag -width 9n",
+				".It Fl Fl verbose",
+				".El",
+				".Ss Resources",
+				".Bl -tag -width 15n",
+				".It Fl Fl memory Ar string",
+				".El",
+				".Sh EXAMPLES",
+				".Bd -literal -offset indent",
+				"demo deploy prod",
+				".Ed",
+			].join("\n"),
+		);
 	});
 
 	it("escapes leading dots in descriptions and .Nd", async () => {

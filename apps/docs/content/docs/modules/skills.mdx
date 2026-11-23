@@ -134,6 +134,8 @@ await uninstallSkill({ name: "my-cli" });
 
 <include lang="ts">../../../examples/modules/skills.ts#sections</include>
 
+Each command file lists the command's usage, then its `examples` under `## Examples`, its arguments, and its flags; a flag with a `valueName` shows it with its last spelling, such as `` `--memory <bytes>` ``. A required argument or flag includes one whose schema rejects a missing value.
+
 Command metadata sections render as `## Title` blocks in each command's file under `commands/`. Passing the `skill` factory in `only` limits a section to the skills renderer.
 
 Sections with the same exact title share one heading and join their bodies. See [`CommandSectionInput`](/docs/api/types#commandsectioninput) for audience rules.

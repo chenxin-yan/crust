@@ -16,22 +16,52 @@ my-cli - My CLI
 Usage:
   my-cli [options]
 
-Commands:
+Core commands:
   deploy     Deploy the app
 
+Additional commands:
+  doctor     Check the setup
+  help       Show help for a command
+
+Global options:
+  -h, --help                   Show help
+
+$ my-cli help deploy
+my-cli deploy - Deploy the app
+
+Usage:
+  my-cli deploy [options]
+
+Examples:
+  my-cli deploy --memory 512M
+
 Options:
+  --memory <bytes>             Memory limit
+
+Global options:
   -h, --help                   Show help
 ```
 
-`help()` owns the recursive `--help` and `-h` flag, and shows help when the selected command has no Command Action, once its input checks pass: `my-cli --level bogus` is still a usage error. A group with nothing typed after its name skips those checks, so `my-cli` alone shows help even when a required flag is unset.
+`help()` owns the recursive `--help` and `-h` flag, and shows help when the selected command has no Command Action, once its input checks pass: `my-cli --level bogus` is still a usage error. A group with nothing typed after its name skips those checks, so `my-cli` alone shows help even when a required flag is unset. `-h` always means help; an app cannot give it to another flag.
+
+## Options
+
+| Option    | Type      | Default | Description                                                                                                |
+| --------- | --------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `command` | `boolean` | `false` | Add a `help [command...]` command: `my-cli help db migrate` prints what `my-cli db migrate --help` prints. |
+
+The `help` command is off by default: in an app without subcommands it would take the root command's first argument. An unknown command after `help` is the usual `Unknown command` error.
 
 ## Behavior
 
 - `--help` is an eager [handler](/docs/guide/extensions#write-your-own): it wins over every non-eager flag handler, such as `deploy --preview --help`. Between `--help` and `--version`, the flag given first wins.
+- Help wins over a mistyped flag: when the command line fails to parse and `-h` or `--help` is a word of its own before `--`, the routed command's help is printed instead of the error, and the exit code stays `2`. `my-cli deploy --memry 1 --help` prints the help of `deploy`; an unknown command stays an error.
 - The no-action fallback runs only when no flag handler took over, so `my-cli --version` still prints the version on an action-less root.
-- Subcommands are listed with their aliases, from `defineCommand()` metadata, without running their recipes: a command whose recipe throws still appears. Hidden commands stay routable but are not listed.
-- A flag that takes a value shows its type after its spellings, such as `-p, --port <number>`; boolean flags show none. Choices, defaults, and env variables follow the description.
-- A label too wide for its column widens the column, so descriptions stay aligned.
+- Order: the usage line, the command's `examples`, its own aliases, then commands, arguments, and options. Subcommands are listed with their aliases, from `defineCommand()` metadata, without running their recipes: a command whose recipe throws still appears. Hidden commands stay routable but are not listed.
+- Commands and flags registered in a [`.group()`](/docs/guide/commands#group-commands-and-flags-in-help) block are listed under its title, in code order. Ungrouped commands follow under "Additional commands" ("Commands" when there are no groups). The command's own ungrouped flags come first under "Options", then the flag groups, then "Global options": flags the command does not declare itself, owned by a Context or an Extension, such as `--help`.
+- A flag that takes a value shows its `valueName`, or else its type, after its spellings, such as `--memory <bytes>` or `-p, --port <number>`; boolean flags show none. A flag that can repeat (`multiple`, or `type: "count"`) ends with `...`. Choices, defaults, and env variables follow the description, including those a [schema](/docs/guide/values-and-validation) defines; a schema that rejects a missing value makes its argument or flag required in the usage line.
+- Descriptions wrap to the terminal's width. A label too wide for its column widens the column, so descriptions stay aligned.
+- Section bodies keep their own ANSI styling only while colors are on: with `NO_COLOR` or [`--no-color`](/docs/modules/extensions/no-color) they print plain.
 
 ## Section consumer
 
@@ -50,4 +80,4 @@ const text = await renderHelp(await app.snapshot());
 // => "my-cli - My CLI\n\nUsage:\n  my-cli [options] ..."
 ```
 
-`renderHelp(command, path?)` renders a Command Snapshot without running the app and resolves to the help text. `path` is the command path shown in the output and defaults to `[meta.name]`.
+`renderHelp(command, path?, options?)` renders a Command Snapshot without running the app and resolves to the help text. `path` is the command path shown in the output and defaults to `[meta.name]`. `options.columns` is the width descriptions wrap to; without it they do not wrap.

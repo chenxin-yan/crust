@@ -162,9 +162,10 @@ Error: Expected a number for --port.
 
 - **Names:** quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`; such a name throws a `DEFINITION` error when the CLI runs from source or in `crust build` (see [definition checks](/docs/api/crust#definition-checks)).
 - **Omitted:** a flag without `required`, `default`, or an `env` binding is `undefined`.
+- **Value name:** help shows a value-taking flag's type as its value, `--port <number>`; name it with `valueName`, such as `memory: { type: "string", valueName: "bytes" }` for `--memory <bytes>`. Flags that take no value (`boolean`, `count`) have none.
 - **Values:** a value-taking flag needs one value, so `serve --port` fails. Built-in types convert the text and reject invalid input, including a blank number, before the action runs. There are no flags whose value is optional (`--color[=when]`), as [POSIX](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02) advises: give the flag `choices` and a `default` instead.
 
-Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs. Invalid values fail later, after [flag handlers and `preRun` hooks](/docs/guide/extensions#hooks), so `serve --port nope --help` with [`help()`](/docs/modules/extensions/help) still prints help. An invalid value is reported before a missing required one.
+Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs; with [`help()`](/docs/modules/extensions/help), a `-h` or `--help` on that line prints the command's help instead, and the exit code stays `2`. Invalid values fail later, after [flag handlers and `preRun` hooks](/docs/guide/extensions#hooks), so `serve --port nope --help` still prints help and exits `0`. An invalid value is reported before a missing required one.
 
 ### Required and defaulted values
 

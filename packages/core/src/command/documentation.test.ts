@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
+import { z } from "zod";
 
-import { defineCommand } from "../index.ts";
+import { defineCommand, defineContext, defineExtension, defineExtensionId } from "../index.ts";
 import { type AnyCrust, Crust } from "./crust.ts";
 import { buildCommandDocumentation, formatDefault, formatDescription } from "./documentation.ts";
 
@@ -231,5 +232,84 @@ describe("buildCommandDocumentation", () => {
 			["-p", "-P", "--port", "--P", "--listen"],
 			["-q", "-Q", "--q", "--Q", "--no-q", "--no-Q"],
 		]);
+	});
+
+	it("lists .group() commands in code order, then the ungrouped ones", async () => {
+		const leaf = (name: string) => defineCommand(name, (c) => c.action(() => {}));
+		const model = await docs(
+			new Crust("app")
+				.add(leaf("misc"))
+				.group("Core", (g) => g.add(leaf("deploy")).command("logs", (c) => c.action(() => {})))
+				.group("Admin", (g) => g.add(leaf("users")))
+				.group("Core", (g) => g.add(leaf("status"))),
+		);
+		expect(model.children.map(({ name, heading }) => [name, heading])).toEqual([
+			["deploy", "Core"],
+			["logs", "Core"],
+			["status", "Core"],
+			["users", "Admin"],
+			["misc", undefined],
+		]);
+	});
+
+	it("lists own flags, then .group() flags in code order, then inherited flags", async () => {
+		const region = defineContext("region")
+			.flags({ region: { type: "string" } })
+			.setup(({ flags }) => flags.region);
+		const ext = defineExtension(defineExtensionId("test:ext")).flags({
+			trace: { type: "boolean" },
+		});
+		const model = await docs(
+			new Crust("app")
+				.extend(ext)
+				.provide(region())
+				.group("Resources", (g) =>
+					g.flags({
+						memory: { type: "string", valueName: "bytes" },
+						mode: { type: "exclusive", flags: { fast: { type: "boolean" } } },
+					}),
+				)
+				.flags({ verbose: { type: "boolean" } })
+				.action(() => {}),
+		);
+		expect(
+			model.flags.map(({ name, heading, inherited, valueName }) => [
+				name,
+				heading,
+				inherited,
+				valueName,
+			]),
+		).toEqual([
+			["verbose", undefined, false, undefined],
+			["memory", "Resources", false, "bytes"],
+			["fast", "Resources", false, undefined],
+			["region", undefined, true, "string"],
+			["trace", undefined, true, undefined],
+		]);
+	});
+
+	it("documents examples and a schema's choices, default, and requiredness", async () => {
+		const model = await docs(
+			new Crust("app", { examples: ["app open", "app --state closed"] })
+				.args({ name: "id", schema: z.string().regex(/^\d+$/) })
+				.flags({
+					state: { type: "string", schema: z.enum(["open", "closed"]).default("open") },
+					labels: { type: "string", multiple: true, schema: z.array(z.enum(["bug", "docs"])) },
+				})
+				.action(() => {}),
+		);
+		expect(model.examples).toEqual(["app open", "app --state closed"]);
+		expect(model.args[0]).toMatchObject({ token: "<id>", required: true });
+		expect(model.flags[0]).toMatchObject({
+			name: "state",
+			required: false,
+			choices: ["open", "closed"],
+			default: "open",
+		});
+		expect(model.flags[1]).toMatchObject({
+			name: "labels",
+			required: true,
+			choices: ["bug", "docs"],
+		});
 	});
 });

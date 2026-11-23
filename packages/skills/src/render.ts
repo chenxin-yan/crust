@@ -354,6 +354,7 @@ function renderCommand(
 ): string {
 	const lines = [...renderCommandHeading(node), ...renderCommandSections(node)];
 	if (node.hasAction) lines.push(...renderRunnableCommandSections(node, command));
+	else lines.push(...renderExamples(node));
 	if (node.children.length > 0) lines.push(...renderSubcommandLinks(node, commandFilePath(node)));
 	lines.push(...renderNavigation(node, parent));
 	return lines.join("\n");
@@ -385,7 +386,7 @@ function renderRunnableCommandSections(
 	node: CommandDocumentation,
 	command: CommandSnapshot,
 ): string[] {
-	const lines = ["## Usage", "", "```", node.usage, "```", ""];
+	const lines = ["## Usage", "", "```", node.usage, "```", "", ...renderExamples(node)];
 
 	if (node.args.length > 0) {
 		lines.push("## Arguments", "", ...renderArgsTable(node.args), "");
@@ -420,6 +421,10 @@ function renderRunnableCommandSections(
 	);
 
 	return lines;
+}
+
+function renderExamples(node: CommandDocumentation): string[] {
+	return node.examples.length === 0 ? [] : ["## Examples", "", "```", ...node.examples, "```", ""];
 }
 
 function renderSubcommandLinks(node: CommandDocumentation, filePath: string): string[] {
@@ -473,7 +478,12 @@ function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 	lines.push("| ---- | ---- | -------- | ----------- |");
 
 	for (const flag of flags) {
-		const name = flag.spellings.map((spelling) => `\`${spelling}\``).join(", ");
+		// A declared value name says more than the type the next column gives.
+		const value =
+			flag.valueName === undefined || flag.valueName === flag.type ? "" : ` <${flag.valueName}>`;
+		const name = flag.spellings
+			.map((spelling, index, all) => `\`${spelling}${index === all.length - 1 ? value : ""}\``)
+			.join(", ");
 		const required = flag.required ? "Yes" : "No";
 		const desc = escapeTableCell(formatFieldDescription(flag));
 		lines.push(`| ${name} | ${displayType(flag.type)} | ${required} | ${desc} |`);

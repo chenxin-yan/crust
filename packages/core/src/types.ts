@@ -460,6 +460,11 @@ interface FlagDefBase extends FlagExtras {
 	aliases?: readonly string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
+	/**
+	 * The value's name in documentation, `--memory <bytes>` for `"bytes"`; the value type
+	 * by default. Only flags that take a value have one.
+	 */
+	valueName?: string;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
 	/**
@@ -556,6 +561,7 @@ type TypedFlagFields<T extends Exclude<ValueType, "string">, Default> = {
 	 * this, and only such a flag lists it in help.
 	 */
 	negatable?: T extends "boolean" ? true : never;
+	valueName?: T extends "boolean" ? never : string;
 	/** Use `type: "string"` with `parse` for custom parsing. */
 	parse?: ((raw: string) => unknown) & {
 		readonly FIX_PARSE: '`parse` is for string flags: use type: "string" with parse';
@@ -608,6 +614,7 @@ type SchemaBooleanFlagDef = SchemaFlagBase & {
 	type: "boolean";
 	/** Also accept `--no-<name>` (and `--no-<alias>`) for `false`; help does not list it. */
 	negatable?: true;
+	valueName?: never;
 } & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
 /**
@@ -635,6 +642,7 @@ interface CountFlagDef extends Omit<FlagDefBase, "required">, NoRange {
 	choices?: never;
 	parse?: never;
 	negatable?: never;
+	valueName?: never;
 }
 
 /**
@@ -689,6 +697,7 @@ export interface ExclusiveFlagDef extends NoRange, FlagExtras {
 	choices?: never;
 	parse?: never;
 	negatable?: never;
+	valueName?: never;
 }
 
 /**
@@ -1113,6 +1122,14 @@ export interface CommandMeta extends CommandExtras {
 	version?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/**
+	 * Example command lines, shown right after the usage in help and listed by the other
+	 * documentation surfaces (man pages, skills, the `--llms` index).
+	 *
+	 * @example
+	 * defineCommand("deploy", { examples: ["app deploy prod", "app deploy staging --dry-run"] }, recipe)
+	 */
+	examples?: readonly string[];
 	/** Plain-text sections rendered after built-in command documentation. */
 	sections?: readonly CommandSection[];
 	/**

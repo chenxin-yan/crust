@@ -85,7 +85,10 @@ console.log(source.startsWith(".Dd ")); // => true
 
 ## Page contents
 
-The page documents the root command: name, synopsis, description, `SUBCOMMANDS` (immediate visible children), `OPTIONS`, and `ARGUMENTS`.
+The page documents the root command: name, synopsis, description, `SUBCOMMANDS` (immediate visible children), `OPTIONS`, `ARGUMENTS`, and `EXAMPLES` from the root's `examples`.
+
+- Commands and flags of a [`.group()`](/docs/api/crust#grouptitle-block) are listed under a `.Ss` with its title. Grouped commands come first and the rest follow under `.Ss Additional commands`; ungrouped flags come first, without a subsection.
+- A value-taking flag shows its `valueName`, or its type, as its `Ar` argument. A flag that can repeat (`multiple`, or `type: "count"`) ends with `...`.
 
 - Root [documentation sections](/docs/guide/commands#documentation-sections) follow as their own `.Sh`, with uppercased titles (`Files` renders as `.Sh FILES`). Same-title sections merge at their first position.
 - Sections of visible subcommands are collected under `.Sh COMMANDS`.

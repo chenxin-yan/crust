@@ -49,7 +49,10 @@ export interface ArgSnapshot extends Readonly<ArgExtras> {
 	readonly type?: ValueType;
 	/** Human-readable description for help text. */
 	readonly description?: string;
-	/** `true` when parsing fails if the argument is missing. */
+	/**
+	 * `true` when the argument must be given: declared `required`, or its schema rejects a
+	 * missing value (one that validates synchronously).
+	 */
 	readonly required?: boolean;
 	/** How the argument collects its values into an array; see `ArgDef`'s `variadic`. */
 	readonly variadic?: VariadicMode;
@@ -92,10 +95,15 @@ export interface FlagSnapshot extends Readonly<FlagExtras> {
 	readonly short?: string;
 	/** Additional aliases without dashes; one-character aliases accept one or two dashes. */
 	readonly aliases?: readonly string[];
-	/** `true` when parsing fails if the flag is not provided. */
+	/**
+	 * `true` when the flag must be given: declared `required`, or its schema rejects a missing
+	 * value (one that validates synchronously).
+	 */
 	readonly required?: boolean;
 	/** `true` when the flag can repeat and collects values into an array. */
 	readonly multiple?: boolean;
+	/** The value's name in documentation (`--memory <bytes>`); absent when not declared. */
+	readonly valueName?: string;
 	/** `true` when the flag accepts generated `--no-<name>` spellings: a boolean with `default: true` or `negatable: true`. */
 	readonly negatable: boolean;
 	/** Static enum of accepted values, e.g. `["debug", "info", "error"]`. */
@@ -128,7 +136,21 @@ export interface FlagSnapshot extends Readonly<FlagExtras> {
 	 * (`commandInputSchema()` in `@crustjs/core/tooling`) leaves these flags out.
 	 */
 	readonly extension?: ExtensionId;
+	/**
+	 * `true` for a flag the command does not declare in its own `.flags()`: a Context-owned or
+	 * Extension flag. Help lists these under "Global options".
+	 */
+	readonly inherited?: true;
 }
+
+/**
+ * Documentation headings set with `.group(title, block)`, in code order: the subcommands
+ * or the own flags (by canonical name) the block registered. Help and the other documentation
+ * surfaces read it; routing and parsing never do.
+ */
+export type CommandGroup =
+	| { readonly title: string; readonly commands: readonly string[] }
+	| { readonly title: string; readonly flags: readonly string[] };
 
 /**
  * A readonly, serializable description of a command, exposed across public
@@ -185,6 +207,8 @@ export interface CommandSnapshot {
 	 * sits under (e.g. `completion`, `skills install`); absent for the application's own commands.
 	 */
 	readonly extension?: ExtensionId;
+	/** The command's `.group()` headings; absent when it has none. */
+	readonly groups?: readonly CommandGroup[];
 	/**
 	 * Direct subcommand snapshots keyed by canonical name (includes hidden ones). In
 	 * invocation snapshots a pending child exposes `meta` (except `meta.sections`)
@@ -247,6 +271,7 @@ export const CORE_FLAG_KEYS: ReadonlySet<string> = coreKeys<CoreKeys<FlagDef, Fl
 	short: true,
 	aliases: true,
 	required: true,
+	valueName: true,
 	multiple: true,
 	negatable: true,
 	choices: true,
@@ -271,6 +296,7 @@ export const CORE_COMMAND_KEYS: ReadonlySet<string> = coreKeys<
 	description: true,
 	version: true,
 	usage: true,
+	examples: true,
 	sections: true,
 	aliases: true,
 	hidden: true,
@@ -282,9 +308,21 @@ export function extraEntries(definition: object, core: ReadonlySet<string>): [st
 	return Object.entries(definition).filter(([key]) => !core.has(key));
 }
 
-/** The parser fills a missing value from its default, so a defaulted def is never required. */
-function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
-	return def.default === undefined ? def.required : undefined;
+/**
+ * The parser fills a missing value from its default, so a defaulted def is never required.
+ * A schema owns requiredness: `missing` is what it receives for an absent value.
+ */
+function effectiveRequired(def: ArgDef | FlagDef, missing: undefined | []): boolean | undefined {
+	if (!def.schema) return def.default === undefined ? def.required : undefined;
+	try {
+		const result = def.schema["~standard"].validate(missing);
+		if (!("then" in result)) return result.issues ? true : undefined;
+		// Documentation cannot wait for an async schema; it is shown as optional.
+		result.then(undefined, () => {});
+	} catch {
+		// A schema that throws on a missing value is shown as optional; parsing reports it.
+	}
+	return undefined;
 }
 
 function snapshotArg(def: ArgDef): ArgSnapshot {
@@ -294,7 +332,7 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		name: def.name,
 		type: def.type,
 		description: def.description,
-		required: effectiveRequired(def),
+		required: effectiveRequired(def, def.variadic ? [] : undefined),
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
@@ -304,14 +342,19 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 	});
 }
 
-function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSnapshot {
+function snapshotFlag(
+	def: FlagDef,
+	extension: ExtensionId | undefined,
+	inherited?: true,
+): FlagSnapshot {
 	return freezeCompact({
 		...Object.fromEntries(extraEntries(def, CORE_FLAG_KEYS)),
 		type: def.type,
 		description: def.description,
 		short: def.short,
 		aliases: def.aliases ? Object.freeze([...def.aliases]) : undefined,
-		required: effectiveRequired(def),
+		required: effectiveRequired(def, undefined),
+		valueName: def.valueName,
 		multiple: def.multiple,
 		negatable: isFlagNegatable(def),
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
@@ -334,6 +377,7 @@ function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSna
 				),
 			),
 		extension,
+		inherited,
 	});
 }
 
@@ -485,6 +529,7 @@ export function createSnapshotProjector(
 				outputSchema: { enumerable: true, get: () => body().outputSchema },
 				output: { enumerable: true, get: () => body().output },
 				extension: { enumerable: true, get: () => body().extension },
+				groups: { enumerable: true, get: () => body().groups },
 				subCommands: { enumerable: true, get: () => body().subCommands },
 			}),
 		);
@@ -496,7 +541,11 @@ export function createSnapshotProjector(
 function snapshotFlags(node: CommandNode): Record<string, FlagSnapshot> {
 	const flags: Record<string, FlagSnapshot> = {};
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
-		flags[name] = snapshotFlag(def, node.extensionFlags?.get(name));
+		flags[name] = snapshotFlag(
+			def,
+			node.extensionFlags?.get(name),
+			Object.hasOwn(node.localFlags, name) ? undefined : true,
+		);
 	}
 	return flags;
 }
@@ -511,6 +560,7 @@ function projectMeta(
 		description: meta.description,
 		version: meta.version,
 		usage: meta.usage,
+		examples: meta.examples ? Object.freeze([...meta.examples]) : undefined,
 		sections: sections
 			? Object.freeze(sections.map((section) => Object.freeze({ ...section })))
 			: undefined,
@@ -539,6 +589,7 @@ function projectNode(
 		...(outputSchema ? { outputSchema } : {}),
 		...(node.outputSchema ? { output: true as const } : {}),
 		...(node.extension ? { extension: node.extension } : {}),
+		...(node.groups ? { groups: node.groups } : {}),
 		subCommands,
 	});
 }
