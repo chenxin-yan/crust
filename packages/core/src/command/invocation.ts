@@ -220,15 +220,15 @@ const USAGE_ERROR_CODES: ReadonlySet<string> = new Set([
 
 /**
  * The exit code of a failed invocation: `cancelledExitCode` for cancellation, the thrown
- * value's own integer `exitCode` (e.g. a child process error), `2` for a usage error, else `1`.
+ * value's own non-zero integer `exitCode` (e.g. a child process error), `2` for a usage error, else `1`.
  */
 function failureExitCode(error: CaughtError, cancelledExitCode = EXIT_CODE_CANCELLED): number {
 	if (cancellationCleanupFailures(error) !== undefined) return cancelledExitCode;
 	try {
 		// SAFETY: structural probe of an arbitrary thrown value; a throwing getter falls through to 1.
 		const code = isObjectLike(error) ? (error as { exitCode?: unknown }).exitCode : undefined;
-		// `process.exitCode` rejects anything but an integer.
-		if (typeof code === "number" && Number.isInteger(code)) return code;
+		// A failure never exits 0, and `process.exitCode` rejects anything but a safe integer.
+		if (typeof code === "number" && Number.isSafeInteger(code) && code !== 0) return code;
 	} catch {
 		// Not readable: the failure keeps the generic code.
 	}

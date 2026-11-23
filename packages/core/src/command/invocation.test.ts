@@ -648,7 +648,7 @@ describe("Invocation pipeline — exit status", () => {
 		expect(await app.run([])).toMatchObject({ status: "completed", result: "done", exitCode: 4 });
 	});
 
-	it("ends with a thrown value's integer exitCode, else 1, whatever exitCode(n) set", async () => {
+	it("ends with a thrown value's non-zero integer exitCode, else 1, whatever exitCode(n) set", async () => {
 		const failing = (error: unknown) =>
 			new Crust("app").action(({ exitCode }) => {
 				exitCode(3);
@@ -664,6 +664,17 @@ describe("Invocation pipeline — exit status", () => {
 		expect((await execute(failing(new Error("plain")), [])).exitCode).toBe(1);
 		expect((await execute(failing({ exitCode: 1.5 }), [])).exitCode).toBe(1);
 		expect((await execute(failing({ exitCode: "2" }), [])).exitCode).toBe(1);
+		expect((await execute(failing({ exitCode: 0 }), [])).exitCode).toBe(1);
+		expect((await execute(failing({ exitCode: 1e21 }), [])).exitCode).toBe(1);
+		// An Extension that fails to apply goes through the same rule.
+		const broken = new Crust("app")
+			.extend(
+				defineExtension(defineExtensionId("broken")).sections(() => {
+					throw child;
+				}),
+			)
+			.action(() => {});
+		expect(await execute(broken, [])).toMatchObject({ exitCode: 137, processExitCode: 137 });
 	});
 
 	it("ends with 2 for PARSE, VALIDATION, and COMMAND_NOT_FOUND errors", async () => {

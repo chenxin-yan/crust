@@ -339,7 +339,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
   ../../../examples/api/crust.ts#execute
 </include>
 
-- The exit code is `0` on success, or the code the action set with `exitCode(n)`; `1` on failure, or the thrown value's integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND` error; and `130` for cancellation (`143` when `SIGTERM` cancelled it). See [exit status](/docs/guide/error-handling#exit-status).
+- The exit code is `0` on success, or the code the action set with `exitCode(n)`; `1` on failure, or the thrown value's non-zero integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND` error; and `130` for cancellation (`143` when `SIGTERM` cancelled it). See [exit status](/docs/guide/error-handling#exit-status).
 - `execute()` sets `process.exitCode` once, when the invocation ends, and does not take the exit code from it: a value an action or hook assigns is overwritten.
 - A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks; if none claims it, the abort itself renders nothing, but cleanup failures that accompany it still render. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - On macOS and Linux, each default `stdout(text)` / `stderr(text)` line is written synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.

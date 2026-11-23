@@ -19,7 +19,7 @@ export interface CapturedExecute {
 	readonly stderr: string;
 	/**
 	 * The exit code `execute()` resolved to: `0` or the action's `exitCode(n)`, `1` or a thrown
-	 * value's integer `exitCode`, `2` for a usage error, `130` for cancellation, `143` after `SIGTERM`.
+	 * value's non-zero integer `exitCode`, `2` for a usage error, `130` for cancellation, `143` after `SIGTERM`.
 	 */
 	readonly exitCode: number;
 }

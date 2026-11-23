@@ -150,9 +150,9 @@ export interface CrustCommandContext<
 	/** Readonly snapshot of the application root, including Extension contributions */
 	rootCommand: CommandSnapshot;
 	/**
-	 * Set the invocation's exit code for when the action completes; the action carries on and the
+	 * Set the invocation's integer exit code for when the action completes; the action carries on and the
 	 * last call wins. To stop, `return` or `throw`. A throw exits `1`, or with the thrown value's
-	 * integer `exitCode`.
+	 * non-zero integer `exitCode`.
 	 */
 	exitCode: (code: number) => void;
 }
@@ -1982,7 +1982,7 @@ export class Crust<
 	 * renders a failure once (through Extension `onError` hooks, ending in the
 	 * chosen Renderer's `error` or Core's default rendering), and resolves to the exit code, which
 	 * it also assigns to `process.exitCode` once at the end: `0`, or the action's `exitCode(n)`;
-	 * `1`, or a thrown value's integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or
+	 * `1`, or a thrown value's non-zero integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or
 	 * `COMMAND_NOT_FOUND` error; `130` for an `AbortError` cancellation, `143` when `SIGTERM`
 	 * cancelled it. After a `SIGINT` or `SIGTERM` cancelled the run, the exit code is
 	 * `130` / `143` whatever the action did, and without injected `io` the process dies by

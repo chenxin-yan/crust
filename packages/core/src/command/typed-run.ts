@@ -78,7 +78,7 @@ export type RunOutcome<Result, Events extends readonly unknown[] | undefined = u
 	readonly stderr: string;
 	/**
 	 * The exit code `execute()` would end with: `0` or the action's `exitCode(n)` when
-	 * `completed`, `0` when `handled`; when `failed`, the thrown value's integer `exitCode`,
+	 * `completed`, `0` when `handled`; when `failed`, the thrown value's non-zero integer `exitCode`,
 	 * `2` for a `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND` error, `130` for cancellation, else `1`.
 	 */
 	readonly exitCode: number;

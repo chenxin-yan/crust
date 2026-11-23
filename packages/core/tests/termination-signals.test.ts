@@ -14,17 +14,17 @@ beforeAll(ensureDist);
 
 // The action sends SIGNAL to itself, and again SECOND_AFTER ms after the abort when set; a
 // comma-separated SIGNAL runs execute() once per signal. IGNORE completes the action despite the
-// abort; GUARD adds another listener that owns the signal; BUSY receives the signal during
-// synchronous work and returns before the event loop can handle it. After execute(), async work
-// runs before the report line, then AFTER=exit calls process.exit(code) and AFTER=zero sets
-// process.exitCode = 0.
+// abort, after an exitCode(5) the signal's code replaces; GUARD adds another listener that owns
+// the signal; BUSY receives the signal during synchronous work and returns before the event loop
+// can handle it. After execute(), async work runs before the report line, then AFTER=exit calls
+// process.exit(code) and AFTER=zero sets process.exitCode = 0.
 const PROBE = `import { Crust } from ${JSON.stringify(join(corePkg, "dist/index.js"))};
 const { SIGNAL: SIGNALS, SECOND_AFTER, IGNORE, GUARD, BUSY, AFTER } = process.env;
 if (GUARD) process.on(SIGNALS, () => {});
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let exitCode;
 for (const SIGNAL of SIGNALS.split(",")) exitCode = await new Crust("app")
-	.action(async ({ signal }) => {
+	.action(async ({ signal, exitCode: setExitCode }) => {
 		// Signal listeners don't keep Node's event loop alive.
 		const keepAlive = setInterval(() => {}, 1_000);
 		try {
@@ -44,7 +44,8 @@ for (const SIGNAL of SIGNALS.split(",")) exitCode = await new Crust("app")
 			}
 			// Leaves a re-raised signal time to end the process.
 			await sleep(100);
-			if (!IGNORE) signal.throwIfAborted();
+			if (IGNORE) setExitCode(5);
+			else signal.throwIfAborted();
 		} finally {
 			clearInterval(keepAlive);
 			console.log("released");
