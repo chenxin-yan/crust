@@ -188,7 +188,7 @@ export interface CommandSnapshot {
 	readonly hasAction: boolean;
 	/** Positional argument snapshots in declaration order. */
 	readonly args: readonly ArgSnapshot[];
-	/** Effective flags keyed by canonical flag name. */
+	/** Effective flags keyed by canonical flag name; no prototype, so `flags.constructor` is absent. */
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
 	/**
 	 * Draft 2020-12 JSON Schema of the action result, from the command's
@@ -212,7 +212,8 @@ export interface CommandSnapshot {
 	/**
 	 * Direct subcommand snapshots keyed by canonical name (includes hidden ones). In
 	 * invocation snapshots a pending child exposes `meta` (except `meta.sections`)
-	 * without being built; reading anything else builds it.
+	 * without being built; reading anything else builds it. No prototype, so a lookup by an
+	 * untrusted word (`help constructor`) finds only commands.
 	 */
 	readonly subCommands: Readonly<Record<string, CommandSnapshot>>;
 }
@@ -370,11 +371,14 @@ function snapshotFlag(
 		flags:
 			def.flags &&
 			Object.freeze(
-				Object.fromEntries(
-					Object.entries(def.flags).map(([name, member]) => [
-						name,
-						snapshotFlag(member, undefined),
-					]),
+				Object.assign(
+					Object.create(null),
+					Object.fromEntries(
+						Object.entries(def.flags).map(([name, member]) => [
+							name,
+							snapshotFlag(member, undefined),
+						]),
+					),
 				),
 			),
 		extension,
@@ -387,7 +391,7 @@ function snapshotFlag(
  * {@link CommandSnapshot}.
  */
 export function snapshotCommand(node: CommandNode): CommandSnapshot {
-	const subCommands: Record<string, CommandSnapshot> = {};
+	const subCommands: Record<string, CommandSnapshot> = Object.create(null);
 	for (const [name, sub] of Object.entries(node.subCommands)) {
 		subCommands[name] = snapshotCommand(sub);
 	}
@@ -473,7 +477,7 @@ export function createSnapshotProjector(
 	const share = (node: CommandNode): CommandSnapshot => {
 		const existing = shared.get(node);
 		if (existing) return existing;
-		const subCommands: Record<string, CommandSnapshot> = {};
+		const subCommands: Record<string, CommandSnapshot> = Object.create(null);
 		for (const [name, sub] of Object.entries(node.subCommands)) subCommands[name] = share(sub);
 		const snapshot = projectNode(node, Object.freeze(subCommands));
 		shared.set(node, snapshot);
@@ -490,7 +494,7 @@ export function createSnapshotProjector(
 		return snapshot;
 	};
 	const projectLocal = (node: CommandNode): CommandSnapshot => {
-		const subCommands: Record<string, CommandSnapshot> = {};
+		const subCommands: Record<string, CommandSnapshot> = Object.create(null);
 		// childMetaOf does not build lazily prepared children.
 		for (const [name, meta] of childMetaOf(node.subCommands)) {
 			let child: CommandSnapshot | undefined;
@@ -548,7 +552,7 @@ function snapshotFlags(
 	node: CommandNode,
 	defaults: ReadonlyMap<ArgDef | FlagDef, SerializableDefault>,
 ): Record<string, FlagSnapshot> {
-	const flags: Record<string, FlagSnapshot> = {};
+	const flags: Record<string, FlagSnapshot> = Object.create(null);
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		flags[name] = snapshotFlag(
 			def,
