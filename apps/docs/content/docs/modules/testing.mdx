@@ -36,7 +36,7 @@ npm install -D @crustjs/testing
 An optional third argument takes [`CaptureOptions`](#captureoptions), plus the streams the action sees:
 
 - `stdin` is the text the action reads from [`stdin`](/docs/guide/terminal-io#read-stdin); `stdin.isTTY` is then `false`, as for a pipe. Without it, stdin is empty.
-- `isTTY: true` makes `stdout.isTTY` and `stderr.isTTY` `true`, and `stdin.isTTY` too unless `stdin` is given. `columns` sets their width, `80` by default, and needs `isTTY: true`. Without `isTTY`, the streams are no terminal and `columns` is `undefined`.
+- `isTTY: true` makes `stdout.isTTY` and `stderr.isTTY` `true`, and `stdin.isTTY` too unless `stdin` is given. `columns` sets their width, `80` by default, and needs `isTTY: true`. Without `isTTY`, the streams are no terminal and `columns` is `undefined`. Even with `isTTY: true`, prompts do not ask, since there are no keys to read ([`canPrompt()`](/docs/modules/prompts#non-interactive-environments) is `false`); test them with [`runInteractive()`](#runinteractiveapp-argv).
 
 ```ts
 await captureExecute(app, ["-"], { stdin: "a\nb\n" });

@@ -144,7 +144,7 @@ Published v1.2.0
 
 ## Cancellation
 
-Ctrl+C in a Crust prompt raises an `AbortError`. By default, `execute()` prints no error and returns exit code 130:
+Ctrl+C or Ctrl+D in a Crust prompt raises an `AbortError`. By default, `execute()` prints no error and returns exit code 130:
 
 <include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
 
