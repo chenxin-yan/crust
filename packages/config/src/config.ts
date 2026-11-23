@@ -485,7 +485,10 @@ function withSettings(
 			}
 		};
 		const base = defineContext(key);
-		const withFlag = flag === false ? base : base.flags({ [key]: owned } as never);
+		// Core offers `--no-<name>` for `default: true`, which the flag no longer carries.
+		const flagDef =
+			def.type === "boolean" && def.default === true ? { ...owned, negatable: true } : owned;
+		const withFlag = flag === false ? base : base.flags({ [key]: flagDef } as never);
 		const context = withFlag.setup(async ({ flags }) => {
 			// Core resolves env for a flag; a setting without one gets the same env handling here.
 			const given =

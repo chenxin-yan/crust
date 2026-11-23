@@ -276,6 +276,17 @@ describe("settings", () => {
 		).toMatchObject({ port: 1, tags: ["x", "y"], timeout: 2000, yes: true });
 	});
 
+	it("turns off a boolean setting with default: true by --no-<name>", async () => {
+		const config = defineConfig({ name: "acme", project: true }).flags({
+			cache: { type: "boolean", default: true },
+		});
+		const run = (argv: string[]) => captureExecute(shows(config), ["show", ...argv]);
+		expect(JSON.parse((await run([])).stdout)).toEqual({ cache: true });
+		const off = await run(["--no-cache"]);
+		expect(off.exitCode, off.stderr).toBe(0);
+		expect(JSON.parse(off.stdout)).toEqual({ cache: false });
+	});
+
 	it("reads a flag: false setting from env and the files, never from a flag", async () => {
 		write(globalFile(), { telemetry: false });
 		expect(await viaRun()).toMatchObject({ telemetry: false });
