@@ -12,7 +12,9 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+import { withTerminalIO } from "@crustjs/prompts";
+import { createPromptIO } from "@crustjs/prompts/testing";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
@@ -21,6 +23,7 @@ import extensionsPackage from "../../extensions/package.json";
 import testingPackage from "../../testing/package.json";
 import type { RunProcessResult } from "../../utils/src/process.ts";
 import packageJson from "../package.json";
+import { app } from "../src/index.ts";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const builtCliPath = join(packageRoot, ".crust", "root", "bin", "create-crust.js");
@@ -329,6 +332,25 @@ describe("create-crust CLI", () => {
 		},
 		30_000,
 	);
+
+	it("ends without an error when the overwrite prompt is answered no", async () => {
+		const projectDir = join(makeTempRoot("create-crust-declined"), "existing-cli");
+		mkdirSync(projectDir);
+		writeFileSync(join(projectDir, "sentinel.txt"), "keep me", "utf-8");
+		const terminal = createPromptIO();
+
+		const outcome = withTerminalIO(terminal.io, () =>
+			app.run([], {
+				args: { directory: projectDir },
+				flags: { runtime: "bun", install: false, git: false },
+			}),
+		);
+		await vi.waitFor(() => expect(terminal.screen()).toContain("already exists. Overwrite?"));
+		terminal.keys("enter");
+
+		expect(await outcome).toMatchObject({ status: "completed", stdout: "Aborted." });
+		expect(readdirSync(projectDir)).toEqual(["sentinel.txt"]);
+	});
 
 	it("fails when the current directory is not empty and --overwrite is not passed", async () => {
 		const tempRoot = makeTempRoot("create-crust-dot-non-empty");

@@ -13,9 +13,10 @@ import {
 import type { BuildOptions } from "@crustjs/crust";
 import { help, version } from "@crustjs/extensions";
 import { spinner } from "@crustjs/progress";
-import { confirm, input, select } from "@crustjs/prompts";
+import { confirm, input, isTTY, select } from "@crustjs/prompts";
 import { resolveUserPath } from "@crustjs/utils/path";
 import { shellQuote } from "@crustjs/utils/process";
+import { getTerminalIO } from "@crustjs/utils/terminal";
 import { Eta } from "eta/core";
 
 import corePkg from "../../core/package.json" with { type: "json" };
@@ -226,6 +227,17 @@ export const app = new Crust("create-crust", {
 				initial: flags.overwrite,
 			});
 			if (!overwrite) {
+				// Answering no at the prompt is a choice, not a failure. The prompt is shown only when
+				// both of its streams are terminals; otherwise it took its default.
+				const io = getTerminalIO();
+				const prompted =
+					flags.overwrite === undefined &&
+					isTTY(io?.input ?? process.stdin) &&
+					isTTY(io?.output ?? process.stderr);
+				if (prompted) {
+					stdout("Aborted.");
+					return;
+				}
 				throw new Error(
 					`${isCwd ? "The current directory is not empty" : `Directory "${name}" already exists`}. Pass --overwrite to write into it.`,
 				);
