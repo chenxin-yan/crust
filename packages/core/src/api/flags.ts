@@ -2,7 +2,7 @@ import { normalizeFlag, normalizeArg } from "../parsing/spellings.ts";
 import type { ArgDef, FlagDef, OmitName } from "../types.ts";
 import type { EmptyArgNameBrand } from "../validation/args.brands.ts";
 import type { LocalFlagBrand } from "../validation/flags.brands.ts";
-import type { LocalValueBrand } from "../validation/shared.ts";
+import type { LocalValueBrand, UnknownKeysBrand } from "../validation/shared.ts";
 
 /** A positional argument definition without its name — the `defineArg` input shape. */
 export type UnnamedArgDef = OmitName<ArgDef>;
@@ -25,7 +25,9 @@ type Named<N extends string, D> = D extends unknown ? Frozen<{ name: N } & D> : 
  * Define one reusable flag, including its readonly env binding. The key it is
  * attached under names it (`.flags({ format })`); attachment checks the name and collisions.
  */
-export function defineFlag<const D extends FlagDef>(def: D & LocalFlagBrand<D>): Owned<D>;
+export function defineFlag<const D extends FlagDef>(
+	def: D & LocalFlagBrand<D> & UnknownKeysBrand<D, FlagDef>,
+): Owned<D>;
 
 export function defineFlag(def: FlagDef): FlagDef {
 	return normalizeFlag(undefined, def);
@@ -34,7 +36,7 @@ export function defineFlag(def: FlagDef): FlagDef {
 /** Define and own one positional argument; layout belongs to its consuming command. */
 export function defineArg<const N extends string, const D extends UnnamedArgDef>(
 	name: N & EmptyArgNameBrand<N>,
-	def: D & LocalValueBrand<D>,
+	def: D & LocalValueBrand<D> & UnknownKeysBrand<D, UnnamedArgDef>,
 ): Named<N, D>;
 
 export function defineArg(name: string, def: UnnamedArgDef): ArgDef {

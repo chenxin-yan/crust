@@ -305,6 +305,28 @@ type SchemaInputBrand<T> = T extends { schema: infer S extends StandardSchema }
 		: { readonly FIX_SCHEMA_INPUT: SchemaInputMessage<T> }
 	: {};
 
+// `keyof` a union lists only shared keys, so a key in one branch alone would escape its checks.
+export type KeysOfAnyBranch<D> = D extends unknown ? keyof D : never;
+
+// A key typed `?: never` holds no value: it is how a definition type forbids a property.
+type HeldKeys<T> = T extends unknown
+	? { [K in keyof T]-?: [Exclude<T[K], undefined>] extends [never] ? never : K }[keyof T]
+	: never;
+
+// Only object members are definitions; a primitive in an open record is left to its other checks.
+type UnknownKeys<T, Def> = Exclude<HeldKeys<Extract<T, object>>, KeysOfAnyBranch<Def>>;
+
+/**
+ * Reject a property no definition of kind `Def` has, such as a misspelled `requried`: a generic
+ * parameter admits it, and nothing reads it. `unknown` when every key is known.
+ */
+export type UnknownKeysBrand<T, Def> =
+	IsAny<T> extends true
+		? unknown
+		: [UnknownKeys<T, Def>] extends [never]
+			? unknown
+			: { readonly FIX_UNKNOWN_PROPERTY: `Unknown property "${UnknownKeys<T, Def> & string}"` };
+
 /** Reject independently provable invalid local values, including members of uncertain definitions. */
 export type LocalValueBrand<T> = UnionToIntersection<
 	T extends unknown

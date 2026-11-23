@@ -1,4 +1,4 @@
-import type { ArgsDef } from "../types.ts";
+import type { ArgDef, ArgsDef } from "../types.ts";
 import type {
 	CollisionBrand,
 	DefName,
@@ -6,6 +6,7 @@ import type {
 	HasClosedNames,
 	LocalValueBrand,
 	DefNameMembers,
+	UnknownKeysBrand,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ type EmptyArgDefinitionNameBrand<A> = EmptyArgNameBrand<DefNameMembers<A>>;
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
 	LocalValueBrand<A> &
+	UnknownKeysBrand<A, ArgDef> &
 	EmptyArgDefinitionNameBrand<A>;
 
 type VariadicPositionError = {
