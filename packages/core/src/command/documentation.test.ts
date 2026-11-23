@@ -19,6 +19,7 @@ describe("formatDescription", () => {
 		expect(formatDescription(undefined, Number.POSITIVE_INFINITY, undefined)).toBe(
 			"[default: Infinity]",
 		);
+		expect(formatDescription("Tags", [], undefined)).toBe("Tags");
 		expect(formatDescription("Output", "json", undefined, (text) => `<${text}>`)).toBe(
 			'Output <[default: "json"]>',
 		);
@@ -252,12 +253,13 @@ describe("buildCommandDocumentation", () => {
 		]);
 	});
 
-	it("lists own flags, then .group() flags in code order, then inherited flags", async () => {
+	it("lists own and root-only Extension flags, then .group() flags in code order, then inherited flags", async () => {
 		const region = defineContext("region")
 			.flags({ region: { type: "string" } })
 			.setup(({ flags }) => flags.region);
 		const ext = defineExtension(defineExtensionId("test:ext")).flags({
 			trace: { type: "boolean" },
+			about: { type: "boolean", recursive: false },
 		});
 		const model = await docs(
 			new Crust("app")
@@ -281,6 +283,7 @@ describe("buildCommandDocumentation", () => {
 			]),
 		).toEqual([
 			["verbose", undefined, false, undefined],
+			["about", undefined, false, undefined],
 			["memory", "Resources", false, "bytes"],
 			["fast", "Resources", false, undefined],
 			["region", undefined, true, "string"],

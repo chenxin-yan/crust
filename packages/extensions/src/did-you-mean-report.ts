@@ -1,6 +1,8 @@
 import type { CommandSnapshot, CrustError, ExtensionContext } from "@crustjs/core";
 import { isListed } from "@crustjs/core/tooling";
 
+import type { RenderHelpOptions } from "./help.ts";
+
 function levenshtein(a: string, b: string): number {
 	const aLen = a.length;
 	const bLen = b.length;
@@ -79,7 +81,11 @@ export async function reportUnknownCommand(
 	error: CrustError<"COMMAND_NOT_FOUND">,
 	context: ExtensionContext,
 	mode: "error" | "help",
-	renderHelp: (command: CommandSnapshot, path: readonly string[]) => Promise<string>,
+	renderHelp: (
+		command: CommandSnapshot,
+		path: readonly string[],
+		options: RenderHelpOptions,
+	) => Promise<string>,
 ): Promise<true> {
 	const details = error.details;
 	const suggestion = findSuggestion(details.input, details.parentCommand.subCommands);
@@ -92,7 +98,11 @@ export async function reportUnknownCommand(
 	if (mode === "help") {
 		context.stdout(message);
 		context.stdout("");
-		context.stdout(await renderHelp(details.parentCommand, details.commandPath));
+		context.stdout(
+			await renderHelp(details.parentCommand, details.commandPath, {
+				columns: context.stdout.columns,
+			}),
+		);
 		return true;
 	}
 

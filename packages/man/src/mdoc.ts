@@ -136,8 +136,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	}
 	if (model.flags.length > 0) {
 		lines.push(".Sh OPTIONS");
-		// Own flags come first in the model, so ungrouped ones open the section without a heading.
-		for (const [heading, flags] of byHeading(model.flags)) {
+		// Ungrouped flags, own and inherited, open the section without a heading.
+		const flagGroups = new Map([[undefined, []], ...byHeading(model.flags)]);
+		for (const [heading, flags] of flagGroups) {
+			if (flags.length === 0) continue;
 			if (heading !== undefined) lines.push(`.Ss ${macroArgument(heading)}`);
 			lines.push(`.Bl -tag -width ${Math.max(8, ...flags.map((flag) => flagLabel(flag).length))}n`);
 			for (const flag of flags.sort(byName)) {

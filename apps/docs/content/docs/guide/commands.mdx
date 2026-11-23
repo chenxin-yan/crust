@@ -147,9 +147,9 @@ Global options:
   -h, --help                   Show help
 ```
 
-- A group changes documentation only: help, [man pages](/docs/modules/man), [skills](/docs/modules/skills), and the [`--llms` index](/docs/modules/extensions/schema). Routing, parsing, and types are the same as with `.add()`, `.command()`, and `.flags()`.
+- A group changes documentation only: help and [man pages](/docs/modules/man) list both kinds, and the [`--llms` index](/docs/modules/extensions/schema) lists flag groups. Routing, parsing, and types are the same as with `.add()`, `.command()`, and `.flags()`.
 - The parent decides the group, so one definition can sit in different groups under different parents.
-- Command groups come in code order, then "Additional commands": the ungrouped ones and those Extensions add. Flags: the command's own ungrouped ones, the flag groups in code order, then "Global options", the flags it does not declare itself (a Context's or an Extension's), which cannot be grouped.
+- Command groups come in code order, then "Additional commands": the ungrouped ones and those Extensions add. Flags: the command's own ungrouped ones, the flag groups in code order, then "Global options", the flags it does not declare itself (a Context's, or a recursive Extension's), which cannot be grouped. A root-only Extension flag, such as `--version`, is listed with the root's own.
 - `examples` are listed right after the usage line in help, and in man pages, skills, and the `--llms` index. The root takes them in `new Crust()` metadata.
 
 ## Documentation sections

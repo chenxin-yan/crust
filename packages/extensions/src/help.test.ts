@@ -505,14 +505,17 @@ describe("help", () => {
 		expect(plain).toContain("Options:\n  --verbose                    Verbose");
 	});
 
-	it("renderHelp wraps descriptions to the given width", async () => {
-		const snapshot = await new Crust("app")
+	it("renderHelp wraps descriptions to the given width, and --help to stdout's", async () => {
+		const app = new Crust("app")
+			.extend(help())
 			.flags({ name: { type: "string", description: "one two three four five six seven" } })
-			.snapshot();
-		const plain = stripAnsi(await renderHelp(snapshot, undefined, { columns: 50 }));
-		expect(plain).toContain(
-			"  --name <string>              one two three four\n                               five six seven",
-		);
+			.action(() => {});
+		const wrapped =
+			"  --name <string>              one two three four\n                               five six seven";
+		const plain = stripAnsi(await renderHelp(await app.snapshot(), undefined, { columns: 50 }));
+		expect(plain).toContain(wrapped);
+		const { stdout } = await captureExecute(app, ["--help"], { isTTY: true, columns: 50 });
+		expect(stripAnsi(stdout)).toContain(wrapped);
 	});
 
 	it("drops an Extension section's own colors under NO_COLOR", async () => {

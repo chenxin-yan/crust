@@ -10,4 +10,4 @@
 - Descriptions wrap to the terminal width. `renderHelp(command, path?, { columns })` takes the width.
 - Section bodies drop their own ANSI styling when colors are off (`NO_COLOR`, `--no-color`).
 - The `--llms` index lists `examples`, a flag's `valueName`, and flags under "Flags", their group titles, and "Global flags".
-- **Breaking:** `--help` and the other Extension flags move from "Options" to "Global options", and `--llms` lists them under "Global flags".
+- **Breaking:** `--help` and the other recursive Extension flags move from "Options" to "Global options", and `--llms` lists them under "Global flags". Root-only ones such as `--version` and `--llms` stay with the root's own flags.

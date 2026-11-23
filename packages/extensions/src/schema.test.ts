@@ -175,10 +175,13 @@ describe("schema", () => {
 				"",
 				"Test CLI",
 				"",
+				"Flags:",
+				"",
+				"- `--llms` (boolean): Print a Markdown index of all commands for LLMs",
+				"",
 				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
-				"- `--llms` (boolean): Print a Markdown index of all commands for LLMs",
 				"",
 				"## `mycli deploy <target> [options]`",
 				"",
@@ -264,7 +267,7 @@ describe("schema", () => {
 		const [root, deploy] = stdout.split("\n## ").slice(1);
 
 		expect(root).toMatch(
-			/- `--llms` [^\n]*\n\n### Auth\n\nSet MYCLI_TOKEN\.\n\n### JSON output\n\n--json [^\n]*\n\n### JSON input\n\n--input [^\n]*\n$/,
+			/- `--json` [^\n]*\n\n### Auth\n\nSet MYCLI_TOKEN\.\n\n### JSON output\n\n--json [^\n]*\n\n### JSON input\n\n--input [^\n]*\n$/,
 		);
 		expect(deploy).toMatch(/\n\n### Safety\n\nRun preview first\.\n$/);
 		expect(stdout).not.toContain("Not for schema");

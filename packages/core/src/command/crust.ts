@@ -1403,8 +1403,13 @@ export interface GroupBuilder<State> extends CommandGroupBuilder<State> {
 	): FlagGroupBuilder<AfterFlags<S, DefinedFlags<F>>["_state"]>;
 }
 
+// A builder has `_state`, `add`, `command`, and `flags` too; the brand keeps a block from returning one.
+declare const groupHandleBrand: unique symbol;
+
 /** A `.group()` block that registers commands; it takes no flags. */
 export interface CommandGroupBuilder<State> {
+	/** @internal */
+	readonly [groupHandleBrand]: true;
 	/** @internal */
 	readonly _state: State;
 	/** @internal */
@@ -1456,6 +1461,8 @@ export interface CommandGroupBuilder<State> {
 
 /** A `.group()` block that defines flags; it takes no commands. */
 export interface FlagGroupBuilder<State> {
+	/** @internal */
+	readonly [groupHandleBrand]: true;
 	/** @internal */
 	readonly _state: State;
 	/** @internal */
@@ -2065,7 +2072,7 @@ export class Crust<
 	 * those Contexts' flags without `.use()`, because its `ctx` exposes them, and its
 	 * action's `flags` type includes them.
 	 *
-	 * Static metadata (description, aliases, hidden, usage, sections) belongs in
+	 * Static metadata (description, aliases, hidden, usage, examples, sections) belongs in
 	 * `config`, as with `defineCommand(name, config, recipe)`.
 	 * Extract to `defineCommand` when a command needs its own file or reuse.
 	 */

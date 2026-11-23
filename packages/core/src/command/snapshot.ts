@@ -138,7 +138,7 @@ export interface FlagSnapshot extends Readonly<FlagExtras> {
 	readonly extension?: ExtensionId;
 	/**
 	 * `true` for a flag the command does not declare in its own `.flags()`: a Context-owned or
-	 * Extension flag. Help lists these under "Global options".
+	 * recursive Extension flag. Help lists these under "Global options".
 	 */
 	readonly inherited?: true;
 }
@@ -544,7 +544,7 @@ function snapshotFlags(node: CommandNode): Record<string, FlagSnapshot> {
 		flags[name] = snapshotFlag(
 			def,
 			node.extensionFlags?.get(name),
-			Object.hasOwn(node.localFlags, name) ? undefined : true,
+			Object.hasOwn(node.localFlags, name) || node.rootOnlyFlags?.has(name) ? undefined : true,
 		);
 	}
 	return flags;

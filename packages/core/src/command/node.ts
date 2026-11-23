@@ -55,6 +55,8 @@ export interface CommandNode {
 	effectiveFlags: FlagsDef;
 	/** Prepared nodes only: the Extension declaring each Extension flag in {@link effectiveFlags}. */
 	extensionFlags?: ReadonlyMap<string, ExtensionId>;
+	/** Prepared root only: its `recursive: false` Extension flags, which documentation lists as its own. */
+	rootOnlyFlags?: ReadonlySet<string>;
 	/** Prepared nodes only: the Extension that contributed this command or its top-level ancestor. */
 	extension?: ExtensionId;
 	/** Cached canonical/short/alias table for the effective flags. */

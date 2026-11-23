@@ -37,6 +37,10 @@ describe(".group()", () => {
 			// @ts-expect-error -- blocks do not nest
 			g.group("Inner", (inner) => inner.add(deploy)),
 		);
+		defineCommand("x", (c) =>
+			// @ts-expect-error -- a block returns its handle, not the enclosing builder
+			c.group("Resources", () => c.flags({ memory: { type: "string" } })),
+		);
 	});
 
 	it("takes valueName only on flags that take a value", () => {

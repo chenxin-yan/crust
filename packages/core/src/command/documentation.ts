@@ -28,7 +28,8 @@ export function formatDescription(
 	const parts = description ? [description] : [];
 	if (deprecated !== undefined) parts.push(formatAnnotation(`[deprecated: ${deprecated}]`));
 	if (env !== undefined) parts.push(formatAnnotation(`[env: ${[env].flat().join(", ")}]`));
-	if (defaultValue !== undefined) {
+	// An empty list is no value to show.
+	if (defaultValue !== undefined && !(Array.isArray(defaultValue) && defaultValue.length === 0)) {
 		parts.push(formatAnnotation(`[default: ${formatDefault(defaultValue)}]`));
 	}
 	if (choices?.length) parts.push(formatAnnotation(`[choices: ${choices.join(", ")}]`));

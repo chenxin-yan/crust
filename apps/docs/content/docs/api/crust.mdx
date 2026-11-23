@@ -286,7 +286,7 @@ The recipe sees the Contexts and Context-owned flags available before the call, 
 
 ## `.group(title, block)`
 
-Lists the commands or flags a block registers under `title` in help, man pages, skills, and the `--llms` index. The block receives a handle with `add()`, `command()`, and `flags()`, which work as the builder methods of the same name; its first call decides the kind, and the other kind is then a compile error. Return the handle the last call gives.
+Lists the commands or flags a block registers under `title` in help and man pages; the `--llms` index lists flag groups only, and skills list neither. The block receives a handle with `add()`, `command()`, and `flags()`, which work as the builder methods of the same name; its first call decides the kind, and the other kind is then a compile error. Return the handle the last call gives.
 
 ```ts
 const app = new Crust("my-cli")
@@ -298,7 +298,7 @@ const app = new Crust("my-cli")
 
 - A group changes documentation only, never routing, parsing, or types. The snapshot records it in [`CommandSnapshot.groups`](/docs/api/types#commandsnapshot).
 - Blocks do not nest. Two groups with the same title list as one, where the first stood.
-- Only the command's own flags can be grouped: Context and Extension flags are listed under "Global options".
+- Only the command's own flags can be grouped: Context and recursive Extension flags are listed under "Global options", and a root-only Extension flag (`--version`) under the root's "Options".
 - See [Group commands and flags in help](/docs/guide/commands#group-commands-and-flags-in-help) for the order help uses.
 
 ## `.snapshot()`

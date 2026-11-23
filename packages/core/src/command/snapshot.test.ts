@@ -87,6 +87,38 @@ describe("snapshotCommand", () => {
 		expect(JSON.parse(JSON.stringify(snapshot)).args).toEqual(snapshot.args);
 	});
 
+	it("shows a schema that validates asynchronously or throws on a missing value as optional", async () => {
+		const standard = { version: 1 as const, vendor: "test" };
+		const snapshot = await new Crust("cli")
+			.flags({
+				later: {
+					type: "string",
+					schema: {
+						"~standard": {
+							...standard,
+							validate: async () => ({ issues: [{ message: "missing" }] }),
+						},
+					},
+				},
+				broken: {
+					type: "string",
+					schema: {
+						"~standard": {
+							...standard,
+							validate: () => {
+								throw new Error("boom");
+							},
+						},
+					},
+				},
+			})
+			.action(() => {})
+			.snapshot();
+
+		expect(snapshot.flags.later).not.toHaveProperty("required");
+		expect(snapshot.flags.broken).not.toHaveProperty("required");
+	});
+
 	it("is serializable: no functions, URL defaults become strings", () => {
 		const snapshot = snapshotCommand(buildTree());
 

@@ -194,6 +194,26 @@ describe("renderManPageMdoc", () => {
 		);
 	});
 
+	it("lists inherited flags before .group() subsections when no own flag is ungrouped", async () => {
+		const root = await new Crust("demo")
+			.extend(help())
+			.group("Resources", (g) => g.flags({ memory: { type: "string" } }))
+			.action(() => {})
+			.snapshot();
+		const mdoc = renderManPageMdoc({ root, section: 1 });
+
+		expect(mdoc).toContain(
+			[
+				".Sh OPTIONS",
+				".Bl -tag -width 10n",
+				".It Fl h , Fl Fl help",
+				"Show help",
+				".El",
+				".Ss Resources",
+			].join("\n"),
+		);
+	});
+
 	it("escapes leading dots in descriptions and .Nd", async () => {
 		const app = new Crust("x", {
 			description: ".config is read automatically.",
