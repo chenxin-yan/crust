@@ -68,17 +68,17 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 Each rule about a definition is checked once, by TypeScript or by Core at runtime.
 
 - TypeScript checks types and structure: unknown keys, a `default` within literal `choices`, the argument list (unique names, and the position of `variadic` and `afterDoubleDash` arguments), a schema's input type, a synchronous `parse`, Context dependencies, required root metadata, an `env` binding that is an object, `delimiter` only with `multiple`, and a section with a nonempty `only` or `except` but not both. These have no runtime check: `as never`, `any`, a value TypeScript can't see (such as a `choices` array that is not a literal tuple), and plain JavaScript bypass them.
-- Core checks names, spellings, and the assembled tree at runtime: blank, reserved, or malformed names and spellings, the `no-` prefix, integer-like flag names, one-character `short`s, empty `env` names and delimiters, section text, and every collision (flags, aliases, sibling commands, Extension commands, section titles, a second `renderer` or `noAction`), and a same-name Context or provider whose flags differ from those of the Context a command declares with [`.use()`](#usefactories). Each throws a `DEFINITION` [error](/docs/api/errors).
+- Core checks names, spellings, and the assembled tree at runtime: blank, reserved, or malformed names and spellings, the `no-` prefix, integer-like flag names, one-character `short`s, empty `env` names and delimiters, section text, every collision (flags, aliases, sibling commands, Extension commands, section titles, a second `renderer` or `noAction`), a same-name Context or provider whose flags differ from those of the Context a command declares with [`.use()`](#usefactories), and a subcommand flag spelling that takes a value where an ancestor's same spelling doesn't, or the reverse (see [routing](/docs/guide/commands#how-a-command-line-is-routed)). Each throws a `DEFINITION` [error](/docs/api/errors).
 - These runtime checks run when the CLI runs from source (`bun`, `node`, tests) and when [`crust build`](/docs/modules/crust) takes its snapshot, so a definition error fails the build. The artifacts `crust build` bundles leave them out, so a built CLI does not repeat them. `crust build --no-validate` skips the snapshot, and these checks with it.
 - So a definition must be the same on every run: one that varies with the platform or the environment is checked only as it is on the build machine. A name, alias, or flag built from runtime data, such as user-configured aliases or a plugin list, is input: validate it yourself before you pass it to Crust.
 
 The runtime checks throw at different times:
 
-| Check                                                                                               | When                                                      |
-| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Direct builder inputs, sibling names and aliases                                                    | At the builder call                                       |
-| Recipe validation, inherited-flag collisions, Context demands of added definitions                  | When the command is first used                            |
-| Extension flag and command collisions, missing Contexts for an Extension's `.use()` or `.provide()` | When the app prepares: first run, `snapshot()`, or `at()` |
+| Check                                                                                                     | When                                                      |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Direct builder inputs, sibling names and aliases                                                          | At the builder call                                       |
+| Recipe validation, inherited-flag collisions, reused flag spellings, Context demands of added definitions | When the command is first used                            |
+| Extension flag and command collisions, missing Contexts for an Extension's `.use()` or `.provide()`       | When the app prepares: first run, `snapshot()`, or `at()` |
 
 Use `await app.snapshot()` to validate the full tree without running Command Actions.
 
@@ -362,7 +362,7 @@ Ctrl-C (`SIGINT`) and `SIGTERM` (sent by `docker stop`, Kubernetes, systemd, `ti
 2. Route the command path, materializing pending commands as needed.
 3. Parse argv (`execute()`) or bind structured input (`run()`).
 4. Run Extension `setup` hooks in registration order, then choose the [renderer](/docs/guide/extensions#renderers) for action and Context output.
-5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run the application's `noAction` hook, if any, and end it the same way.
+5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run steps 7 and 8, then the application's `noAction` hook, if any, and end it the same way. Without a `noAction` hook, a command with subcommands fails with `Missing command. Available: …` (`VALIDATION`).
 6. Run Extension `preRun` hooks in registration order. They run only before a Command Action.
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.

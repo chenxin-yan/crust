@@ -98,7 +98,7 @@ describe("defineExtension", () => {
 		expect(seen).toEqual(["second pre", "second post"]);
 	});
 
-	it("runs noAction in place of a missing action, skipping preRun, unless a handler fires", async () => {
+	it("runs noAction after validation in place of a missing action, skipping preRun, unless a handler fires", async () => {
 		const seen: string[] = [];
 		const first = defineExtension(defineExtensionId("first"))
 			.setup(() => void seen.push("first setup"))
@@ -108,11 +108,17 @@ describe("defineExtension", () => {
 			.noAction(() => void seen.push("second noAction"));
 		const app = new Crust("app")
 			.extend(first, second)
-			// Missing, but noAction runs before validation.
 			.args({ name: "name", type: "string", required: true })
 			.command("leaf", (command) => command.action(() => void seen.push("action")));
 
 		expect(await app.run([] as never, {} as never)).toMatchObject({
+			status: "failed",
+			error: { code: "VALIDATION", message: 'Missing required argument "<name>"' },
+		});
+		expect(seen).toEqual(["first setup"]);
+
+		seen.length = 0;
+		expect(await app.run([] as never, { args: { name: "x" } } as never)).toMatchObject({
 			status: "handled",
 			by: "second",
 		});
@@ -138,7 +144,12 @@ describe("defineExtension", () => {
 		expect(seen).toEqual([]);
 
 		const unclaimed = new Crust("app").extend(first).command("leaf", (c) => c.action(() => {}));
-		expect(await unclaimed.run([] as never)).toMatchObject({ status: "completed" });
+		// Without noAction, a group run bare names its commands.
+		expect(await unclaimed.run([] as never)).toMatchObject({
+			status: "failed",
+			error: { code: "VALIDATION", message: "Missing command. Available: leaf" },
+			exitCode: 2,
+		});
 	});
 
 	it("snapshots contribution arrays and validates flags at the offending call", () => {

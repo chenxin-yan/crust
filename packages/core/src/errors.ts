@@ -37,8 +37,7 @@ export type ParseErrorReason =
 	| "missing-value"
 	| "unexpected-value"
 	| "unknown-argument"
-	| "positional-gap"
-	| "flag-not-forwardable";
+	| "positional-gap";
 
 /**
  * `details.reason` values Core sets on `DEFINITION` errors. Checks of a CLI's definition (names,
@@ -69,6 +68,7 @@ export type DefinitionErrorReason =
 	| "extension-defer-after-setup"
 	| "factory-id-mismatch"
 	| "flag-collision"
+	| "flag-shape-mismatch"
 	| "flags-before-validation"
 	| "foreign-command-builder"
 	| "integer-like-name"
@@ -91,9 +91,7 @@ export interface ParseErrorDetails {
 	/**
 	 * The offending flag. For `"unknown-flag"` it is the supplied name without
 	 * leading dashes (`--nope` and `-x` report `"nope"` and `"x"`); for
-	 * `"missing-value"` and `"unexpected-value"` it is the canonical flag name;
-	 * for `"flag-not-forwardable"` it is the argv token as written, without an inline
-	 * value (`--token=x` and `-tx` report `"--token"` and `"-t"`).
+	 * `"missing-value"` and `"unexpected-value"` it is the canonical flag name.
 	 */
 	readonly flag?: string;
 	/** The offending argument name, for `"positional-gap"` and `"unknown-argument"`. */

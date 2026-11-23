@@ -1,4 +1,4 @@
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand, unknownCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -25,6 +25,21 @@ describe("didYouMean", () => {
 		expect(stderr).not.toContain("broken recipe");
 		expect(exitCode).toBe(2);
 		expect(built).toEqual([]);
+	});
+
+	it("suggests a subcommand for a word a root action declines with unknownCommand()", async () => {
+		const app = new Crust("app")
+			.extend(didYouMean())
+			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
+			.args({ name: "script", type: "string", required: true })
+			.action(({ args, command }) => {
+				throw unknownCommand(command, args.script);
+			});
+
+		const { stderr, exitCode } = await captureExecute(app, ["buidl"]);
+
+		expect(stderr).toContain('Unknown command "buidl". Did you mean "build"?');
+		expect(exitCode).toBe(2);
 	});
 
 	it("breaks tied scores by canonical name", async () => {

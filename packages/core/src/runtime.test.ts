@@ -51,7 +51,7 @@ describe("runtime structured invocation", () => {
 		);
 	});
 
-	it("lets handling hooks skip required and schema validation after binding", async () => {
+	it("validates required values and schemas before a noAction hook", async () => {
 		let schemas = 0;
 		const app = new Crust("handled")
 			.args({ name: "file", type: "string", required: true })
@@ -73,10 +73,15 @@ describe("runtime structured invocation", () => {
 			.extend(defineExtension(defineExtensionId("handled")).noAction(() => {}));
 		const erased: AnyCrust = app;
 		expect(await erased.run([], {})).toMatchObject({
+			status: "failed",
+			error: { code: "VALIDATION", message: 'Missing required argument "<file>"' },
+		});
+		expect(schemas).toBe(0);
+		expect(await erased.run([], { args: { file: "a" }, flags: { config: "c" } })).toMatchObject({
 			status: "handled",
 			by: defineExtensionId("handled"),
 		});
-		expect(schemas).toBe(0);
+		expect(schemas).toBe(1);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run([], { flags: { config: 3 } }))).rejects.toThrow(
 			"Expected a string for --config.",

@@ -52,6 +52,7 @@ export type {
 	RootCommandMeta,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
+export { unknownCommand } from "./command/router.ts";
 // Typed programmatic invocation
 export type {
 	CommandHandle,

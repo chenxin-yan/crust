@@ -233,6 +233,40 @@ export function checkProvidedContextFlags(
 	}
 }
 
+/** Each flag spelling a command or its ancestors parse: whether it takes a value, and the nearest command path that parses it. */
+export type FlagShapes = ReadonlyMap<
+	string,
+	{ readonly takesValue: boolean; readonly path: string }
+>;
+
+/**
+ * Routing splits a flag typed before a subcommand name the way the command it was typed after
+ * reads it, and hands it to the subcommand: a spelling reused below must take a value at both
+ * levels or at neither. Returns the shapes `node`'s subcommands are checked against.
+ */
+export function checkReusedFlagShapes(
+	node: CommandNode,
+	path: string,
+	ancestors: FlagShapes,
+): FlagShapes {
+	const shapes = new Map(ancestors);
+	for (const [spelling, { canonicalName, def }] of node.flagSpellings) {
+		const takesValue = def.type !== "boolean";
+		const ancestor = ancestors.get(spelling);
+		if (ancestor && ancestor.takesValue !== takesValue) {
+			const flag = spelling.length === 1 ? `-${spelling}` : `--${spelling}`;
+			const takes = (value: boolean) => (value ? "takes a value" : "takes no value");
+			throw new CrustError(
+				"DEFINITION",
+				`Flag "${flag}" ${takes(takesValue)} on command "${path}" but ${takes(ancestor.takesValue)} on "${ancestor.path}"; a subcommand may reuse a parent's flag spelling only if both take a value or neither does`,
+				{ subject: "flag", name: canonicalName, reason: "flag-shape-mismatch" },
+			);
+		}
+		shapes.set(spelling, { takesValue, path });
+	}
+	return shapes;
+}
+
 /** The factories `demands` declare: a demanded instance (an Extension's provided Context) declares its own. */
 export function demandedFactories(demands: CommandNode["demands"]): AnyContextFactory[] {
 	return demands.map((demand) => ("contextName" in demand ? demand : demand.factory));

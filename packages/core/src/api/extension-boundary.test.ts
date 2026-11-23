@@ -313,7 +313,7 @@ it("keeps root providers' flags off contributed commands that do not use them", 
 		});
 	const child = defineCommand("child", (c) => {
 		recipes++;
-		return c.flags({ token: { type: "boolean" } });
+		return c.flags({ token: { type: "number" } });
 	});
 	const ext = defineExtension(defineExtensionId("pending-commands")).add(
 		defineCommand("parent", (c) => c.add(child)),
@@ -323,7 +323,7 @@ it("keeps root providers' flags off contributed commands that do not use them", 
 	expect(recipes).toBe(0);
 	const snapshot = await app.snapshot();
 	expect(snapshot.flags.token?.type).toBe("string");
-	expect(snapshot.subCommands.parent?.subCommands.child?.flags.token?.type).toBe("boolean");
+	expect(snapshot.subCommands.parent?.subCommands.child?.flags.token?.type).toBe("number");
 	expect(setups).toBe(0);
 });
 
@@ -410,7 +410,7 @@ it("checked inputs validate open provider flags only where they are parsed", asy
 });
 
 it("checked Extension additions preserve nonrecursive flags and same-id replacement", async () => {
-	const child = defineCommand("child", (c) => c.flags({ token: { type: "boolean" } }));
+	const child = defineCommand("child", (c) => c.flags({ token: { type: "number" } }));
 	const id = defineExtensionId("pending-replacement");
 	const pending = defineExtension(id).add(child);
 	const root = new Crust("app").extend(pending);
@@ -508,7 +508,10 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 			recursive: false,
 		},
 	});
-	const original = new Crust("app").extend(old).command("child", (c) => c.action(() => "child"));
+	const original = new Crust("app")
+		.extend(old)
+		.command("child", (c) => c.action(() => "child"))
+		.action(() => {});
 	const removed = original.extend(defineExtension(id));
 	await expect(unwrap(removed.run([], { flags: { local: "value" } }))).rejects.toThrow(
 		'Unknown flag "--local"',
@@ -526,7 +529,8 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 	const narrowed = new Crust("app")
 		.extend(recursive)
 		.command("child", (c) => c.action(() => "child"))
-		.extend(widened);
+		.extend(widened)
+		.action(() => {});
 	expect(await narrowed.run([], { flags: { local: "value" } })).toMatchObject({
 		status: "completed",
 		result: undefined,

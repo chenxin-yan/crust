@@ -46,5 +46,5 @@ The exit code stays 2 in both modes.
 
 ## Limitations
 
-- A parent with a Command Action treats an unknown token as a positional argument, so no `COMMAND_NOT_FOUND` occurs and nothing is suggested.
+- A parent whose Command Action declares arguments treats an unknown word as an argument, so no `COMMAND_NOT_FOUND` occurs and nothing is suggested, unless the action declines the word with [`unknownCommand()`](/docs/api/errors#unknowncommandcommand-name).
 - [`run()`](/docs/api/crust#runpath-input-options) returns the failed outcome without presenting it.

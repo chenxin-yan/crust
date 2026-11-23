@@ -740,13 +740,13 @@ describe("Context-owned flags at use sites", () => {
 		const ext = defineExtension(defineExtensionId("confirm")).provide(confirm());
 		const before = new Crust("cli")
 			.command("early", (command) =>
-				command.command("nested", (nested) => nested.action(() => "nested")),
+				command.command("nested", (nested) => nested.action(() => "nested")).action(() => "early"),
 			)
 			.extend(ext);
 		const after = new Crust("cli")
 			.extend(ext)
 			.command("early", (command) =>
-				command.command("nested", (nested) => nested.action(() => "nested")),
+				command.command("nested", (nested) => nested.action(() => "nested")).action(() => "early"),
 			);
 
 		await unwrap(before.run(["early"], { flags: { yes: true } }));
@@ -1229,7 +1229,11 @@ describe("Context dependency runtime boundaries", () => {
 		// .provide() is positional (flag scoping): the child added before it never
 		// inherits logger, so the hook's pull on that path fails loud lazily even
 		// though .extend() typechecked against the root's final Ctx.
-		const app = new Crust("cli").add(child).provide(logger()).extend(observer);
+		const app = new Crust("cli")
+			.add(child)
+			.provide(logger())
+			.extend(observer)
+			.action(() => {});
 
 		await expect(unwrap(app.run(["child"]))).rejects.toMatchObject({
 			details: { name: "logger", reason: "missing-context" },

@@ -9,6 +9,7 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, FlagsDef, ParsedFlagValue, RunInputPayload } from "../types.ts";
 import { type AnyCrust, Crust, defineCommand } from "./crust.ts";
+import { unknownCommand } from "./router.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
 /**
@@ -1504,20 +1505,21 @@ describe("Extension setup, flag handlers, and noAction", () => {
 			.extend(version)
 			.command("publish", (command) =>
 				command
-					.flags({ version: { type: "string" } })
+					.flags({ version: { type: "boolean" } })
 					.action(({ flags, stdout }) => stdout(`publishing ${flags.version}`)),
 			)
 			.action(() => {});
 		expect((await app.run([], { flags: { version: true } })).stdout).toBe("cli v1");
-		expect((await app.run(["publish"], { flags: { version: "2.0.0" } })).stdout).toBe(
-			"publishing 2.0.0",
+		expect((await app.run(["publish"], { flags: { version: true } })).stdout).toBe(
+			"publishing true",
 		);
 		const lines: string[] = [];
 		await app.execute({
-			argv: ["publish", "--version", "2.0.0"],
+			argv: ["--version", "publish"],
 			io: { stdout: lineSink(lines), stderr: { write() {} } },
 		});
-		expect(lines).toEqual(["publishing 2.0.0"]);
+		// The command that runs reads the flag, wherever it was typed.
+		expect(lines).toEqual(["publishing true"]);
 	});
 
 	it("ranks structured run() flags by key order", async () => {
@@ -2414,7 +2416,84 @@ describe("Crust .execute()", () => {
 
 		expect(ran).toBe(false);
 		expect(process.exitCode).toBe(2);
-		expect(stderrChunks.join("\n")).toContain("Unexpected positional arguments");
+		expect(stderrChunks.join("\n")).toContain('Unknown command "sesion".');
+		process.exitCode = 0;
+	});
+
+	it("lets the command that runs read every flag wherever it was typed", async () => {
+		const app = new Crust("app")
+			.flags({ config: { type: "string", short: "c" } })
+			.command("cp", (c) =>
+				c
+					.flags({ copies: { type: "string", short: "c" } })
+					.args({ name: "file", type: "string", required: true })
+					.action(({ args, flags, stdout }) => stdout(`${args.file} ${flags.copies}`)),
+			)
+			.command("rm", (c) => c.action(() => {}));
+		for (const argv of [
+			["-c", "2", "cp", "a.txt"],
+			["cp", "-c", "2", "a.txt"],
+		]) {
+			const lines: string[] = [];
+			expect(await app.execute({ argv, io: { stdout: lineSink(lines) } })).toBe(0);
+			expect(lines).toEqual(["a.txt 2"]);
+		}
+		// A flag the running command does not know is the same error on either side of its name.
+		for (const argv of [
+			["-c", "x", "rm"],
+			["rm", "-c", "x"],
+		]) {
+			const errors: string[] = [];
+			expect(await app.execute({ argv, io: { stderr: lineSink(errors) } })).toBe(2);
+			expect(errors).toEqual(['Error: Unknown flag "-c"']);
+		}
+	});
+
+	it("lets an action decline a word with the error Core raises for an unknown command", async () => {
+		const app = new Crust("app").command("tools", (tools) =>
+			tools
+				.args({ name: "name", type: "string", required: true })
+				.command("lint", (lint) => lint.action(() => {}))
+				.command("secret", { hidden: true }, (secret) => secret.action(() => {}))
+				.action(({ args, command }) => {
+					throw unknownCommand(command, args.name);
+				}),
+		);
+		expect(await app.run(["tools"], { args: { name: "lnt" } })).toMatchObject({
+			status: "failed",
+			exitCode: 2,
+			error: {
+				code: "COMMAND_NOT_FOUND",
+				message: 'Unknown command "lnt".',
+				details: {
+					input: "lnt",
+					available: ["lint"],
+					commandPath: ["app", "tools"],
+					parentCommand: { meta: { name: "tools" } },
+				},
+			},
+		});
+	});
+
+	it("checks a group's input and names its commands when no noAction shows help", async () => {
+		const app = new Crust("app")
+			.flags({ level: { type: "string", choices: ["debug", "info"] } })
+			.command("db", (db) => db.command("migrate", (m) => m.action(() => {})))
+			.command("hidden", { hidden: true }, (c) => c.action(() => {}));
+
+		await app.execute({ argv: [] });
+		expect(process.exitCode).toBe(2);
+		expect(stderrChunks.join("\n")).toContain("Missing command. Available: db");
+
+		stderrChunks.length = 0;
+		await app.execute({ argv: ["--level", "bogus"] });
+		expect(process.exitCode).toBe(2);
+		expect(stderrChunks.join("\n")).toContain("--level");
+
+		stderrChunks.length = 0;
+		await app.execute({ argv: ["db"] });
+		expect(process.exitCode).toBe(2);
+		expect(stderrChunks.join("\n")).toContain("Missing command. Available: migrate");
 		process.exitCode = 0;
 	});
 

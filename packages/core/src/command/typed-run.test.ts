@@ -106,7 +106,11 @@ describe("typed programmatic invocation", () => {
 				}),
 			),
 		);
-		expect(await app.run([])).toMatchObject({ status: "completed" });
+		// Listing a missing command reads only the child's static metadata.
+		expect(await app.run([])).toMatchObject({
+			status: "failed",
+			error: { code: "VALIDATION", message: "Missing command. Available: child" },
+		});
 		await expect(unwrap(app.run(["child"]))).rejects.toThrow("recipe failed");
 		await expect(app.snapshot()).rejects.toThrow("recipe failed");
 	});

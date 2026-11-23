@@ -376,7 +376,8 @@ export interface ExtensionHooks<
 	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>;
 	/**
 	 * Runs in place of a missing Command Action, when no flag handler took the invocation,
-	 * and ends it as `handled`. At most one Extension in an application may set it.
+	 * once the command's input is validated, and ends it as `handled`. At most one Extension
+	 * in an application may set it.
 	 */
 	readonly noAction?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
 	/**

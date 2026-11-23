@@ -343,13 +343,14 @@ describe("json", () => {
 		});
 	});
 
-	it("renders a validation error as JSON when an unknown command is a parent action's positional", async () => {
+	it("renders a validation error as JSON for a word beyond a parent action's arguments", async () => {
 		const app = new Crust("app")
 			.extend(json())
 			.command("deploy", (cmd) => cmd.action(() => {}))
+			.args({ name: "target", type: "string" })
 			.action(() => {});
 
-		const { stderr, exitCode } = await captureExecute(app, ["nope", "--json"]);
+		const { stderr, exitCode } = await captureExecute(app, ["prod", "nope", "--json"]);
 
 		expect(JSON.parse(stderr)).toMatchObject({ code: "VALIDATION" });
 		expect(exitCode).toBe(2);
