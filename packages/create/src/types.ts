@@ -25,7 +25,7 @@ export type ScaffoldFiles = Readonly<Record<string, string>>;
 export type ScaffoldOptions = (
 	| {
 			/**
-			 * A directory copied exactly: every file's bytes and mode. A file named with a single
+			 * A directory copied exactly: every file's bytes and permission bits. A file named with a single
 			 * leading `_` is written with a `.` instead (`_gitignore` becomes `.gitignore`).
 			 *
 			 * - `string`: filesystem path; a relative one resolves against the working directory, like
@@ -37,13 +37,13 @@ export type ScaffoldOptions = (
 			readonly template: string | URL;
 			/**
 			 * Files written from code. A key that names a template file replaces its content and keeps
-			 * its mode. Keys are written as given: no `_` rename.
+			 * its permission bits. Keys are written as given: no `_` rename.
 			 */
 			readonly files?: ScaffoldFiles;
 	  }
 	| { readonly template?: undefined; readonly files: ScaffoldFiles }
 ) & {
-	/** Destination directory. A relative path resolves against the working directory. */
+	/** Destination directory, not empty. A relative path resolves against the working directory. */
 	readonly dest: string;
 
 	/**

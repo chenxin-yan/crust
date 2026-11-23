@@ -1,12 +1,15 @@
 import {
-	chmodSync,
+	closeSync,
+	fchmodSync,
 	lstatSync,
 	mkdirSync,
+	openSync,
 	readdirSync,
 	readFileSync,
 	realpathSync,
 	rmSync,
 	statSync,
+	type Stats,
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -43,56 +46,75 @@ function renameDotfile(relativePath: string): string {
 	return relativePath;
 }
 
-/** A `files` key as a path relative to the destination, refused outside it or inside `.git`. */
+/** Whether a path relative to the destination is `.git` or inside it, in any letter case. */
+function isGitPath(relPath: string): boolean {
+	return relPath.split(sep)[0]!.toLowerCase() === ".git";
+}
+
+/** A `files` key as a path relative to the destination, refused outside it. */
 function filesKeyPath(destDir: string, key: string): string {
 	const target = resolve(destDir, key);
 	const relPath = relative(destDir, target);
 	if (isAbsolute(key) || relPath === "" || !isWithin(destDir, target)) {
 		throw new Error(`files: ${JSON.stringify(key)} is not a path inside the new project.`);
 	}
-	if (relPath.split(sep)[0]!.toLowerCase() === ".git") {
-		throw new Error(`files: ${JSON.stringify(key)} is inside .git.`);
-	}
 	return relPath;
 }
 
 /**
- * Reject a destination path whose existing components include a symlink
- * resolving outside the canonical destination root.
+ * Reject a destination path that cannot be written as planned.
  *
- * Walks every component of `relPath` below `realDestDir`, so an ancestor
- * directory link is caught before `mkdir` would create anything through it,
- * and a dangling file link is caught before `write` would create its target.
- * Components that do not exist yet are created fresh by the caller.
+ * Walks every existing component of `relPath` below `realDestDir`, so an ancestor directory
+ * link is caught before `mkdir` would create anything through it, and a dangling file link is
+ * caught before `write` would create its target. A link must resolve inside the destination and
+ * outside its `.git`. With `keepsExisting` (nothing is deleted first), an existing ancestor must
+ * be a directory and the file itself must not be one. Components that do not exist yet are
+ * created fresh by the caller.
  */
-function assertDestinationContained(realDestDir: string, relPath: string): void {
+function assertDestinationWritable(
+	realDestDir: string,
+	relPath: string,
+	keepsExisting: boolean,
+): void {
 	if (realpathSync(realDestDir) !== realDestDir) {
 		throw new Error(`Destination root "${realDestDir}" was redirected outside the destination.`);
 	}
+	const segments = relPath.split(sep);
 	let current = realDestDir;
-	for (const segment of relPath.split(sep)) {
+	for (const [index, segment] of segments.entries()) {
 		current = join(current, segment);
-		let isLink: boolean;
+		let stat: Stats;
 		try {
-			isLink = lstatSync(current).isSymbolicLink();
+			stat = lstatSync(current);
 		} catch (error) {
 			if (isErrnoException(error) && error.code === "ENOENT") {
 				return;
 			}
 			throw error;
 		}
-		if (!isLink) {
-			continue;
+		if (stat.isSymbolicLink()) {
+			let target: string | undefined;
+			try {
+				target = realpathSync(current);
+			} catch {
+				// Dangling link: writing through it would create the target wherever it points.
+			}
+			if (target === undefined || !isWithin(realDestDir, target)) {
+				throw new Error(
+					`Destination path "${current}" is a symlink${target === undefined ? " to a missing target" : ` to "${target}"`} outside the destination "${realDestDir}". Remove the link or choose another destination.`,
+				);
+			}
+			if (isGitPath(relative(realDestDir, target))) {
+				throw new Error(`Destination path "${current}" is a symlink into .git.`);
+			}
+			stat = statSync(target);
 		}
-		let target: string | undefined;
-		try {
-			target = realpathSync(current);
-		} catch {
-			// Dangling link: writing through it would create the target wherever it points.
-		}
-		if (target === undefined || !isWithin(realDestDir, target)) {
+		const isFile = index === segments.length - 1;
+		if (stat.isDirectory() === isFile) {
+			// Without keepsExisting, `replace` deletes this component before writing.
+			if (!keepsExisting) return;
 			throw new Error(
-				`Destination path "${current}" is a symlink${target === undefined ? " to a missing target" : ` to "${target}"`} outside the destination "${realDestDir}". Remove the link or choose another destination.`,
+				`Destination path "${current}" is ${isFile ? "a directory" : "not a directory"}, so "${relPath}" cannot be written.`,
 			);
 		}
 	}
@@ -103,7 +125,7 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Write a new project: copy the `template` directory exactly (bytes and file modes), then write
+ * Write a new project: copy the `template` directory exactly (bytes and permission bits), then write
  * `files` from code. A `files` entry wins over the template file at the same path.
  *
  * Template resolution:
@@ -118,12 +140,16 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
  *   relative to the destination directory, sorted.
  * @throws When the template source cannot be resolved, does not exist, or is not a directory.
  * @throws When there is nothing to write: the template is empty and `files` has no entries.
- * @throws When a `files` key is absolute, leaves the destination, or is inside `.git`.
+ * @throws When `dest` is empty, or a `files` key is absolute or leaves the destination.
+ * @throws When a planned file is inside `.git`, or one planned file is the directory of another.
  * @throws When `dest` exists and is not a directory.
  * @throws When `conflict` is `"abort"` and the destination holds anything besides `.git`.
+ * @throws When `conflict` is `"replace"` and the template and the destination contain each other.
  * @throws When an existing destination file or ancestor directory is a symlink that
- *   resolves outside the destination (or to a missing target), regardless of `conflict`.
- *   A `dest` that is itself a symlink is followed once: its target is the destination.
+ *   resolves outside the destination (or to a missing target) or into its `.git`, regardless of
+ *   `conflict`. A `dest` that is itself a symlink is followed once: its target is the destination.
+ * @throws When `conflict` is `"overwrite"` and an existing directory stands where a file goes, or
+ *   an existing file where a directory goes.
  *
  * @example
  * ```ts
@@ -140,13 +166,13 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
  */
 export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> {
 	const { template, dest, files = {}, conflict = "abort", dryRun = false } = options;
-	const destDir = resolve(dest);
+	const destDir = resolvePathLike(dest);
+	const templateDir = template === undefined ? undefined : resolvePathLike(template);
 
 	// Each destination path maps to the template file it copies, the text written from code, or
 	// both: then the text wins and the template file's mode is kept.
 	const plan = new Map<string, { source?: string; text?: string }>();
-	if (template !== undefined) {
-		const templateDir = resolvePathLike(template);
+	if (templateDir !== undefined) {
 		const templateStat = statSync(templateDir, { throwIfNoEntry: false });
 		if (!templateStat) {
 			throw new Error(
@@ -173,12 +199,22 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	if (plan.size === 0) {
 		throw new Error("Nothing to scaffold: the template has no files and `files` has no entries.");
 	}
+	for (const relPath of plan.keys()) {
+		if (isGitPath(relPath)) {
+			throw new Error(`"${relPath}" is inside .git.`);
+		}
+		for (let dir = dirname(relPath); dir !== "."; dir = dirname(dir)) {
+			if (plan.has(dir)) {
+				throw new Error(`"${dir}" cannot be both a file and the directory of "${relPath}".`);
+			}
+		}
+	}
 
 	const destStat = statSync(destDir, { throwIfNoEntry: false });
 	if (destStat && !destStat.isDirectory()) {
 		throw new Error(`Destination "${destDir}" exists and is not a directory.`);
 	}
-	const existing = destStat ? readdirSync(destDir).filter((name) => name !== ".git") : [];
+	const existing = destStat ? readdirSync(destDir).filter((name) => !isGitPath(name)) : [];
 	if (conflict === "abort" && existing.length > 0) {
 		throw new Error(
 			`Destination directory "${destDir}" already exists and is non-empty. Use conflict: "overwrite" or "replace" to proceed.`,
@@ -191,7 +227,17 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	const relPaths = [...plan.keys()].sort();
 	if (destStat) {
 		const realDestDir = realpathSync(destDir);
-		for (const relPath of relPaths) assertDestinationContained(realDestDir, relPath);
+		if (conflict === "replace" && templateDir !== undefined) {
+			const realTemplateDir = realpathSync(templateDir);
+			if (isWithin(realDestDir, realTemplateDir) || isWithin(realTemplateDir, realDestDir)) {
+				throw new Error(
+					`Template "${templateDir}" and destination "${destDir}" overlap, and conflict: "replace" would delete template files before copying them.`,
+				);
+			}
+		}
+		for (const relPath of relPaths) {
+			assertDestinationWritable(realDestDir, relPath, conflict !== "replace");
+		}
 	}
 	if (dryRun) return { files: relPaths };
 
@@ -204,8 +250,19 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 		const { source, text } = plan.get(relPath)!;
 		const destFilePath = join(realDestDir, relPath);
 		mkdirSync(dirname(destFilePath), { recursive: true });
-		writeFileSync(destFilePath, text ?? readFileSync(source!));
-		if (source !== undefined) chmodSync(destFilePath, statSync(source).mode & 0o777);
+		if (source === undefined) {
+			writeFileSync(destFilePath, text!);
+			continue;
+		}
+		// Permission bits go on before the bytes, so a private file is never readable by others.
+		const mode = statSync(source).mode & 0o777;
+		const fd = openSync(destFilePath, "w", mode);
+		try {
+			fchmodSync(fd, mode);
+			writeFileSync(fd, text ?? readFileSync(source));
+		} finally {
+			closeSync(fd);
+		}
 	}
 
 	return { files: relPaths };

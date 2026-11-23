@@ -36,7 +36,7 @@ Ship templates with [`crust.include`](/docs/guide/build-and-distribution#ship-ex
 
 ## Template conventions
 
-The template directory is copied exactly: every file's bytes and mode. Nothing in it is read or replaced, so it can hold binaries, executable scripts, and files in any syntax.
+The template directory is copied exactly: every file's bytes and permission bits. Nothing in it is read or replaced, so it can hold binaries, executable scripts, and files in any syntax.
 
 ```text
 templates/base/_gitignore   -> my-project/.gitignore
@@ -55,7 +55,7 @@ A file that depends on the user's answers is written from code: `files` maps a p
   ../../../examples/modules/create-files.ts
 </include>
 
-- A `files` entry wins over the template file at the same path and keeps that file's mode.
+- A `files` entry wins over the template file at the same path and keeps that file's permission bits.
 - Keys are written as given, with no `_` rename. A key must stay inside the new project and outside `.git`.
 - Values are text. Binaries and executables belong in the template.
 - Import a JSON file from the template to start from its typed contents, as with `package.json` above.
@@ -79,13 +79,13 @@ See [Locating templates](#locating-templates) for how `template` resolves. A cal
 
 A destination holding only `.git` counts as empty, so `git init` before scaffolding needs no `conflict`.
 
-Every check runs before anything is deleted or written: the template exists, there is something to write, every `files` key stays inside the new project, the conflict rule, and the symlink rules below. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
+Every check runs before anything is deleted or written: the template exists, there is something to write, every `files` key stays inside the new project, nothing is written inside `.git`, no planned file is also the directory of another, the conflict rule, and the symlink rules below. `"replace"` also refuses a template inside the destination, or a destination inside the template, since it would delete template files before copying them. `"overwrite"` refuses an existing directory where a file goes, or an existing file where a directory goes. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
 
 Symlinks in the destination:
 
 - `dest` itself may be a symlink; its target is the destination.
 - Symlinks that stay inside the destination are followed.
-- An existing file or directory that is a symlink resolving outside the destination, or to a missing target, throws before any file is written.
+- An existing file or directory that is a symlink resolving outside the destination, to a missing target, or into `.git` throws before any file is written.
 
 <Callout type="warn">
   These path checks are not atomic with filesystem writes. Use a destination whose directories

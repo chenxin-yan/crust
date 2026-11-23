@@ -106,6 +106,26 @@ describe("scaffold", () => {
 		expect(mode(join(destDir, "secret.txt"))).toBe(0o600);
 	});
 
+	it.skipIf(process.platform === "win32")(
+		"applies the template mode to an existing file it overwrites, read-only included",
+		async () => {
+			createTemplateFile("secret.txt", "new secret");
+			chmodSync(join(templateDir, "secret.txt"), 0o600);
+			createTemplateFile("locked.txt", "new locked");
+			chmodSync(join(templateDir, "locked.txt"), 0o444);
+			mkdirSync(destDir);
+			writeFileSync(join(destDir, "secret.txt"), "old", { mode: 0o644 });
+			writeFileSync(join(destDir, "locked.txt"), "old", { mode: 0o644 });
+
+			await scaffoldTemplate({ conflict: "overwrite" });
+
+			expect(readOutputFile("secret.txt")).toBe("new secret");
+			expect(mode(join(destDir, "secret.txt"))).toBe(0o600);
+			expect(readOutputFile("locked.txt")).toBe("new locked");
+			expect(mode(join(destDir, "locked.txt"))).toBe(0o444);
+		},
+	);
+
 	describe("files", () => {
 		it("writes files from code without a template", async () => {
 			const result = await scaffold({
@@ -147,6 +167,7 @@ describe("scaffold", () => {
 			[join(tmpdir(), "absolute.txt"), "is not a path inside the new project"],
 			["", "is not a path inside the new project"],
 			[".git/hooks/pre-commit", "is inside .git"],
+			[".GIT/config", "is inside .git"],
 		])("refuses the key %j before writing anything", async (key, message) => {
 			createTemplateFile("a.txt", "a");
 
@@ -155,6 +176,31 @@ describe("scaffold", () => {
 			expect(existsSync(join(tempDir, "outside.txt"))).toBe(false);
 		});
 	});
+
+	it("refuses an empty destination path instead of using the working directory", async () => {
+		// A dry run, so a regression reports instead of emptying the working directory.
+		await expect(
+			scaffold({ dest: "", files: { "a.txt": "a" }, conflict: "replace", dryRun: true }),
+		).rejects.toThrow("Path cannot be empty");
+	});
+
+	it.each([true, false])(
+		"refuses a file that is also another file's directory before deleting anything, dryRun %s",
+		async (dryRun) => {
+			mkdirSync(destDir);
+			writeFileSync(join(destDir, "keep.txt"), "keep");
+
+			await expect(
+				scaffold({
+					dest: destDir,
+					files: { a: "one", "a/b": "two" },
+					conflict: "replace",
+					dryRun,
+				}),
+			).rejects.toThrow('"a" cannot be both a file and the directory of');
+			expect(readdirSync(destDir)).toEqual(["keep.txt"]);
+		},
+	);
 
 	it("refuses an empty plan before deleting anything", async () => {
 		mkdirSync(destDir);
@@ -212,6 +258,49 @@ describe("scaffold", () => {
 			expect(readdirSync(destDir).sort()).toEqual([".git", "file.txt"]);
 			expect(readOutputFile("file.txt")).toBe("new content");
 			expect(readOutputFile(join(".git", "HEAD"))).toBe("ref: refs/heads/main\n");
+		});
+
+		it("refuses template files inside .git and keeps the repository's metadata", async () => {
+			writeFileSync(join(destDir, ".git", "config"), "[core]\n");
+			createTemplateFile(".git/config", "[core]\n\tbare = true\n");
+
+			await expect(scaffoldTemplate()).rejects.toThrow("is inside .git");
+			expect(readOutputFile(join(".git", "config"))).toBe("[core]\n");
+			expect(existsSync(join(destDir, "file.txt"))).toBe(false);
+		});
+
+		it.each([true, false])(
+			"'replace' refuses a template inside the destination, dryRun %s",
+			async (dryRun) => {
+				writeFileSync(join(destDir, "keep.txt"), "keep");
+				const innerTemplate = join(destDir, "template");
+				mkdirSync(innerTemplate);
+				writeFileSync(join(innerTemplate, "a.txt"), "a");
+
+				await expect(
+					scaffold({ template: innerTemplate, dest: destDir, conflict: "replace", dryRun }),
+				).rejects.toThrow("overlap");
+				expect(readOutputFile("keep.txt")).toBe("keep");
+				expect(readOutputFile(join("template", "a.txt"))).toBe("a");
+			},
+		);
+
+		it.each([
+			["an existing directory where a file goes", "a", () => mkdirSync(join(destDir, "a"))],
+			[
+				"an existing file where a directory goes",
+				"a/b",
+				() => writeFileSync(join(destDir, "a"), "x"),
+			],
+		])("'overwrite' refuses %s, in a dry run as well", async (_, key, arrange) => {
+			arrange();
+
+			for (const dryRun of [true, false]) {
+				await expect(
+					scaffoldTemplate({ files: { [key]: "x" }, conflict: "overwrite", dryRun }),
+				).rejects.toThrow("cannot be written");
+			}
+			expect(existsSync(join(destDir, "file.txt"))).toBe(false);
 		});
 
 		it("'overwrite' replaces conflicting files and leaves the others", async () => {
@@ -348,6 +437,19 @@ describe("scaffold", () => {
 				scaffold({ dest: destDir, files: { "src/index.ts": "x" }, conflict: "overwrite" }),
 			).rejects.toThrow(/src.*outside the destination/);
 			expect(existsSync(join(outsideDir, "index.ts"))).toBe(false);
+		});
+
+		it("rejects a link into .git and keeps the repository's metadata", async () => {
+			mkdirSync(join(destDir, ".git"));
+			writeFileSync(join(destDir, ".git", "config"), "[core]\n");
+			symlinkSync(join(destDir, ".git"), join(destDir, "src"));
+
+			for (const dryRun of [true, false]) {
+				await expect(
+					scaffold({ dest: destDir, files: { "src/config": "x" }, conflict: "overwrite", dryRun }),
+				).rejects.toThrow(/src.*symlink into \.git/);
+			}
+			expect(readFileSync(join(destDir, ".git", "config"), "utf-8")).toBe("[core]\n");
 		});
 
 		it("writes through a link that stays inside the destination", async () => {
