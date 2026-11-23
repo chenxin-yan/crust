@@ -3,14 +3,18 @@ import { standardJsonSchema } from "../parsing/schema.ts";
 import { isFlagNegatable } from "../parsing/spellings.ts";
 import type {
 	ArgDef,
+	ArgExtras,
+	CommandExtras,
 	CommandMeta,
 	CommandSection,
 	DeclaredDefault,
 	FlagDef,
 	FlagEnv,
+	FlagExtras,
 	ValueType,
 	VariadicMode,
 } from "../types.ts";
+import type { KeysOfAnyBranch } from "../validation/shared.ts";
 import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -26,7 +30,9 @@ import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./
  *
  * Fields with `undefined` values are dropped entirely (see `freezeCompact`),
  * so absent means "not declared" — except `required`, which is omitted when a
- * declared default makes the value optional.
+ * declared default makes the value optional. Keys packages add through
+ * {@link ArgExtras} pass through with their values unchanged, so they are only
+ * as serializable as those values.
  *
  * @example
  * For `{ name: "port", type: "number", default: 3000 }`:
@@ -35,7 +41,7 @@ import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./
  * // `required`/`variadic` keys absent — not declared on the def
  * ```
  */
-export interface ArgSnapshot {
+export interface ArgSnapshot extends ArgExtras {
 	/** Argument name as defined, e.g. `"file"`. */
 	readonly name: string;
 	/** Value type (`"string"`, `"number"`, …); absent for schema-backed args. */
@@ -65,6 +71,8 @@ export interface ArgSnapshot {
 /**
  * Serializable projection of a flag definition. The flag's canonical name is
  * the key it sits under in {@link CommandSnapshot.flags}, not a field here.
+ * Keys packages add through {@link FlagExtras} pass through unchanged, as in
+ * {@link ArgSnapshot}.
  *
  * @example
  * For `{ verbose: { type: "boolean", short: "v", default: false } }`:
@@ -73,7 +81,7 @@ export interface ArgSnapshot {
  * // => { type: "boolean", short: "v", default: false, negatable: true }
  * ```
  */
-export interface FlagSnapshot {
+export interface FlagSnapshot extends FlagExtras {
 	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`. */
 	readonly type: FlagDef["type"];
 	/** Human-readable description for help text. */
@@ -147,7 +155,10 @@ export interface FlagSnapshot {
  * ```
  */
 export interface CommandSnapshot {
-	/** Command metadata, including routing and presentation options. */
+	/**
+	 * Command metadata, including routing and presentation options. Keys packages add through
+	 * {@link CommandExtras} pass through unchanged, as in {@link ArgSnapshot}.
+	 */
 	readonly meta: Readonly<CommandMeta>;
 	/** Whether the command defines a Command Action */
 	readonly hasAction: boolean;
@@ -206,6 +217,70 @@ function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	return value;
 }
 
+/** The keys core reads on one kind of definition; `Extras` are the ones packages add. */
+type CoreKeys<Def, Extras> = Exclude<KeysOfAnyBranch<Def>, keyof Extras>;
+
+// Records, not lists, so a key core adds to a definition type and forgets here fails to compile.
+const coreKeys = <K extends string>(keys: Record<K, true>): ReadonlySet<string> =>
+	new Set(Object.keys(keys));
+
+/** The keys every argument definition may hold that core reads. */
+export const CORE_ARG_KEYS: ReadonlySet<string> = coreKeys<CoreKeys<ArgDef, ArgExtras>>({
+	name: true,
+	type: true,
+	description: true,
+	required: true,
+	variadic: true,
+	choices: true,
+	default: true,
+	min: true,
+	max: true,
+	schema: true,
+	parse: true,
+});
+
+/** The keys every flag definition may hold that core reads. */
+export const CORE_FLAG_KEYS: ReadonlySet<string> = coreKeys<CoreKeys<FlagDef, FlagExtras>>({
+	type: true,
+	description: true,
+	short: true,
+	aliases: true,
+	required: true,
+	multiple: true,
+	negatable: true,
+	choices: true,
+	default: true,
+	env: true,
+	min: true,
+	max: true,
+	delimiter: true,
+	schema: true,
+	parse: true,
+	hidden: true,
+	deprecated: true,
+	requires: true,
+	flags: true,
+});
+
+/** The command metadata keys core reads. */
+export const CORE_COMMAND_KEYS: ReadonlySet<string> = coreKeys<
+	CoreKeys<CommandMeta, CommandExtras>
+>({
+	name: true,
+	description: true,
+	version: true,
+	usage: true,
+	sections: true,
+	aliases: true,
+	hidden: true,
+	deprecated: true,
+});
+
+/** The entries of `definition` whose keys core does not read: those packages add through the `Extras` interfaces. */
+export function extraEntries(definition: object, core: ReadonlySet<string>): [string, unknown][] {
+	return Object.entries(definition).filter(([key]) => !core.has(key));
+}
+
 /** The parser fills a missing value from its default, so a defaulted def is never required. */
 function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
 	return def.default === undefined ? def.required : undefined;
@@ -213,6 +288,7 @@ function effectiveRequired(def: ArgDef | FlagDef): boolean | undefined {
 
 function snapshotArg(def: ArgDef): ArgSnapshot {
 	return freezeCompact({
+		...Object.fromEntries(extraEntries(def, CORE_ARG_KEYS)),
 		name: def.name,
 		type: def.type,
 		description: def.description,
@@ -228,6 +304,7 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 
 function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSnapshot {
 	return freezeCompact({
+		...Object.fromEntries(extraEntries(def, CORE_FLAG_KEYS)),
 		type: def.type,
 		description: def.description,
 		short: def.short,
@@ -427,6 +504,7 @@ function projectMeta(
 	sections: readonly CommandSection[] | undefined,
 ): Readonly<CommandMeta> {
 	return freezeCompact({
+		...Object.fromEntries(extraEntries(meta, CORE_COMMAND_KEYS)),
 		name: meta.name,
 		description: meta.description,
 		version: meta.version,

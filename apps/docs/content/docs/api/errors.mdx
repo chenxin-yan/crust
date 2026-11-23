@@ -20,14 +20,14 @@ See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/co
 
 ## Codes
 
-| Code                | Meaning                                                                                         |
-| ------------------- | ----------------------------------------------------------------------------------------------- |
-| `DEFINITION`        | Malformed definition or collision, recipe, Extension, Context, or documentation-section failure |
-| `PARSE`             | Argv syntax, structured input binding (`run()`, `bindInput`), or built-in value parsing failed  |
-| `VALIDATION`        | Required-value, exclusive-group, `requires`, or Standard Schema validation failed               |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)             |
-| `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                           |
-| `OUTPUT`            | A Command Action result failed its [`.output()`](/docs/api/crust#outputschema) schema           |
+| Code                | Meaning                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `DEFINITION`        | Malformed definition or collision, recipe, Extension, Context, or documentation-section failure            |
+| `PARSE`             | Argv syntax, structured input binding (`run()`, `bindInput`, `bindText`), or built-in value parsing failed |
+| `VALIDATION`        | Required-value, exclusive-group, `requires`, or Standard Schema validation failed                          |
+| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                        |
+| `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                                      |
+| `OUTPUT`            | A Command Action result failed its [`.output()`](/docs/api/crust#outputschema) schema                      |
 
 With `execute()`, a word that names no subcommand becomes an argument if the parent has a Command Action that declares arguments; otherwise the parent reports `COMMAND_NOT_FOUND`. Typed `run()` returns `COMMAND_NOT_FOUND` for any unknown path segment.
 
@@ -66,6 +66,7 @@ app.args({ name: "script", type: "string", required: true }).action(({ args, com
 | `invalid-flags`                                                                   | `.flags()` receives a record whose prototype is not `Object.prototype` or `null` (such as one written with a literal `__proto__` key)                                                                                                            |
 | `missing-context`                                                                 | A Context is pulled or demanded but not provided                                                                                                                                                                                                 |
 | `missing-extension`                                                               | A command `.use()`s an Extension the app does not extend                                                                                                                                                                                         |
+| `unowned-key`                                                                     | A definition sets a key a package added through `ArgExtras`, `FlagExtras`, or `CommandExtras` that no installed Extension [owns](/docs/guide/extensions#own-a-definition-key)                                                                    |
 | `context-cycle`                                                                   | Context dependencies form a cycle                                                                                                                                                                                                                |
 | `flags-before-validation`                                                         | A flag-owning Context is pulled before validation, such as in `preRun`                                                                                                                                                                           |
 | `context-flags-not-parsed`                                                        | A flag-owning Context is pulled on a command that does not parse its flags (declare it with `.use()`), or a same-name provider fulfilling a `.use()`, or a `provide` replacement, does not own exactly the flags of the Context it stands in for |
@@ -73,7 +74,7 @@ app.args({ name: "script", type: "string", required: true }).action(({ args, com
 | `context-after-disposal`                                                          | Any Context is pulled after disposal                                                                                                                                                                                                             |
 | `duplicate-section`                                                               | A Context's section title matches a command section or another Context's section on the same command                                                                                                                                             |
 
-The reasons about names, spellings, collisions, and sections come from the [definition checks](/docs/api/crust#definition-checks): they are raised when the CLI runs from source and by `crust build`, never by a built CLI. The Context reasons, `missing-extension`, and `extension-defer-after-setup` are raised wherever the CLI runs, except `context-flags-not-parsed` when preparation throws it for a same-name Context or provider whose flags differ from the declared Context's, which is a definition check too. A definition that is not an object, such as a string, an array, or `undefined`, is a TypeScript error and is not checked at runtime.
+The reasons about names, spellings, collisions, sections, and unowned keys come from the [definition checks](/docs/api/crust#definition-checks): they are raised when the CLI runs from source and by `crust build`, never by a built CLI. The Context reasons, `missing-extension`, and `extension-defer-after-setup` are raised wherever the CLI runs, except `context-flags-not-parsed` when preparation throws it for a same-name Context or provider whose flags differ from the declared Context's, which is a definition check too. A definition that is not an object, such as a string, an array, or `undefined`, is a TypeScript error and is not checked at runtime.
 
 ### `ParseErrorDetails`
 
@@ -126,14 +127,14 @@ Every issue the `.output()` schema reports for one result is aggregated into one
 
 ## Propagation boundaries
 
-| Failure                                                                                                                      | `run()`                                | `execute()`                                                                                                              |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Eager builder checks (direct inputs, sibling names/aliases)                                                                  | Throws at the builder call             | Throws at the builder call                                                                                               |
-| Deferred recipe, inherited-flag, or Context-demand checks                                                                    | `failed` outcome when encountered      | Rendered when encountered; exit `1`                                                                                      |
-| Preparation                                                                                                                  | `failed` outcome; no hooks run         | Rendered directly; exit `1`                                                                                              |
-| Routing, argv syntax, typed `run()` input binding                                                                            | `failed` outcome; no hooks run         | Rendered via `onError`; exit `2`                                                                                         |
-| Extension hooks before the action (including `bindInput`), validation, Context setup, Command Action, `.output()` validation | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1` (`2` for validation)                                                                    |
-| Cancellation (an `AbortError`, even when cleanup then fails)                                                                 | `failed` outcome                       | Offered to `onError`, else only cleanup failures render; exit `130` (`143` after `SIGTERM`, `141` after a closed stdout) |
+| Failure                                                                                                                                     | `run()`                                | `execute()`                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Eager builder checks (direct inputs, sibling names/aliases)                                                                                 | Throws at the builder call             | Throws at the builder call                                                                                               |
+| Deferred recipe, inherited-flag, or Context-demand checks                                                                                   | `failed` outcome when encountered      | Rendered when encountered; exit `1`                                                                                      |
+| Preparation                                                                                                                                 | `failed` outcome; no hooks run         | Rendered directly; exit `1`                                                                                              |
+| Routing, argv syntax, typed `run()` input binding                                                                                           | `failed` outcome; no hooks run         | Rendered via `onError`; exit `2`                                                                                         |
+| Extension hooks before the action (including `bindInput` and `bindText`), validation, Context setup, Command Action, `.output()` validation | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1` (`2` for validation)                                                                    |
+| Cancellation (an `AbortError`, even when cleanup then fails)                                                                                | `failed` outcome                       | Offered to `onError`, else only cleanup failures render; exit `130` (`143` after `SIGTERM`, `141` after a closed stdout) |
 
 When definition checks run:
 

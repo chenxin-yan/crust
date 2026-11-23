@@ -84,7 +84,8 @@ export type DefinitionErrorReason =
 	| "reserved-name"
 	| "reserved-no-prefix"
 	| "reserved-spelling"
-	| "unknown-handle-flag";
+	| "unknown-handle-flag"
+	| "unowned-key";
 
 /** Details for argv syntax or built-in value parsing failures. */
 export interface ParseErrorDetails {

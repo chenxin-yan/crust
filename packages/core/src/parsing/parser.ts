@@ -861,6 +861,47 @@ function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue):
 	return coerceStructuredValue(def, value, label);
 }
 
+/** A positional's text, converted as the same word on the command line. */
+function coerceTextArg(
+	def: ArgDef,
+	value: RunInputValue,
+	label: string,
+	index?: number,
+): ParsedArgValue {
+	if (typeof value !== "string") {
+		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS.string} for ${label}.`);
+	}
+	return coerceToken(def, value, label, index);
+}
+
+/** A flag's text, converted as the same words on the command line: one per occurrence. */
+function coerceTextFlag(name: string, def: FlagDef, value: RunInputValue): ParsedFlagValue {
+	const label = `--${name}`;
+	if (def.type === "count" || def.flags) {
+		throw new CrustError("PARSE", `Flag "${label}" has no text form; bind it with bindInput.`);
+	}
+	if (def.multiple && !isOccurrenceArray(value)) {
+		throw new CrustError("PARSE", `Expected an occurrence array for ${label}`);
+	}
+	const words: readonly RunInputValue[] =
+		def.multiple && isOccurrenceArray(value) ? value : [value];
+	if (!words.every((word): word is string => typeof word === "string")) {
+		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS.string} for ${label}.`);
+	}
+	const texts = splitOccurrences(words, def.multiple ? def.delimiter : undefined);
+	// Like an environment value: the command line has no word for a boolean flag's value.
+	const parsed: ArgvFlagValue =
+		def.type === "boolean"
+			? {
+					kind: "boolean",
+					value: def.multiple
+						? texts.map((text) => coerceValue(text, def, label) as boolean)
+						: (coerceValue(texts[0]!, def, label) as boolean),
+				}
+			: { kind: "string", value: def.multiple ? texts : texts[0]! };
+	return coerceFlagValue(name, def, parsed);
+}
+
 /**
  * Frozen value sources for definitions: `source(name)` for a supplied one, else `default`
  * when it declares one; definitions without a value are left out.
@@ -1040,11 +1081,13 @@ function positionalGap(argument: string, omitted: string): CrustError {
  *
  * @param env - Environment consulted for omitted flags' `FlagDef.env` fallbacks; none by default
  *   (invocations pass `process.env`)
+ * @param text - Supplied values are text, converted as the same words on the command line
  */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
 	env: FlagEnvironment = {},
+	text = false,
 ): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags } = input;
 	const positionals: RunInputValue[] = [];
@@ -1120,13 +1163,13 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 		command,
 		positionals,
 		flagValues,
-		coerceStructuredValue,
+		text ? coerceTextArg : coerceStructuredValue,
 		(name, def, value) =>
 			fromEnv.has(name)
 				? // SAFETY: applyEnvAndDelimiter produced every value in `fromEnv`.
 					coerceFlagValue(name, def, value as ArgvFlagValue)
 				: // SAFETY: every other value came from the caller's structured flags.
-					coerceStructuredFlag(name, def, value as RunInputValue),
+					(text ? coerceTextFlag : coerceStructuredFlag)(name, def, value as RunInputValue),
 		(error, label) => {
 			if (!label.startsWith("--") || !fromEnv.has(label.slice(2))) throw error;
 			valueErrors.set(label, error);
@@ -1158,13 +1201,14 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 }
 
 /**
- * Bind structured input over a parse result, as `ExtensionContext.bindInput` does.
+ * Bind structured input over a parse result, as `ExtensionContext.bindInput` and `bindText` do.
  * Values given on argv win; every other supplied key replaces the environment value,
- * default, or typed `run()` value, converted as {@link parseStructured} converts it.
- * Supplied keys that argv already gave are dropped first, so their values are never
+ * default, typed `run()` value, or earlier bound value, converted as {@link parseStructured}
+ * converts it. Supplied keys that argv already gave are dropped first, so their values are never
  * converted and cannot fail; values not replaced are kept without re-resolving defaults.
  *
- * @param parsed - The invocation's original parse result; each call re-binds against it
+ * @param parsed - The parse result to bind over: the invocation's, or an earlier binding's
+ * @param text - Supplied values are text, converted as the same words on the command line
  * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
  *   omitted earlier one, or a value that fails conversion (including a non-array value for
  *   a variadic argument or `multiple` flag)
@@ -1173,6 +1217,7 @@ export function bindStructuredInput(
 	command: CommandNode,
 	parsed: ArgvParseResult,
 	input: RunInputPayload,
+	text = false,
 ): ArgvParseResult {
 	const { sources } = parsed;
 	const supplied = (
@@ -1203,6 +1248,8 @@ export function bindStructuredInput(
 			),
 		},
 		{ args: inputArgs, flags: inputFlags },
+		{},
+		text,
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
 		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));
@@ -1231,6 +1278,8 @@ export function bindStructuredInput(
 		// Spread, not assignment: an argument may be named `__proto__`.
 		args: { ...parsed.args, ...pick(structured.args, inputArgs) },
 		flags: { ...parsed.flags, ...pick(structured.flags, inputFlags) },
+		// A later binding must not take a bound positional for omitted.
+		suppliedArgs: new Set([...(parsed.suppliedArgs ?? []), ...(structured.suppliedArgs ?? [])]),
 		sources: Object.freeze({
 			args: rebound(sources.args, inputArgs, structured.sources.args),
 			flags: rebound(sources.flags, inputFlags, structured.sources.flags),

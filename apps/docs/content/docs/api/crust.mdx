@@ -68,17 +68,17 @@ Metadata is optional unless an installed Extension [requires it](/docs/guide/ext
 Each rule about a definition is checked once, by TypeScript or by Core at runtime.
 
 - TypeScript checks types and structure: unknown keys, a `default` within literal `choices`, the argument list (unique names, where each `variadic` mode may go, and no required argument after an optional one), a schema's input type, a synchronous `parse`, Context dependencies, required root metadata, an `env` binding that is a name or a nonempty list of names, `delimiter` only with `multiple`, and a section with a nonempty `only` or `except` but not both. These have no runtime check: `as never`, `any`, a value TypeScript can't see (such as a `choices` array that is not a literal tuple), and plain JavaScript bypass them.
-- Core checks names, spellings, and the assembled tree at runtime: blank, reserved, or malformed names and spellings, the `no-` prefix, integer-like flag names, one-character `short`s, empty `env` names and delimiters, section text, every collision (flags, aliases, sibling commands, Extension commands, section titles, a second `renderer` or `noAction`), a same-name Context or provider whose flags differ from those of the Context a command declares with [`.use()`](#usefactories), and a subcommand flag spelling that takes a value where an ancestor's same spelling doesn't, or the reverse (see [routing](/docs/guide/commands#how-a-command-line-is-routed)). Each throws a `DEFINITION` [error](/docs/api/errors).
+- Core checks names, spellings, and the assembled tree at runtime: blank, reserved, or malformed names and spellings, the `no-` prefix, integer-like flag names, one-character `short`s, empty `env` names and delimiters, section text, every collision (flags, aliases, sibling commands, Extension commands, section titles, a second `renderer` or `noAction`), a same-name Context or provider whose flags differ from those of the Context a command declares with [`.use()`](#usefactories), a subcommand flag spelling that takes a value where an ancestor's same spelling doesn't, or the reverse (see [routing](/docs/guide/commands#how-a-command-line-is-routed)), and a definition key no installed Extension [owns](/docs/guide/extensions#own-a-definition-key). Each throws a `DEFINITION` [error](/docs/api/errors).
 - These runtime checks run when the CLI runs from source (`bun`, `node`, tests) and when [`crust build`](/docs/modules/crust) takes its snapshot, so a definition error fails the build. The artifacts `crust build` bundles leave them out, so a built CLI does not repeat them. `crust build --no-validate` skips the snapshot, and these checks with it.
 - So a definition must be the same on every run: one that varies with the platform or the environment is checked only as it is on the build machine. A name, alias, or flag built from runtime data, such as user-configured aliases or a plugin list, is input: validate it yourself before you pass it to Crust.
 
 The runtime checks throw at different times:
 
-| Check                                                                                                     | When                                                      |
-| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Direct builder inputs, sibling names and aliases                                                          | At the builder call                                       |
-| Recipe validation, inherited-flag collisions, reused flag spellings, Context demands of added definitions | When the command is first used                            |
-| Extension flag and command collisions, missing Contexts for an Extension's `.use()` or `.provide()`       | When the app prepares: first run, `snapshot()`, or `at()` |
+| Check                                                                                                                              | When                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Direct builder inputs, sibling names and aliases                                                                                   | At the builder call                                       |
+| Recipe validation, inherited-flag collisions, reused flag spellings, Context demands of added definitions, unowned definition keys | When the command is first used                            |
+| Extension flag and command collisions, missing Contexts for an Extension's `.use()` or `.provide()`                                | When the app prepares: first run, `snapshot()`, or `at()` |
 
 Use `await app.snapshot()` to validate the full tree without running Command Actions.
 
@@ -251,7 +251,7 @@ const greet = new Crust("greet")
   .action(({ args, stdout }) => stdout(`Hello, ${args.name}!`));
 ```
 
-The action receives typed `args` and `flags`, the lazy `ctx` bag, a cancellation `signal`, the resolved `command` and `rootCommand` snapshots, `stdin`, and `stdout` / `stderr`, which are how the action prints: `stdout(text)` writes a line, `stdout.write(chunk)` writes text or bytes as they are, and `isTTY` and `columns` describe the stream (see [Terminal I/O](/docs/guide/terminal-io)). See [`CrustCommandContext`](/docs/api/types#crustcommandcontexta-f-ctx).
+The action receives typed `args` and `flags`, the lazy `ctx` bag, a cancellation `signal`, the resolved `command` and `rootCommand` snapshots, `stdin`, and `stdout` / `stderr`, which are how the action prints: `stdout(text)` writes a line, `stdout.write(chunk)` writes text or bytes as they are, and `isTTY` and `columns` describe the stream (see [Terminal I/O](/docs/guide/terminal-io)). `runCommand(path, input?, options?)` runs another command of the app as [`run()`](#runpath-input-options) does, as a fresh invocation cancelled with this one. See [`CrustCommandContext`](/docs/api/types#crustcommandcontexta-f-ctx).
 
 Pass `signal` to `fetch`, timers, or child processes; see [cancellation](/docs/api/errors#cancellation) for when it aborts and how the exit path is decided.
 

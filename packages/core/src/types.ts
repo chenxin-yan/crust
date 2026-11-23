@@ -221,6 +221,36 @@ type ResolveUnparsedType<F> = F extends {
 		: never;
 
 // ────────────────────────────────────────────────────────────────────────────
+// Extension-owned definition keys
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Keys a package adds to every argument definition with module augmentation. Core never reads
+ * them: it passes them through to Extensions in `ArgSnapshot`. The key must be optional,
+ * and only the Extension that declares it with `.owns()` reads it; that Extension may supply a
+ * value the user left out, but never changes how a given value is parsed or typed.
+ *
+ * @example
+ * ```ts
+ * declare module "@crustjs/core" {
+ *   interface ArgExtras {
+ *     prompt?: string;
+ *   }
+ * }
+ * ```
+ */
+export interface ArgExtras {}
+
+/** Keys a package adds to every flag definition and `FlagSnapshot`; see {@link ArgExtras}. */
+export interface FlagExtras {}
+
+/**
+ * Keys a package adds to command metadata (`defineCommand(name, config, …)`, inline
+ * `.command(name, config, …)`, and `CommandSnapshot.meta`); see {@link ArgExtras}.
+ */
+export interface CommandExtras {}
+
+// ────────────────────────────────────────────────────────────────────────────
 // ArgDef — Positional argument definition (discriminated by `type`)
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -235,7 +265,7 @@ type ResolveUnparsedType<F> = F extends {
 export type VariadicMode = true | "afterDoubleDash" | "passthrough";
 
 /** Shared fields present on every positional argument definition */
-interface ArgDefBase {
+interface ArgDefBase extends ArgExtras {
 	/** The argument name (used as the key in the parsed result and in help text) */
 	name: string;
 	/** Human-readable description for help text */
@@ -372,7 +402,7 @@ interface JsonArgDef extends ArgDefBase, NoRange {
  * output type reaches the Command Action. Core value options (`type`,
  * `default`, `required`, `choices`, `parse`) cannot be mixed in.
  */
-interface SchemaArgDef extends NoRange {
+interface SchemaArgDef extends NoRange, ArgExtras {
 	/** The argument name (used as the key in the parsed result and in help text) */
 	name: string;
 	/** Human-readable description for help text */
@@ -421,7 +451,7 @@ export type ArgsDef = readonly ArgDef[];
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Shared fields present on every flag definition */
-interface FlagDefBase {
+interface FlagDefBase extends FlagExtras {
 	/** Human-readable description for help text */
 	description?: string;
 	/** Single-character (one code point) short alias (e.g. `"v"` → `-v`) */
@@ -639,7 +669,7 @@ export type ExclusiveMemberDef = {
  * // flags.scope: { flag: "org-id"; value: string } | { flag: "all" }
  * ```
  */
-export interface ExclusiveFlagDef extends NoRange {
+export interface ExclusiveFlagDef extends NoRange, FlagExtras {
 	type: "exclusive";
 	/** When `true`, one member must be given */
 	required?: true;
@@ -1074,7 +1104,7 @@ export type CommandSectionInput = SectionContent & SectionAudience;
 export type CommandSection = SectionContent & Audience<readonly [ExtensionId, ...ExtensionId[]]>;
 
 /** Metadata describing a CLI command */
-export interface CommandMeta {
+export interface CommandMeta extends CommandExtras {
 	/** The command name (used in help text and routing) */
 	name: string;
 	/** Human-readable description for help text */

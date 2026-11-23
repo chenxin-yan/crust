@@ -920,14 +920,14 @@ describe("Extension named hooks", () => {
 			]);
 		});
 
-		it("re-binds against the original input on each call, so the last call wins", async () => {
+		it("adds each call to the earlier ones, and a key bound again takes the later value", async () => {
 			const { execute, received } = bindingApp(
 				{ args: { source: "first" }, flags: { name: "first", port: 1 } },
-				{ flags: { name: "second" } },
+				{ args: { target: "second" }, flags: { name: "second" } },
 			);
 			expect(await execute([])).toEqual({ exitCode: 0, stderr: "" });
 			expect(received).toMatchObject([
-				{ args: { source: undefined }, flags: { name: "second", port: undefined } },
+				{ args: { source: "first", target: "second" }, flags: { name: "second", port: 1 } },
 			]);
 		});
 
@@ -1039,6 +1039,22 @@ describe("Extension named hooks", () => {
 			expect(order).toEqual(["preRun stop=true", "action stop=true"]);
 		});
 
+		it("keeps what two Extensions bind, whatever the order", async () => {
+			const binder = (id: string, payload: RunInputPayload) =>
+				defineExtension(defineExtensionId(id)).setup((ctx) => ctx.bindInput(payload));
+			const first = binder("first", { args: { source: "a" }, flags: { name: "json" } });
+			const second = binder("second", { flags: { port: 1 } });
+			const app = (...extensions: (typeof first)[]) =>
+				new Crust("cli")
+					.flags({ name: { type: "string" }, port: { type: "number" } })
+					.args({ name: "source", type: "string" }, { name: "target", type: "string" })
+					.extend(...extensions)
+					.action(({ args, flags }) => ({ args, flags }));
+			const both = { args: { source: "a" }, flags: { name: "json", port: 1 } };
+			expect(await app(first, second).run([])).toMatchObject({ result: both });
+			expect(await app(second, first).run([])).toMatchObject({ result: both });
+		});
+
 		it("gives the routing-failure onError context a no-op bindInput", async () => {
 			let flags: unknown;
 			const renderer = defineExtension(defineExtensionId("renderer")).onError((_error, ctx) => {
@@ -1051,6 +1067,142 @@ describe("Extension named hooks", () => {
 				.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 			expect(await app.execute({ argv: ["nope"] })).toBe(2);
 			expect(flags).toEqual({});
+		});
+	});
+
+	describe("bindText", () => {
+		type Text = Parameters<ExtensionContext["bindText"]>[0];
+		const size = (raw: string) => {
+			const match = /^(\d+)m$/.exec(raw);
+			if (!match) throw new Error("use a number followed by m");
+			return Number(match[1]) * 1024 * 1024;
+		};
+
+		/** An app whose `preRun` binds `text`; its action records what it receives. */
+		function textApp(text: Text, bind: "bindText" | "bindInput" = "bindText") {
+			const received: unknown[] = [];
+			const app = new Crust("cli")
+				.flags({
+					port: { type: "number" },
+					origin: { type: "url" },
+					out: { type: "path" },
+					size: { type: "string", parse: size },
+					mode: { type: "string", choices: ["fast", "safe"] },
+					force: { type: "boolean" },
+					tags: { type: "string", multiple: true, delimiter: "," },
+					verbose: { type: "count", short: "v" },
+				})
+				.args({ name: "count", type: "integer" }, { name: "files", type: "path", variadic: true })
+				.extend(
+					defineExtension(defineExtensionId("text")).preRun((ctx) =>
+						bind === "bindText" ? ctx.bindText(text) : ctx.bindInput(text),
+					),
+				)
+				.action(({ args, flags }) => void received.push({ args, flags }));
+			async function execute(argv: string[]) {
+				const stderr: string[] = [];
+				const exitCode = await app.execute({
+					argv,
+					io: { stdout: { write() {} }, stderr: lineSink(stderr) },
+				});
+				return { exitCode, stderr: stderr.join("\n") };
+			}
+			return { execute, received };
+		}
+
+		it("converts text as the same words on the command line: type, parse, and delimiter", async () => {
+			const fromArgv = textApp({});
+			const argv = ["3", "a.txt", "~/b.txt", "--port", "8080", "--origin", "https://x.dev/a"];
+			argv.push("--out", "dist", "--size", "10m", "--mode", "safe", "--force");
+			argv.push("--tags", "a,b", "--tags", "c");
+			expect(await fromArgv.execute(argv)).toEqual({ exitCode: 0, stderr: "" });
+			const fromText = textApp({
+				args: { count: "3", files: ["a.txt", "~/b.txt"] },
+				flags: {
+					port: "8080",
+					origin: "https://x.dev/a",
+					out: "dist",
+					size: "10m",
+					mode: "safe",
+					force: "yes",
+					tags: ["a,b", "c"],
+				},
+			});
+			expect(await fromText.execute([])).toEqual({ exitCode: 0, stderr: "" });
+			expect(fromText.received).toEqual(fromArgv.received);
+			const { homedir } = process.getBuiltinModule("node:os");
+			const { join, resolve } = process.getBuiltinModule("node:path");
+			expect(fromText.received).toEqual([
+				{
+					args: { count: 3, files: [resolve("a.txt"), join(homedir(), "b.txt")] },
+					flags: {
+						port: 8080,
+						origin: new URL("https://x.dev/a"),
+						out: resolve("dist"),
+						size: 10 * 1024 * 1024,
+						mode: "safe",
+						force: true,
+						tags: ["a", "b", "c"],
+						verbose: 0,
+					},
+				},
+			]);
+		});
+
+		it.each([
+			[["--port", "80x"], { flags: { port: "80x" } }],
+			[["--origin", "x.dev"], { flags: { origin: "x.dev" } }],
+			[["--size", "10"], { flags: { size: "10" } }],
+			[["--mode", "slow"], { flags: { mode: "slow" } }],
+			[["1.5"], { args: { count: "1.5" } }],
+		] satisfies [string[], Text][])(
+			"fails %j with the command line's own error",
+			async (argv, text) => {
+				const fromArgv = await textApp({}).execute(argv);
+				expect(fromArgv.exitCode).toBe(2);
+				expect(await textApp(text).execute([])).toEqual(fromArgv);
+			},
+		);
+
+		it("never converts text for a value argv gave, and reports a bound value as bound", async () => {
+			const sources: unknown[] = [];
+			const app = new Crust("cli")
+				.flags({ port: { type: "number" }, host: { type: "string" } })
+				.extend(
+					defineExtension(defineExtensionId("text")).preRun((ctx) => {
+						ctx.bindText({ flags: { port: "not a number", host: "example.com" } });
+						sources.push(ctx.sources.flags);
+					}),
+				)
+				.action(({ flags }) => flags);
+			expect(await app.execute({ argv: ["--port", "80"], io: { stdout: { write() {} } } })).toBe(0);
+			expect(sources).toEqual([{ port: "argv", host: "bound" }]);
+		});
+
+		it("adds to what bindInput bound", async () => {
+			const app = new Crust("cli")
+				.flags({ port: { type: "number" }, host: { type: "string" } })
+				.extend(
+					defineExtension(defineExtensionId("typed")).setup((ctx) =>
+						ctx.bindInput({ flags: { port: 80 } }),
+					),
+					defineExtension(defineExtensionId("text")).preRun((ctx) =>
+						ctx.bindText({ flags: { host: "example.com" } }),
+					),
+				)
+				.action(({ flags }) => flags);
+			expect(await app.run([])).toMatchObject({ result: { port: 80, host: "example.com" } });
+		});
+
+		it("refuses a count flag, which has no text form, and a word where a list belongs", async () => {
+			expect(await textApp({ flags: { verbose: "3" } }).execute([])).toEqual({
+				exitCode: 2,
+				stderr: 'Error: Flag "--verbose" has no text form; bind it with bindInput.',
+			});
+			expect(await textApp({ flags: { tags: "a" } }).execute([])).toEqual({
+				exitCode: 2,
+				stderr: "Error: Expected an occurrence array for --tags",
+			});
 		});
 	});
 
@@ -1105,7 +1257,7 @@ describe("Extension named hooks", () => {
 			});
 		});
 
-		it("reads bound keys live, and a later bindInput reverts keys it no longer supplies", async () => {
+		it("reads bound keys live, and a later bindInput keeps keys it leaves out", async () => {
 			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp((ctx) => {
 				ctx.bindInput({ args: { source: "x" }, flags: { name: "a", port: 1 } });
@@ -1123,8 +1275,11 @@ describe("Extension named hooks", () => {
 					args: { source: "bound", target: "default" },
 					flags: { name: "bound", verbose: "argv", port: "bound" },
 				},
-				// argv still wins for verbose; port and source revert to the original parse.
-				{ ...original, flags: { ...original.flags, name: "bound" } },
+				// argv still wins for verbose; port and source stay bound.
+				{
+					args: { source: "bound", target: "default" },
+					flags: { name: "bound", verbose: "argv", port: "bound" },
+				},
 			]);
 		});
 

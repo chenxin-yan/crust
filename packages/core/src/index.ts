@@ -89,13 +89,16 @@ export { artifactPath } from "@crustjs/utils/artifacts";
 // Core types
 export type {
 	ArgDef,
+	ArgExtras,
 	ArgsDef,
+	CommandExtras,
 	CommandMeta,
 	CommandSection,
 	CommandSectionInput,
 	SectionAudience,
 	SectionConsumer,
 	FlagDef,
+	FlagExtras,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
