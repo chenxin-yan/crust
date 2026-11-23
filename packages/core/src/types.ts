@@ -527,7 +527,7 @@ type TypedFlagFields<T extends Exclude<ValueType, "string">, Default> = {
 	 */
 	negatable?: T extends "boolean" ? true : never;
 	/** Use `type: "string"` with `parse` for custom parsing. */
-	parse?: {
+	parse?: ((raw: string) => unknown) & {
 		readonly FIX_PARSE: '`parse` is for string flags: use type: "string" with parse';
 	};
 } & (T extends "number" | "integer" ? NumberRange : NoRange);

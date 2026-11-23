@@ -158,7 +158,7 @@ Events are for programs: Crust never prints them. A terminal user sees only the 
 - **Cancellation:** when the invocation's `signal` aborts, Crust closes the generator at its next `yield`, so its `finally` blocks run, and the invocation fails with the abort reason. Pass `signal` to the work between yields to stop sooner.
 - **Throwing consumers:** a throwing renderer `event`, or an `onEvent` that throws or rejects, closes the generator the same way and fails the invocation.
 - **Failed cleanup:** if closing the generator throws, the invocation fails with a `SuppressedError` (`error`: the cleanup failure, `suppressed`: the original), as with a failed [Context disposal](/docs/api/errors#propagation-boundaries). A cancelled invocation still exits `130` (`143` after `SIGTERM`, `141` after a closed stdout).
-- **Only `async function*` streams:** an ordinary action that returns a generator, such as `async () => watch()`, returns it as its result. To stream another generator's events, forward them: `async function* () { return yield* watch(); }`.
+- **Only a returned generator streams:** an action streams when it returns an async generator, as an `async function*` does. An `async` action that returns one, such as `async () => watch()`, returns a promise, so the generator is its result and is never drained. To stream another generator's events, forward them: `async function* () { return yield* watch(); }`.
 
 ## Unknown commands
 

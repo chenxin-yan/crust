@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -266,5 +266,11 @@ describe("declaration emission for consumers", () => {
 		const output = result.stdout.toString() + result.stderr.toString();
 		expect(output).toBe("");
 		expect(result.status).toBe(0);
+	});
+
+	it("imports shared-chunk types under their own names, which compiler errors print", () => {
+		const declarations = readFileSync(join(corePkg, "dist/index.d.ts"), "utf8");
+		expect(declarations).toMatch(/^import \{[^}]*\bCrust\b[^}]*\} from "\.\//m);
+		expect(declarations).not.toMatch(/^import \{[^}]* as [^}]*\} from "\.\//m);
 	});
 });

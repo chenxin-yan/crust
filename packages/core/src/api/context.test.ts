@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
-import { Crust, defineCommand } from "../command/crust.ts";
+import { type AnyCrust, Crust, defineCommand } from "../command/crust.ts";
 import type { RunOutcome } from "../command/typed-run.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -704,7 +704,8 @@ describe("Context-owned flags at use sites", () => {
 				.use(confirm)
 				.postRun(async ({ ctx }) => void seen.push(await ctx.confirm));
 			const list = defineCommand("list", (command) => command.action(() => "list"));
-			const app =
+			// The two registrations differ in type: only a provided Context's flags are the Extension's.
+			const app: AnyCrust =
 				source === "extension"
 					? new Crust("cli").extend(base.provide(confirm())).add(list)
 					: new Crust("cli").provide(confirm()).extend(base).add(list);

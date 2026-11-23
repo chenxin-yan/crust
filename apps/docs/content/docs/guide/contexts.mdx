@@ -194,9 +194,9 @@ Provide every dependency. Order within one `.provide()` call does not matter. Se
   ../../../examples/guide/contexts-doubles.ts#replacement
 </include>
 
-The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs. An `.of()` value needs none of the real setup's dependencies, and it fits wherever the real instance does, such as a parameter typed `ReturnType<typeof database>`.
+The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs. An `.of()` value needs none of the real setup's dependencies, and it fits wherever the real instance does, such as a parameter typed `ReturnType<typeof database>`. Type such a parameter with that alone: a union with `ReturnType<typeof database.of>` fails with `FIX_DEPENDENCY_TYPE`.
 
-To swap a Context on an app that is already assembled, pass `provide` to [`run()`](/docs/api/crust#runpath-input-options) or the [testing helpers](/docs/modules/testing#captureoptions). It replaces the same-name Context for that invocation only:
+To swap a Context on an app that is already assembled, pass `provide` to [`run()`](/docs/api/crust#runpath-input-options) or the [testing helpers](/docs/modules/testing#captureoptions). It replaces the same-name Context for that invocation only. These calls type it against the Contexts the app provides at its root; for a Context a command provides itself, use the app's `execute({ provide })`, which takes any instance:
 
 <include lang="ts" meta='title="work.test.ts"'>
   ../../../examples/guide/contexts-doubles.ts#provide-option

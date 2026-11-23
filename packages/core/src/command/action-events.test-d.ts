@@ -71,12 +71,11 @@ function _normalActionsHaveNoEvents() {
 	>;
 }
 
-function _onlyAnAsyncGeneratorFunctionStreams() {
+function _aPromiseOfAGeneratorIsTheResult() {
 	async function* count() {
 		yield 1;
 		return "end";
 	}
-	// A promise of a generator is the result: only an `async function*` streams.
 	const app = new Crust("cli").action(async () => count());
 	type _result = Expect<
 		Equal<

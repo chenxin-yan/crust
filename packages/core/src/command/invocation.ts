@@ -64,7 +64,6 @@ import {
 	registerFlag,
 	type AddedChild,
 	type ChildEntry,
-	type CommandAction,
 	type CommandNode,
 	type FlagShapes,
 } from "./node.ts";
@@ -840,11 +839,6 @@ function selectHandler(
 	return first;
 }
 
-/** Only an `async function*` action streams; any value an ordinary action returns is its result. */
-function isAsyncGeneratorFunction(action: CommandAction): boolean {
-	return Object.prototype.toString.call(action) === "[object AsyncGeneratorFunction]";
-}
-
 /** One invocation's action events: the caller's live callback, and every event once a generator action starts. */
 interface ActionEventStream {
 	readonly onEvent?: ((event: unknown) => unknown) | undefined;
@@ -1011,10 +1005,13 @@ async function dispatch(
 					actionExitCode = code;
 				},
 			} satisfies CrustCommandContext;
-			result = isAsyncGeneratorFunction(resolvedNode.run)
-				? // SAFETY: calling an async generator function returns its generator.
-					await drain(resolvedNode.run(context) as AsyncGenerator, (stream.events = []))
-				: await resolvedNode.run(context);
+			// Streams exactly when the action's type says so: it returns an async generator itself,
+			// not a promise of one, so `async () => watch()` returns the generator as its result.
+			const returned = resolvedNode.run(context);
+			result =
+				Object.prototype.toString.call(returned) === "[object AsyncGenerator]"
+					? await drain(returned as AsyncGenerator, (stream.events = []))
+					: await returned;
 		}
 		// An actionless command's `undefined` result still meets its `.output()` contract.
 		const checked = resolvedNode.outputSchema

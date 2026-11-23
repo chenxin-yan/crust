@@ -102,6 +102,18 @@ describe("async generator actions", () => {
 		expect(started).toBe(false);
 	});
 
+	it("streams a generator a non-async action returns, as its type says", async () => {
+		async function* count() {
+			yield 1;
+			return "end";
+		}
+		const app = new Crust("cli").action(() => count());
+
+		const outcome = await app.run([]);
+
+		expect(outcome).toMatchObject({ status: "completed", result: "end", events: [1] });
+	});
+
 	it("awaits an async onEvent before resuming the action, and fails when it rejects", async () => {
 		const log: string[] = [];
 		const app = new Crust("cli").action(async function* () {

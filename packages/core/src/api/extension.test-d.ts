@@ -448,4 +448,18 @@ function _replacingAnExtensionIdRecomputesItsFlags() {
 		.action(({ flags }) => {
 			type _format = Expect<Equal<typeof flags.format, string>>;
 		});
+	// A used Context's flags belong to its provider, which still provides them.
+	const settings = defineContext("settings")
+		.flags({ level: { type: "string", default: "info" } })
+		.setup(({ flags }) => flags.level);
+	const usesSettings = defineExtension(id)
+		.use(settings)
+		.postRun(async ({ ctx }) => void (await ctx.settings));
+	new Crust("x")
+		.provide(settings())
+		.extend(usesSettings)
+		.extend(defineExtension(id))
+		.action(({ flags }) => {
+			type _level = Expect<Equal<typeof flags.level, string>>;
+		});
 }

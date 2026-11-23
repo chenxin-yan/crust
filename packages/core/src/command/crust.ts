@@ -651,10 +651,12 @@ type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
 		: Id
 	: never;
 
-/** Flag names an Extension contributes, for a later same-id registration; an open record names none. */
+/**
+ * Flag names an Extension contributes, for a later same-id registration; an open record names
+ * none. Not the flags of the Contexts its hooks `.use()`: their provider still supplies them.
+ */
 type ContributedFlagNames<E> = keyof (ExtensionOwnFlags<E> &
-	ExtensionProvidedFlags<E> &
-	ExtensionHookFlags<E>) extends infer K
+	ExtensionProvidedFlags<E>) extends infer K
 	? string extends K
 		? never
 		: K
@@ -946,8 +948,8 @@ type AnyActionCompletion = readonly [result: unknown, events: readonly unknown[]
 /**
  * What an action returning `R` completes with: its awaited return and no events, or, when it
  * returns an async generator (an `async function*`), the generator's `return` value and the
- * values it yields. A promise of a generator is an ordinary result: only an `async function*`
- * streams. Not distributed, so `any` and `never` stay whole.
+ * values it yields. A promise of a generator is an ordinary result, as at runtime. Not
+ * distributed, so `any` and `never` stay whole.
  */
 type ActionCompletion<R> =
 	IsAny<R> extends true
@@ -1788,7 +1790,10 @@ export class Crust<
 	 * and its hooks run once, at the later position. A literal flag or command name
 	 * the later registration contributes again takes its type. For a literal id
 	 * registered again in a later call, the flags only the earlier registration
-	 * contributed leave the types too; removed command paths can remain statically
+	 * contributed leave the types too, except in inline `.command()` children declared
+	 * between the two calls, for flags of Contexts the earlier one's hooks `.use()`, and
+	 * when an explicit `MetaKeys` argument (`defineExtension<"version">(id)`) widened the
+	 * id to `string`; removed command paths can remain statically
 	 * visible and reject with `COMMAND_NOT_FOUND`. A command both registrations
 	 * contribute in one call is typed as either one's result. An `.action()` bound
 	 * before the later registration keeps the earlier flag types, so register
