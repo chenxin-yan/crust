@@ -4,6 +4,7 @@ import {
 	type CommandInputSchema,
 	commandInputFields,
 	commandInputSchema,
+	formatDescription,
 	isListed,
 } from "@crustjs/core/tooling";
 
@@ -158,11 +159,18 @@ export function toolsFromSnapshot(
 			}
 			owners.set(name, path);
 			const outputSchema = toolOutputSchema(command.outputSchema);
+			const { description, deprecated } = command.meta;
+			const text = formatDescription(
+				description,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				deprecated,
+			);
 			tools.push({
 				name,
-				...(command.meta.description === undefined
-					? {}
-					: { description: command.meta.description }),
+				...(text === "" ? {} : { description: text }),
 				inputSchema: commandInputSchema(command, path),
 				...(outputSchema === undefined ? {} : { outputSchema }),
 				...commandInputFields(command),

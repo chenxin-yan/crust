@@ -91,6 +91,44 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 				.flags({ a: { type: "string" } })
 				.flags({ b: { type: "string", aliases: ["a"] } }),
 	],
+	// An exclusive group's name and its members' spellings share the flag namespace.
+	[
+		"flag-collision",
+		() =>
+			new Crust("cli").flags({
+				all: { type: "boolean" },
+				scope: { type: "exclusive", flags: { all: { type: "boolean" } } },
+			}),
+	],
+	[
+		"flag-collision",
+		() =>
+			new Crust("cli")
+				.flags({ scope: { type: "exclusive", flags: { mine: { type: "boolean", short: "m" } } } })
+				.flags({ scope: { type: "string" } }),
+	],
+	[
+		"flag-collision",
+		() =>
+			new Crust("cli")
+				.flags({ scope: { type: "exclusive", flags: { mine: { type: "boolean", short: "m" } } } })
+				.flags({ max: { type: "string", short: "m" } }),
+	],
+	[
+		"flag-collision",
+		() =>
+			defineFlag({
+				type: "exclusive",
+				flags: { a: { type: "boolean", short: "x" }, b: { type: "boolean", short: "x" } },
+			}),
+	],
+	[
+		"invalid-spelling",
+		() =>
+			new Crust("cli").flags({
+				scope: { type: "exclusive", flags: { "a b": { type: "boolean" } } },
+			}),
+	],
 	["empty-name", () => new Crust("")],
 	["empty-name", () => defineCommand("\u00a0", action)],
 	["empty-name", () => new Crust("cli").args({ name: "", type: "string" })],

@@ -146,15 +146,28 @@ export interface SearchableCommand {
 		readonly aliases?: readonly string[];
 	};
 	readonly args: readonly { readonly name: string; readonly description?: string }[];
-	readonly flags: Readonly<
-		Record<string, { readonly description?: string; readonly extension?: unknown }>
-	>;
+	readonly flags: Readonly<Record<string, SearchableFlag>>;
+}
+
+interface SearchableFlag {
+	readonly description?: string;
+	readonly extension?: unknown;
+	readonly hidden?: boolean;
+	/** An exclusive group's members, indexed in its place. */
+	readonly flags?: Readonly<Record<string, SearchableFlag>>;
+}
+
+function flagDetails(flags: Readonly<Record<string, SearchableFlag>>): (string | undefined)[] {
+	return Object.entries(flags).flatMap(([name, flag]) => {
+		if (flag.extension !== undefined || flag.hidden === true) return [];
+		return flag.flags ? flagDetails(flag.flags) : [name, flag.description];
+	});
 }
 
 /**
  * The search item of the command at `path`: its path, name, and aliases as
  * names; its description; its argument names and descriptions and those of the
- * flags no Extension declares as details.
+ * listed flags no Extension declares as details.
  */
 export function commandSearchItem(path: readonly string[], command: SearchableCommand): SearchItem {
 	return {
@@ -162,9 +175,7 @@ export function commandSearchItem(path: readonly string[], command: SearchableCo
 		descriptions: [command.meta.description],
 		details: [
 			...command.args.flatMap((arg) => [arg.name, arg.description]),
-			...Object.entries(command.flags).flatMap(([name, flag]) =>
-				flag.extension === undefined ? [name, flag.description] : [],
-			),
+			...flagDetails(command.flags),
 		],
 	};
 }

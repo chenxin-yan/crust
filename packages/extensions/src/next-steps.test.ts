@@ -544,6 +544,37 @@ describe("nextSteps", () => {
 		await replay(app, lines.slice(-1));
 	});
 
+	it("spells an exclusive group's value as its member flag, and replays it", async () => {
+		const seen: unknown[] = [];
+		const scoped = defineCommand("scoped", (cmd) =>
+			cmd
+				.flags({
+					scope: {
+						type: "exclusive",
+						required: true,
+						flags: { "org-id": { type: "string" }, all: { type: "boolean" } },
+					},
+				})
+				.action(({ flags }) => void seen.push(flags.scope)),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(scoped)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(scoped, { flags: { scope: { flag: "org-id", value: "acme" } } });
+					next.add(scoped, { flags: { scope: { flag: "all" } } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n").slice(1, -1);
+		expect(lines).toEqual(["  app scoped --org-id acme", "  app scoped --all"]);
+		await replay(app, lines);
+		expect(seen).toEqual([{ flag: "org-id", value: "acme" }, { flag: "all" }]);
+	});
+
 	it("skips json values JSON would change and replays the rest", async () => {
 		const seen: unknown[] = [];
 		const show = defineCommand("show", (cmd) =>

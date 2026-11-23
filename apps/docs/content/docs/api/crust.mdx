@@ -147,7 +147,7 @@ const serve = new Crust("serve").flags({
 
 - Only own enumerable string keys are flags; TypeScript rejects symbol keys and unquoted number keys, so write `"1.5"` rather than `1.5`. Integer-like names (`"0"`, or digits without a leading zero such as `"2"`) are rejected at any length, because JavaScript lists array-index keys first and would reorder help. A record whose prototype is not `Object.prototype` or `null`, such as one written with a literal `__proto__` key, throws a `DEFINITION` error.
 - A key written after a spread (`{ ...shared, out }`) silently replaces the spread's flag of the same name. Attach shared sets in their own `.flags()` call: collisions across calls are checked.
-- Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
+- Long names, aliases, and `short` spellings must not collide with other flags visible on the command. An [exclusive group](/docs/guide/arguments-and-flags#one-of-several-flags)'s key and its members' spellings count too.
 - Names, aliases, and `short` are written without dashes: each must be non-empty, contain no whitespace, and not start with `-`. Names and aliases must also not contain `=`, because `--name=value` splits there. A spelling that breaks this throws a `DEFINITION` error, with `reason: "empty-spelling"` for an empty spelling and `"invalid-spelling"` for the rest.
 - One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Generated docs list both.
 - A boolean flag with `default: true` or `negatable: true` accepts `--no-<spelling>` for the name and every long alias; any other flag rejects it with a `PARSE` error. Generated docs list the negations only for `default: true`. Names and aliases beginning with `no-` are reserved.
@@ -270,7 +270,7 @@ Registers definitions under their carried names, deferring their recipes until f
 
 ## `.command(name, config?, recipe)`
 
-Defines a child like `.add(defineCommand(name, config?, recipe))`, for short inline commands. `config` takes the same [`CommandConfig`](#definecommandname-config-recipe) as `defineCommand()`: description, aliases, `hidden`, usage, and sections. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
+Defines a child like `.add(defineCommand(name, config?, recipe))`, for short inline commands. `config` takes the same [`CommandConfig`](#definecommandname-config-recipe) as `defineCommand()`: description, aliases, `hidden`, `deprecated`, usage, and sections. It works on the root and inside another command's recipe, so subcommands can nest inline. Use `defineCommand()` for commands in separate files and reused commands.
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>

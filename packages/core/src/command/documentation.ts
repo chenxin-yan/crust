@@ -14,7 +14,7 @@ export function formatDefault(value: DeclaredDefault): string {
 }
 
 /**
- * Format a definition's description and optional env/default/choice annotations.
+ * Format a definition's description and optional deprecation/env/default/choice annotations.
  * `env` is the variable *names* only, joined with commas; renderers never see their values.
  */
 export function formatDescription(
@@ -23,8 +23,10 @@ export function formatDescription(
 	choices: readonly string[] | undefined,
 	formatAnnotation: (annotation: string) => string = (annotation) => annotation,
 	env?: FlagEnv,
+	deprecated?: string,
 ): string {
 	const parts = description ? [description] : [];
+	if (deprecated !== undefined) parts.push(formatAnnotation(`[deprecated: ${deprecated}]`));
 	if (env !== undefined) parts.push(formatAnnotation(`[env: ${[env].flat().join(", ")}]`));
 	if (defaultValue !== undefined) {
 		parts.push(formatAnnotation(`[default: ${formatDefault(defaultValue)}]`));
@@ -98,8 +100,8 @@ export interface DocumentationFlag {
 	readonly aliases: readonly string[];
 	/** `true` for boolean flags that also accept `--no-<name>`: `default: true` or `negatable: true`. */
 	readonly negatable: boolean;
-	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`. */
-	readonly type: FlagSnapshot["type"];
+	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`; never `"exclusive"`, whose members are listed instead. */
+	readonly type: Exclude<FlagSnapshot["type"], "exclusive">;
 	/** Human-readable description from the flag definition. */
 	readonly description?: string;
 	/** `true` when parsing fails if the flag is not provided. */
@@ -114,6 +116,10 @@ export interface DocumentationFlag {
 	readonly env?: FlagSnapshot["env"];
 	/** Delimiter that splits a repeatable flag's string argv values and environment text into occurrences. */
 	readonly delimiter?: string;
+	/** Why the flag is deprecated, and what to use instead. */
+	readonly deprecated?: string;
+	/** The exclusive group (`type: "exclusive"`) this flag is a member of, by the group's name. */
+	readonly group?: string;
 }
 
 /**
@@ -126,6 +132,7 @@ export type UsageSegment =
 	| { readonly kind: "path"; readonly text: string }
 	| { readonly kind: "command"; readonly text: "<command>" }
 	| { readonly kind: "arg"; readonly text: string; readonly required: boolean }
+	| { readonly kind: "exclusive"; readonly text: string; readonly required: boolean }
 	| { readonly kind: "options"; readonly text: "[options]" }
 	| { readonly kind: "custom"; readonly text: string };
 
@@ -143,6 +150,8 @@ export interface CommandDocumentation {
 	readonly description?: string;
 	/** Alternative names that route to this command, e.g. `["i"]` for `install`. */
 	readonly aliases: readonly string[];
+	/** Why the command is deprecated, and what to use instead. */
+	readonly deprecated?: string;
 	/**
 	 * Plain usage line: `usageSegments` texts joined with spaces —
 	 * e.g. `"mycli remote add <name> [url] [options]"`.
@@ -157,7 +166,8 @@ export interface CommandDocumentation {
 	/**
 	 * Effective flags (Context-owned + local), in definition order: flags owned by
 	 * Extension-provided Contexts first, then the command path's own Context-owned
-	 * and local flags, then Extension flags.
+	 * and local flags, then Extension flags. An exclusive group's members stand in its
+	 * place, each with its `group`. Hidden flags are left out.
 	 */
 	readonly flags: readonly DocumentationFlag[];
 	/** Unfiltered command-authored and Extension-contributed documentation sections. */
@@ -176,10 +186,15 @@ function argToken(arg: ArgSnapshot): string {
 	return arg.required ? `<${name}>` : `[${name}]`;
 }
 
-function documentationFlags(flags: CommandSnapshot["flags"]): readonly DocumentationFlag[] {
-	return Object.entries(flags).map(([name, def]) => {
+function documentationFlags(
+	flags: CommandSnapshot["flags"],
+	group?: string,
+): readonly DocumentationFlag[] {
+	return Object.entries(flags).flatMap(([name, def]): DocumentationFlag[] => {
+		if (def.hidden === true) return [];
+		if (def.type === "exclusive") return [...documentationFlags(def.flags ?? {}, name)];
 		const long = [name, ...(def.aliases ?? [])];
-		return Object.freeze({
+		const flag: DocumentationFlag = Object.freeze({
 			name,
 			spellings: Object.freeze([
 				...(def.short ? [`-${def.short}`] : []),
@@ -200,7 +215,28 @@ function documentationFlags(flags: CommandSnapshot["flags"]): readonly Documenta
 			default: def.default,
 			env: def.env,
 			delimiter: def.delimiter,
+			deprecated: def.deprecated,
+			group,
 		});
+		return [flag];
+	});
+}
+
+/** Each exclusive group's usage token, `(--org-id <string> | --all)`, or `[…]` when optional. */
+function exclusiveSegments(
+	flags: CommandSnapshot["flags"],
+	documented: readonly DocumentationFlag[],
+): UsageSegment[] {
+	return Object.entries(flags).flatMap(([name, def]): UsageSegment[] => {
+		const members = documented.filter((flag) => flag.group === name);
+		if (members.length === 0) return [];
+		const text = members
+			.map(({ name: member, type }) =>
+				type === "boolean" ? `--${member}` : `--${member} <${type}>`,
+			)
+			.join(" | ");
+		const required = def.required === true;
+		return [{ kind: "exclusive", text: required ? `(${text})` : `[${text}]`, required }];
 	});
 }
 
@@ -241,7 +277,10 @@ export function buildCommandDocumentation(
 					? [{ kind: "command", text: "<command>" } as const]
 					: []),
 				...argSegments(beforeOptions),
-				...(flags.length > 0 ? [{ kind: "options", text: "[options]" } as const] : []),
+				...exclusiveSegments(command.flags, flags),
+				...(flags.some((flag) => flag.group === undefined)
+					? [{ kind: "options", text: "[options]" } as const]
+					: []),
 				...argSegments(afterOptions),
 			];
 	const usage = usageSegments.map((segment) => segment.text).join(" ");
@@ -251,6 +290,7 @@ export function buildCommandDocumentation(
 		path: Object.freeze([...path]),
 		description: command.meta.description,
 		aliases: Object.freeze([...(command.meta.aliases ?? [])]),
+		deprecated: command.meta.deprecated,
 		usage,
 		usageSegments: Object.freeze(usageSegments.map((segment) => Object.freeze(segment))),
 		hasAction: command.hasAction,

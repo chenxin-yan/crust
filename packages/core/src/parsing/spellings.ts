@@ -59,12 +59,18 @@ function assertUsableSpelling(spelling: string, kind: "canonical" | "short" | "a
 	}
 }
 
-/** All canonical, short, and alias spellings carried by a flag definition. */
+/**
+ * All canonical, short, and alias spellings carried by a flag definition. An exclusive group's
+ * are its name, which no argv token spells but which shares the namespace, and its members'.
+ */
 export function flagSpellings(name: string | undefined, def: FlagDef): string[] {
 	return [
 		...(name === undefined ? [] : [name]),
 		...(def.short === undefined ? [] : [def.short]),
 		...(def.aliases ?? []),
+		...Object.entries(def.flags ?? {}).flatMap(([member, memberDef]) =>
+			flagSpellings(member, memberDef),
+		),
 	];
 }
 
@@ -79,6 +85,8 @@ export interface FlagSpelling {
 	readonly def: FlagDef;
 	readonly kind: "canonical" | "short" | "alias";
 	readonly negatable: boolean;
+	/** The exclusive group a member spelling belongs to; `canonicalName` and `def` are the member's. */
+	readonly group?: string;
 }
 
 /** Whether a flag accepts generated `--no-` spellings: a boolean with `default: true` or `negatable: true`. */
@@ -149,6 +157,16 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
 		...("aliases" in def && def.aliases ? { aliases: Object.freeze([...def.aliases]) } : {}),
 		...(def.choices ? { choices: Object.freeze([...def.choices]) } : {}),
 		...("env" in def && typeof def.env === "object" ? { env: Object.freeze([...def.env]) } : {}),
+		...("requires" in def && def.requires ? { requires: Object.freeze([...def.requires]) } : {}),
+		...("flags" in def && def.flags
+			? {
+					flags: Object.freeze(
+						Object.fromEntries(
+							Object.entries(def.flags).map(([name, member]) => [name, ownDefinition(member)]),
+						),
+					),
+				}
+			: {}),
 		...("multiple" in def && def.multiple && Array.isArray(def.default)
 			? { default: Object.freeze([...def.default]) }
 			: {}),
@@ -165,6 +183,9 @@ function checkFlagStrings(name: string | undefined, def: FlagDef): void {
 	const label = name === undefined ? "Flag" : `Flag "${name}"`;
 	const named = name === undefined ? {} : { name };
 	if (name !== undefined) assertUsableSpelling(name, "canonical");
+	for (const [member, memberDef] of Object.entries(def.flags ?? {})) {
+		checkFlagStrings(member, memberDef);
+	}
 	if (def.short !== undefined) assertUsableSpelling(def.short, "short");
 	for (const alias of def.aliases ?? []) assertUsableSpelling(alias, "alias");
 	const spellings = flagSpellings(name, def);

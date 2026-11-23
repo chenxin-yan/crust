@@ -210,6 +210,178 @@ describe("parseArgs — booleans", () => {
 	});
 });
 
+describe("parseArgs — values that start with a dash or `=`", () => {
+	const cmd = makeNode({
+		meta: "test",
+		flags: {
+			lines: { type: "integer", short: "n" },
+			scale: { type: "number" },
+			pattern: { type: "string", short: "e" },
+			template: { type: "string", short: "t", choices: ["vue", "react"] },
+			delimiter: { type: "string", short: "d" },
+			dry: { type: "boolean", short: "D" },
+		},
+	});
+
+	it("takes a negative number as the next word only for a numeric flag", () => {
+		expect(parseArgs(cmd, ["-n", "-5", "--scale", "-1.5e2"]).flags).toMatchObject({
+			lines: -5,
+			scale: -150,
+		});
+		expect(() => parseArgs(cmd, ["-e", "-5"])).toThrow(
+			'Missing value for flag "--pattern"; to pass a value starting with "-", write --pattern=<value>',
+		);
+		expect(() => parseArgs(cmd, ["-n", "-x"])).toThrow('Missing value for flag "--lines"');
+		expect(parseArgs(cmd, ["-e=-5"]).flags.pattern).toBe("=-5");
+	});
+
+	it("keeps the `=` of an attached short value, and hints when the value is rejected", () => {
+		expect(parseArgs(cmd, ["-d=", "-t", "vue"]).flags).toMatchObject({
+			delimiter: "=",
+			template: "vue",
+		});
+		expect(() => parseAndValidate(cmd, ["-t=vue"])).toThrow(
+			"Invalid value for --template. Expected one of: vue, react. Write -t vue or --template=vue.",
+		);
+		expect(() => parseAndValidate(cmd, ["--lines==3"])).toThrow(
+			"Expected an integer for --lines. Write -n 3 or --lines=3.",
+		);
+	});
+
+	it("names a boolean short given `=value`", () => {
+		expect(() => parseArgs(cmd, ["-D=1"])).toThrow('Flag "-D" does not take a value.');
+		expect(() => parseArgs(cmd, ["-D=1"])).toThrow(
+			expect.objectContaining({ details: { flag: "dry", reason: "unexpected-value" } }),
+		);
+	});
+});
+
+describe("parseArgs — exclusive groups", () => {
+	const flags = {
+		scope: {
+			type: "exclusive",
+			required: true,
+			flags: {
+				"org-id": { type: "string", short: "o", env: "ORG_ID" },
+				"project-id": { type: "integer", env: "PROJECT_ID" },
+				all: { type: "boolean", aliases: ["everything"], env: "ALL" },
+			},
+		},
+	} as const;
+	const cmd = makeNode({ meta: "test", flags });
+
+	it("binds the member given as { flag, value }, or { flag } for a boolean", () => {
+		expect(parseArgs(cmd, ["-o", "acme"], {}).flags.scope).toEqual({
+			flag: "org-id",
+			value: "acme",
+		});
+		expect(parseArgs(cmd, ["--project-id", "7"], {}).flags.scope).toEqual({
+			flag: "project-id",
+			value: 7,
+		});
+		const parsed = parseArgs(cmd, ["--everything"], {});
+		expect(parsed.flags.scope).toEqual({ flag: "all" });
+		expect(parsed.sources.flags).toEqual({ scope: "argv" });
+		expect(parsed.flagOrder).toEqual(["scope"]);
+		// The member's own spellings only: the group's name is no flag.
+		expect(() => parseArgs(cmd, ["--scope", "x"], {})).toThrow('Unknown flag "--scope"');
+	});
+
+	it("refuses two members, or none when required, as usage errors", () => {
+		expect(() => parseAndValidate(cmd, ["--all", "-o", "acme"], {})).toThrow(
+			'Flags "--all" and "--org-id" cannot be used together',
+		);
+		expect(() => parseAndValidate(cmd, [], {})).toThrow(
+			'Missing one of the required flags "--org-id", "--project-id", "--all"',
+		);
+		// The same member twice is one flag given twice: the last value wins.
+		expect(parseArgs(cmd, ["-o", "a", "-o", "b"], {}).flags.scope).toEqual({
+			flag: "org-id",
+			value: "b",
+		});
+		const optional = makeNode({
+			meta: "test",
+			flags: { scope: { ...flags.scope, required: undefined } },
+		});
+		expect(parseArgs(optional, [], {}).flags.scope).toBeUndefined();
+	});
+
+	it("compares sources level by level: the command line, then the environment", () => {
+		const both = { ORG_ID: "acme", PROJECT_ID: "7" };
+		const fromArgv = parseArgs(cmd, ["--all"], both);
+		expect(fromArgv.flags.scope).toEqual({ flag: "all" });
+		expect(() => parseAndValidate(cmd, [], both)).toThrow(
+			'Flags "--org-id" (from $ORG_ID) and "--project-id" (from $PROJECT_ID) cannot be used together',
+		);
+		const fromEnv = parseArgs(cmd, [], { PROJECT_ID: "7", ALL: "false" });
+		expect(fromEnv.flags.scope).toEqual({ flag: "project-id", value: 7 });
+		expect(fromEnv.sources.flags).toEqual({ scope: "env" });
+		expect(() => parseAndValidate(cmd, [], { PROJECT_ID: "x" })).toThrow(
+			"Expected an integer for --project-id (from $PROJECT_ID).",
+		);
+	});
+
+	it("takes typed input in the shape the action receives", () => {
+		expect(
+			parseStructured(cmd, { flags: { scope: { flag: "org-id", value: "acme" } } }).flags.scope,
+		).toEqual({ flag: "org-id", value: "acme" });
+		expect(parseStructured(cmd, { flags: { scope: { flag: "all" } } }).flags.scope).toEqual({
+			flag: "all",
+		});
+		expect(() => parseStructured(cmd, { flags: { scope: { flag: "team", value: "x" } } })).toThrow(
+			"Expected { flag, value } for --scope, with flag one of: org-id, project-id, all",
+		);
+		expect(() => parseStructured(cmd, { flags: { scope: { flag: "all", value: true } } })).toThrow(
+			'Expected { flag: "all" } for --scope',
+		);
+		expect(() => parseStructured(cmd, { flags: { scope: { flag: "project-id" } } })).toThrow(
+			'Expected { flag: "project-id", value } for --scope',
+		);
+		expect(() =>
+			parseStructured(cmd, { flags: { scope: { flag: "project-id", value: 1.5 } } }),
+		).toThrow("Expected an integer for --project-id.");
+		// An omitted group falls back to the environment.
+		expect(parseStructured(cmd, {}, { ORG_ID: "acme" }).flags.scope).toEqual({
+			flag: "org-id",
+			value: "acme",
+		});
+	});
+});
+
+describe("validateParsed — requires", () => {
+	const cmd = makeNode({
+		meta: "test",
+		flags: {
+			jq: { type: "string", requires: ["json"] },
+			json: { type: "boolean", env: "JSON" },
+			web: { type: "boolean", requires: ["scope"] },
+			region: { type: "string", default: "us", requires: ["json"] },
+			scope: { type: "exclusive", flags: { all: { type: "boolean" }, mine: { type: "boolean" } } },
+		},
+	});
+
+	it("needs the named flags from any source but a default, and not a boolean's false", () => {
+		expect(() => parseAndValidate(cmd, ["--jq", "."], {})).toThrow('Flag "--jq" requires "--json"');
+		expect(() => parseAndValidate(cmd, ["--jq", "."], { JSON: "false" })).toThrow(
+			'Flag "--jq" requires "--json"',
+		);
+		expect(() => parseAndValidate(cmd, ["--web"], {})).toThrow(
+			'Flag "--web" requires one of "--all", "--mine"',
+		);
+		parseAndValidate(cmd, ["--jq", ".", "--json"], {});
+		parseAndValidate(cmd, ["--jq", "."], { JSON: "1" });
+		parseAndValidate(cmd, ["--web", "--mine"], {});
+		// A default is not given: `region` needs nothing until it is set.
+		parseAndValidate(cmd, [], {});
+		expect(() => parseAndValidate(cmd, ["--region", "eu"], {})).toThrow(
+			'Flag "--region" requires "--json"',
+		);
+		expect(() => validateParsed(cmd, parseStructured(cmd, { flags: { jq: "." } }, {}))).toThrow(
+			'Flag "--jq" requires "--json"',
+		);
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // Aliases (short and long)
 // ────────────────────────────────────────────────────────────────────────────

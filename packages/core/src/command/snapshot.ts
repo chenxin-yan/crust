@@ -106,6 +106,14 @@ export interface FlagSnapshot {
 	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
 	 */
 	readonly inputSchema?: Readonly<Record<string, unknown>>;
+	/** `true` when the flag is left out of listings; it still parses. */
+	readonly hidden?: boolean;
+	/** Why the flag is deprecated, and what to use instead. */
+	readonly deprecated?: string;
+	/** Flags of the same record this one needs when given. */
+	readonly requires?: readonly string[];
+	/** An exclusive group's members (`type: "exclusive"`), keyed by their canonical names. */
+	readonly flags?: Readonly<Record<string, FlagSnapshot>>;
 	/**
 	 * The Extension that declares this flag with its `flags` (e.g. `--help`,
 	 * `--json`); absent for local and Context-owned flags. Command input
@@ -236,6 +244,19 @@ function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSna
 		max: def.max,
 		delimiter: def.delimiter,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
+		hidden: def.hidden,
+		deprecated: def.deprecated,
+		requires: def.requires,
+		flags:
+			def.flags &&
+			Object.freeze(
+				Object.fromEntries(
+					Object.entries(def.flags).map(([name, member]) => [
+						name,
+						snapshotFlag(member, undefined),
+					]),
+				),
+			),
 		extension,
 	});
 }
@@ -418,6 +439,7 @@ function projectMeta(
 			: undefined,
 		aliases: meta.aliases ? Object.freeze([...meta.aliases]) : undefined,
 		hidden: meta.hidden,
+		deprecated: meta.deprecated,
 	});
 }
 

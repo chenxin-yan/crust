@@ -33,11 +33,13 @@ export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
  * Values bound from argv tokens, tagged before definition/value correlation erases.
  * `invalid` is an environment value already rejected; coercion rethrows it so it defers like the rest.
  * `env` names the variable a string value came from, so its errors name it too.
+ * `member` is an exclusive group's value: the member given and its own value.
  */
 type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
 	| { readonly kind: "count"; value: number }
 	| { readonly kind: "string"; value: string | string[]; readonly env?: string }
+	| { readonly kind: "member"; readonly flag: string; readonly value: ArgvFlagValue }
 	| { readonly kind: "invalid"; readonly error: CrustError };
 
 /** Records a value error, keyed by its definition's label, instead of throwing it; see {@link parseArgs}. */
@@ -239,10 +241,39 @@ function coerceOrDefer<T>(
 function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): ParsedFlagValue {
 	if (parsed.kind === "invalid") throw parsed.error;
 	if (parsed.kind === "boolean" || parsed.kind === "count") return parsed.value;
-	const label = parsed.env === undefined ? `--${name}` : `--${name} (from $${parsed.env})`;
+	if (parsed.kind === "member") return memberValue(def, parsed.flag, parsed.value, coerceFlagValue);
+	const { env } = parsed;
+	const label = env === undefined ? `--${name}` : `--${name} (from $${env})`;
+	const coerce = (value: string, index?: number) => {
+		try {
+			return coerceToken(def, value, label, index);
+		} catch (error) {
+			// `-t=vue` keeps the `=`, as POSIX tools do; say how to write what was likely meant.
+			if (env !== undefined || !value.startsWith("=") || !(error instanceof CrustError))
+				throw error;
+			const meant = value.slice(1);
+			const spelling = def.short === undefined ? `--${name}` : `-${def.short}`;
+			// The error is this call's own, so amending its message touches nothing shared.
+			error.message = `${error.message.replace(/\.?$/, ".")} Write ${spelling} ${meant} or --${name}=${meant}.`;
+			throw error;
+		}
+	};
 	return Array.isArray(parsed.value)
-		? parsed.value.map((value, i) => coerceToken(def, value, label, i))
-		: coerceToken(def, parsed.value, label);
+		? parsed.value.map((value, i) => coerce(value, i))
+		: coerce(parsed.value);
+}
+
+/** An exclusive group's value from its member's: `{ flag, value }`, or `{ flag }` for a boolean. */
+function memberValue<V>(
+	group: FlagDef,
+	flag: string,
+	value: V,
+	coerce: (name: string, def: FlagDef, value: V) => ParsedFlagValue,
+): ParsedFlagValue {
+	// SAFETY: only a group's member spellings and checked typed input produce member values.
+	const member = group.flags![flag]!;
+	const coerced = coerce(flag, member, value);
+	return member.type === "boolean" ? { flag } : { flag, value: coerced };
 }
 
 /** Split repeatable occurrences on the declared delimiter, dropping empty segments. */
@@ -324,10 +355,37 @@ function applyEnvAndDelimiter(
 			}
 			continue;
 		}
+		if (def.flags) {
+			values[name] = envMemberValue(def.flags, env);
+			continue;
+		}
 		const found = envVariable(def, env);
 		if (found) values[name] = envFlagValue(name, def, ...found);
 	}
 	return values;
+}
+
+/**
+ * An exclusive group's environment value: the one member whose variable is set. A boolean
+ * member set to false is not given.
+ */
+function envMemberValue(
+	members: Readonly<Record<string, FlagDef>>,
+	env: FlagEnvironment,
+): ArgvFlagValue | undefined {
+	const given = Object.entries(members).flatMap(([flag, def]) => {
+		const found = envVariable(def, env);
+		const value = found && envFlagValue(flag, def, ...found);
+		if (!value || (value.kind === "boolean" && value.value === false)) return [];
+		return [{ flag, value, label: `"--${flag}" (from $${found[0]})` }];
+	});
+	const [first, second] = given;
+	if (second) return { kind: "invalid", error: exclusiveConflict(first!.label, second.label) };
+	return first && { kind: "member", flag: first.flag, value: first.value };
+}
+
+function exclusiveConflict(first: string, second: string): CrustError {
+	return new CrustError("VALIDATION", `Flags ${first} and ${second} cannot be used together`);
 }
 
 /**
@@ -372,9 +430,40 @@ function validateRequiredFlags<F extends FlagsDef>(
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (def.required === true && def.default === undefined) {
 			if (resolvedFlags[name] === undefined) {
-				throw new CrustError("VALIDATION", `Missing required flag "--${name}"`);
+				throw new CrustError(
+					"VALIDATION",
+					def.flags
+						? `Missing one of the required flags ${memberNames(def.flags)}`
+						: `Missing required flag "--${name}"`,
+				);
 			}
 		}
+	}
+}
+
+/** A group's listed members, for its errors: `"--org-id", "--all"`. */
+function memberNames(members: Readonly<Record<string, FlagDef>>): string {
+	const names = Object.keys(members).filter((name) => !members[name]!.hidden);
+	return names.map((name) => `"--${name}"`).join(", ");
+}
+
+/**
+ * Check each given flag's `requires`. A flag counts as given with a value from any source
+ * but its default, other than a boolean's `false`.
+ */
+function validateRequires(flagsDef: FlagsDef, parsed: ArgvParseResult): void {
+	const given = (name: string) => {
+		const source = parsed.sources.flags[name];
+		const value = parsed.flags[name];
+		return source !== undefined && source !== "default" && value !== undefined && value !== false;
+	};
+	for (const [name, def] of Object.entries(flagsDef)) {
+		if (!def.requires || !given(name)) continue;
+		const needed = def.requires.find((required) => !given(required));
+		if (needed === undefined) continue;
+		const members = flagsDef[needed]?.flags;
+		const target = members ? `one of ${memberNames(members)}` : `"--${needed}"`;
+		throw new CrustError("VALIDATION", `Flag "--${name}" requires ${target}`);
 	}
 }
 
@@ -503,6 +592,12 @@ export function matchFlagToken(
 			// A stray `-` would print as `--`, which reads as the separator; name the whole token instead.
 			if (!spelling) return unknownFlag(short === "-" ? token : `-${short}`, short);
 			if (!flagTakesValue(spelling.def)) {
+				if (token[index] === "=") {
+					return new CrustError("PARSE", `Flag "-${short}" does not take a value.`, {
+						flag: spelling.canonicalName,
+						reason: "unexpected-value",
+					});
+				}
 				occurrences.push({ spelling, value: true });
 				continue;
 			}
@@ -544,12 +639,32 @@ export function matchFlagToken(
 	return unknownFlag(`--${name}`, name);
 }
 
-/** Record one occurrence under its canonical name; `multiple` keeps argv order across spellings. */
+/**
+ * Record one occurrence under its canonical name; `multiple` keeps argv order across spellings.
+ * A group member's is recorded under the group, where a second member is a conflict.
+ */
 function addFlagValue(
 	values: Record<string, ArgvFlagValue | undefined>,
-	{ canonicalName, def }: FlagSpelling,
+	{ canonicalName, def, group }: FlagSpelling,
 	value: string | boolean,
 ): void {
+	if (group !== undefined) {
+		const existing = values[group];
+		if (existing?.kind === "invalid") return;
+		values[group] =
+			existing?.kind === "member" && existing.flag !== canonicalName
+				? {
+						kind: "invalid",
+						error: exclusiveConflict(`"--${existing.flag}"`, `"--${canonicalName}"`),
+					}
+				: {
+						kind: "member",
+						flag: canonicalName,
+						value:
+							typeof value === "boolean" ? { kind: "boolean", value } : { kind: "string", value },
+					};
+		return;
+	}
 	const existing = values[canonicalName];
 	if (def.type === "count") {
 		values[canonicalName] = {
@@ -605,9 +720,12 @@ function tokenizeArgv(command: CommandNode, argv: readonly string[]) {
 		if (!token.pending) continue;
 
 		const flag = token.pending.canonicalName;
+		const { type } = token.pending.def;
 		const value = argv[index + 1];
-		// A next token starting with "-" more likely means a forgotten value; a lone `-` (stdin) is a value.
-		if (value === undefined || (value.length > 1 && value.startsWith("-"))) {
+		// A next token starting with "-" more likely means a forgotten value; a lone `-` (stdin)
+		// is a value, and so is a negative number for a numeric flag.
+		const negative = (type === "number" || type === "integer") && DECIMAL.test(value ?? "");
+		if (value === undefined || (value.length > 1 && value.startsWith("-") && !negative)) {
 			const hint =
 				value === undefined ? "" : `; to pass a value starting with "-", write --${flag}=<value>`;
 			throw new CrustError("PARSE", `Missing value for flag "--${flag}"${hint}`, {
@@ -633,6 +751,7 @@ const STRUCTURED_EXPECTATIONS: Readonly<Record<FlagDef["type"], string>> = {
 	number: "a number",
 	integer: "an integer",
 	count: "a count",
+	exclusive: "{ flag, value }",
 	boolean: "a boolean",
 	url: "a URL",
 	json: "a JSON value",
@@ -693,6 +812,31 @@ function coerceStructuredValue(
 
 function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue): ParsedFlagValue {
 	const label = `--${name}`;
+	if (def.flags) {
+		const { flag, value: memberInput } =
+			typeof value === "object" &&
+			value !== null &&
+			!Array.isArray(value) &&
+			!(value instanceof URL)
+				? (value as { readonly flag?: unknown; readonly value?: RunInputValue })
+				: {};
+		if (typeof flag !== "string" || !Object.hasOwn(def.flags, flag)) {
+			throw new CrustError(
+				"PARSE",
+				`Expected ${STRUCTURED_EXPECTATIONS.exclusive} for ${label}, with flag one of: ${Object.keys(def.flags).join(", ")}`,
+			);
+		}
+		const boolean = def.flags[flag]!.type === "boolean";
+		if (boolean !== (memberInput === undefined)) {
+			throw new CrustError(
+				"PARSE",
+				`Expected ${boolean ? `{ flag: "${flag}" }` : `{ flag: "${flag}", value }`} for ${label}`,
+			);
+		}
+		return memberValue(def, flag, memberInput, (member, memberDef, input) =>
+			input === undefined ? true : coerceStructuredFlag(member, memberDef, input),
+		);
+	}
 	// Only multiple flags interpret arrays as occurrences; scalar JSON can itself be an array.
 	if (def.multiple) {
 		if (!isOccurrenceArray(value)) {
@@ -1100,4 +1244,5 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 
 	validateRequiredArgs(command.args, parsed.args);
 	validateRequiredFlags(command.effectiveFlags, parsed.flags);
+	validateRequires(command.effectiveFlags, parsed);
 }

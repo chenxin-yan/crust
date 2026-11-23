@@ -22,6 +22,7 @@ function formatUsageSegment(segment: UsageSegment): string {
 		case "custom":
 			return green(segment.text);
 		case "command":
+		case "exclusive":
 		case "options":
 			return cyan(segment.text);
 		case "arg":
@@ -48,6 +49,12 @@ function formatCommandLabel(command: CommandDocumentation): string {
 	return command.aliases.length === 0 ? name : `${name} (${command.aliases.join(", ")})`;
 }
 
+function formatCommandDescription(command: CommandDocumentation): string {
+	const description = command.description ?? "";
+	if (command.deprecated === undefined) return description;
+	return `${description} ${dim(`[deprecated: ${command.deprecated}]`)}`.trim();
+}
+
 export function renderHelpText(
 	command: CommandSnapshot,
 	path: readonly string[] | undefined,
@@ -67,6 +74,7 @@ export function renderHelpText(
 							description: meta.description,
 							aliases: meta.aliases,
 							hidden: meta.hidden,
+							deprecated: meta.deprecated,
 						},
 						hasAction: false,
 						args: [],
@@ -79,8 +87,9 @@ export function renderHelpText(
 		path,
 	);
 	const heading = model.path.join(" ");
+	const description = formatCommandDescription(model);
 	const lines = [
-		model.description ? `${bold(heading)} - ${dim(model.description)}` : bold(heading),
+		description ? `${bold(heading)} - ${dim(description)}` : bold(heading),
 		"",
 		bold(cyan("Usage:")),
 		`  ${model.usageSegments.map(formatUsageSegment).join(" ")}`,
@@ -89,7 +98,9 @@ export function renderHelpText(
 		formatSection(
 			"Commands",
 			COMMAND_COLUMN_WIDTH,
-			model.children.map((child) => [formatCommandLabel(child), child.description ?? ""] as const),
+			model.children.map(
+				(child) => [formatCommandLabel(child), formatCommandDescription(child)] as const,
+			),
 		),
 		formatSection(
 			"Arguments",
@@ -112,7 +123,14 @@ export function renderHelpText(
 							flag.spellings.join(", ") +
 								(flag.type === "boolean" || flag.type === "count" ? "" : ` <${flag.type}>`),
 						),
-						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env),
+						formatDescription(
+							flag.description,
+							flag.default,
+							flag.choices,
+							dim,
+							flag.env,
+							flag.deprecated,
+						),
 					] as const,
 			),
 		),

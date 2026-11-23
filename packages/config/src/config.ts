@@ -24,6 +24,8 @@ type SettingType = "string" | "number" | "boolean";
 export type ConfigFlagDef = Extract<FlagDef, { type: SettingType; schema?: never }> & {
 	/** `false`: no flag; the setting comes from its environment variable, the files or its default. */
 	readonly flag?: false;
+	/** Each setting's flag is a record of its own, so it has no other flag to name. */
+	readonly requires?: never;
 };
 
 /** Settings keyed by name: the flag's name and the key in the files. */
@@ -48,8 +50,12 @@ const SETTING_PROPERTIES = {
 	default: true,
 	required: true,
 	flag: true,
+	hidden: true,
+	deprecated: true,
 	// A flag schema validates argv text; a file holds JSON values.
 	schema: false,
+	requires: false,
+	flags: false,
 } as const satisfies Record<AllKeys<ConfigFlagDef>, boolean>;
 
 /** A config file: `true` for its default name, or a file name of your own ending in `.json`. */

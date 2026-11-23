@@ -34,6 +34,12 @@ describe("formatDescription", () => {
 			"[env: APP_TOKEN]",
 		);
 	});
+
+	it("puts the deprecation first among the annotations", () => {
+		expect(formatDescription("Old", "x", undefined, undefined, "OLD", "Use --new.")).toBe(
+			'Old [deprecated: Use --new.] [env: OLD] [default: "x"]',
+		);
+	});
 });
 
 describe("buildCommandDocumentation", () => {
@@ -147,6 +153,69 @@ describe("buildCommandDocumentation", () => {
 		expect(model.flags[1]).toMatchObject({ negatable: false, spellings: ["--help"] });
 		// Accepted, but help does not offer it.
 		expect(model.flags[2]).toMatchObject({ negatable: true, spellings: ["--trace"] });
+	});
+
+	it("leaves hidden flags out, and marks deprecated flags and commands", async () => {
+		const model = await docs(
+			new Crust("app")
+				.flags({
+					secret: { type: "string", hidden: true },
+					old: { type: "string", deprecated: "Use --new.", hidden: true },
+					legacy: { type: "boolean", deprecated: "Use --modern." },
+				})
+				.add(defineCommand("scan", { deprecated: "Use `scout`." }, (c) => c.action(() => {})))
+				.action(() => {}),
+		);
+		expect(model.flags.map((flag) => [flag.name, flag.deprecated])).toEqual([
+			["legacy", "Use --modern."],
+		]);
+		expect(model.children[0]).toMatchObject({ name: "scan", deprecated: "Use `scout`." });
+	});
+
+	it("lists an exclusive group's members as flags and shows the group in usage", async () => {
+		const model = await docs(
+			new Crust("app")
+				.args({ name: "service", type: "string", required: true })
+				.flags({
+					scope: {
+						type: "exclusive",
+						required: true,
+						flags: {
+							"org-id": { type: "string", short: "o" },
+							all: { type: "boolean" },
+							legacy: { type: "string", hidden: true },
+						},
+					},
+					format: {
+						type: "exclusive",
+						flags: { json: { type: "boolean" }, limit: { type: "integer" } },
+					},
+				})
+				.action(() => {}),
+		);
+		expect(model.usage).toBe(
+			"app <service> (--org-id <string> | --all) [--json | --limit <integer>]",
+		);
+		expect(model.usageSegments.slice(2)).toEqual([
+			{ kind: "exclusive", text: "(--org-id <string> | --all)", required: true },
+			{ kind: "exclusive", text: "[--json | --limit <integer>]", required: false },
+		]);
+		expect(model.flags.map(({ name, group, spellings }) => [name, group, spellings])).toEqual([
+			["org-id", "scope", ["-o", "--org-id"]],
+			["all", "scope", ["--all"]],
+			["json", "format", ["--json"]],
+			["limit", "format", ["--limit"]],
+		]);
+		// Other flags still show `[options]`.
+		const withOptions = await docs(
+			new Crust("app")
+				.flags({
+					scope: { type: "exclusive", flags: { all: { type: "boolean" } } },
+					verbose: { type: "boolean" },
+				})
+				.action(() => {}),
+		);
+		expect(withOptions.usage).toBe("app [--all] [options]");
 	});
 
 	it("lists the single-dash form of one-character long spellings after the short", async () => {

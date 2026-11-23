@@ -118,6 +118,10 @@ function _typecheckDefineEnvRejectsFlagOnlyKeys() {
 	const unknownKey = { DEBUG: { type: "boolean", bogus: 1 } } as const;
 	// @ts-expect-error -- a pre-declared record is checked at the call too
 	defineEnv("env", unknownKey);
+	// @ts-expect-error -- an exclusive group's members are argv spellings
+	defineEnv("env", { SCOPE: { type: "exclusive", flags: { all: { type: "boolean" } } } });
+	// @ts-expect-error -- a deprecation warns about argv use
+	defineEnv("env", { OLD: { type: "string", deprecated: "Use NEW." } });
 	defineEnv("env", { PORT: { type: "integer", min: 1 } });
 }
 

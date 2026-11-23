@@ -376,6 +376,29 @@ describe("help", () => {
 		expect(plain).toContain("Manage issues");
 	});
 
+	it("renderHelp hides hidden flags, marks deprecated ones, and shows exclusive groups in usage", async () => {
+		const command = new Crust("app")
+			.flags({
+				secret: { type: "string", hidden: true, description: "Internal" },
+				old: { type: "string", deprecated: "Use --new.", description: "Old input" },
+				scope: {
+					type: "exclusive",
+					required: true,
+					flags: { "org-id": { type: "string" }, all: { type: "boolean", description: "All" } },
+				},
+			})
+			.add(defineCommand("scan", { deprecated: "Use scout.", description: "Scan" }, (cmd) => cmd))
+			.action(() => {});
+
+		const plain = stripAnsi(await renderHelp(await command.snapshot()));
+		const lines = plain.split("\n");
+		expect(lines).toContain("  app (--org-id <string> | --all) [options]");
+		expect(lines).toContain("  scan       Scan [deprecated: Use scout.]");
+		expect(lines).toContain("  --old <string>               Old input [deprecated: Use --new.]");
+		expect(lines).toContain("  --all                        All");
+		expect(plain).not.toContain("secret");
+	});
+
 	it("renderHelp omits the COMMANDS section when every subcommand is hidden", async () => {
 		const command = new Crust("app")
 			.add(

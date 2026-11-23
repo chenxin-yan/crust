@@ -134,11 +134,14 @@ export function registerFlag(
 	def = normalizeFlag(name, def);
 
 	if (process.env.CRUST_INTERNAL_BUILD !== "1") {
-		const existingName = Object.hasOwn(node.effectiveFlags, name)
-			? name
-			: flagSpellings(name, def)
-					.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
-					.find((existing) => existing !== undefined);
+		// A group's name is no spelling, so effective flag names are checked too.
+		const existingName = flagSpellings(name, def)
+			.map((spelling) =>
+				Object.hasOwn(node.effectiveFlags, spelling)
+					? spelling
+					: node.flagSpellings.get(spelling)?.canonicalName,
+			)
+			.find((existing) => existing !== undefined);
 		if (existingName !== undefined) {
 			throw new CrustError(
 				"DEFINITION",
@@ -150,7 +153,22 @@ export function registerFlag(
 
 	(source === "local" ? node.localFlags : node.ownedFlags)[name] = def;
 	node.effectiveFlags[name] = def;
-	const entry = { canonicalName: name, def, negatable: isFlagNegatable(def) } as const;
+	if (def.flags) {
+		for (const [member, memberDef] of Object.entries(def.flags)) {
+			registerSpellings(node, member, memberDef, name);
+		}
+	} else {
+		registerSpellings(node, name, def);
+	}
+}
+
+function registerSpellings(node: CommandNode, name: string, def: FlagDef, group?: string): void {
+	const entry = {
+		canonicalName: name,
+		def,
+		negatable: isFlagNegatable(def),
+		...(group !== undefined && { group }),
+	} as const;
 	node.flagSpellings.set(name, { ...entry, kind: "canonical" });
 	if (def.short !== undefined) node.flagSpellings.set(def.short, { ...entry, kind: "short" });
 	for (const alias of def.aliases ?? []) node.flagSpellings.set(alias, { ...entry, kind: "alias" });

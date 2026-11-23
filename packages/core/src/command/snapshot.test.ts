@@ -116,6 +116,40 @@ describe("snapshotCommand", () => {
 		expect(JSON.stringify(snapshot)).not.toContain(JSON.stringify(process.env.HOME));
 	});
 
+	it("projects hidden, deprecated, requires, and an exclusive group's members", async () => {
+		const snapshot = await new Crust("cli")
+			.flags({
+				old: { type: "string", hidden: true, deprecated: "Use --new.", requires: ["scope"] },
+				scope: {
+					type: "exclusive",
+					required: true,
+					flags: { "org-id": { type: "string", short: "o" }, all: { type: "boolean" } },
+				},
+			})
+			.add(defineCommand("scan", { deprecated: "Use `scout`." }, (c) => c.action(() => {})))
+			.snapshot();
+		expect(snapshot.flags).toEqual({
+			old: {
+				type: "string",
+				negatable: false,
+				hidden: true,
+				deprecated: "Use --new.",
+				requires: ["scope"],
+			},
+			scope: {
+				type: "exclusive",
+				required: true,
+				negatable: false,
+				flags: {
+					"org-id": { type: "string", short: "o", negatable: false },
+					all: { type: "boolean", negatable: false },
+				},
+			},
+		});
+		expect(Object.isFrozen(snapshot.flags.scope?.flags)).toBe(true);
+		expect(snapshot.subCommands.scan?.meta.deprecated).toBe("Use `scout`.");
+	});
+
 	it("marks the commands and flags an Extension contributes with its id", async () => {
 		const tooling = defineExtensionId("tooling");
 		const app = new Crust("cli")

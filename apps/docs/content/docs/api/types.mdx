@@ -95,6 +95,23 @@ A boolean flag takes no value: `--color=false` is a `PARSE` error. `--no-<name>`
 
 `delimiter` splits string argv occurrences and the environment text alike. It requires `multiple: true` and drops empty segments. Boolean argv switches are never split.
 
+`hidden: true` parses the flag as usual but leaves it out of help, man pages, completion, generated skills, search, and command input schemas. `deprecated: "message"` prints `Warning: flag "--name" is deprecated. message` on stderr once when the command line gives the flag, and help appends `[deprecated: message]`; command input schemas mark it `deprecated: true`. `requires: ["json"]` names flags of the same record the flag needs when given; another name is a compile error. See [Hidden and deprecated flags](/docs/guide/arguments-and-flags#hidden-and-deprecated-flags).
+
+`type: "exclusive"` declares mutually exclusive flags as one entry: `flags` holds the members, single-value core flags with their own spellings but no `default`, `required`, `negatable`, or `requires`, and `required: true` makes one member mandatory. The entry has no other keys. Its value is `{ flag, value }` for the member given (`{ flag }` for a boolean member), or `undefined`, and typed `run()` input takes the same shape. See [One of several flags](/docs/guide/arguments-and-flags#one-of-several-flags).
+
+```ts
+const flags = {
+  scope: {
+    type: "exclusive",
+    required: true,
+    flags: { "org-id": { type: "string" }, all: { type: "boolean" } },
+  },
+  jq: { type: "string", requires: ["json"] },
+  json: { type: "boolean" },
+} satisfies FlagsDef;
+// flags.scope: { flag: "org-id"; value: string } | { flag: "all" }
+```
+
 Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `negatable`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
 A schema-backed flag with `type: "json"` takes one value token (no `multiple` or `delimiter`) and parses it as JSON. The schema receives the parsed `JsonValue | undefined`, and structured input (`run()`, `--input`, MCP) passes the JSON value itself; a value that is not JSON data is a `PARSE` error. Its input type must accept JSON data, typed `run()` input takes that input type, and the schema's input JSON Schema is the flag's command input property.
@@ -130,7 +147,7 @@ Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from generated listings and suggestions without disabling routing. `sections` are rendered by documentation Extensions after their built-in sections.
+`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from generated listings and suggestions without disabling routing. `deprecated` prints a warning on stderr when the command line runs the command, and help marks it; it is independent of `hidden`. `sections` are rendered by documentation Extensions after their built-in sections.
 
 ### `CommandSectionInput`
 
