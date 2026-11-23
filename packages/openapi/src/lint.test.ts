@@ -178,6 +178,16 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 						requestBody: json(object({})),
 					}),
 				},
+				// One `flagName` entry would move both parameters to one new flag.
+				"/c": {
+					post: op("c", {
+						parameters: [
+							{ name: "request_body", in: "query", schema: { type: "string" } },
+							{ name: "request_body", in: "header", schema: { type: "string" } },
+						],
+						requestBody: json(object({})),
+					}),
+				},
 			}),
 		},
 		expected: [
@@ -191,6 +201,10 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				operationId: "b",
 				message: expect.stringContaining('the request body share the input name "request-body"'),
 				fix: 'Set `flagName` for the query parameter "request_body" in the operation\'s override',
+			},
+			{
+				operationId: "c",
+				fix: "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`",
 			},
 		],
 	},

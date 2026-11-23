@@ -169,7 +169,7 @@ my-cli api /users --paginate                       # every page, one JSON line e
 | `--paginate`                | Fetches every page through the `paginate` option, printing each body as one JSON line                                                                                                                          |
 
 - Fields form a JSON object body. For `GET` and `HEAD`, or when `--body` is given, they become query parameters instead.
-- A JSON object holds one value per key, so a key given twice in a field body, such as `-F tag=a -F tag=b`, fails with a `PARSE` error before any request; send a list or a nested value as JSON with `--body '{"tag":["a","b"]}'`. In the query, each one is sent: `?tag=a&tag=b`.
+- A key given twice, such as `-F tag=a -F tag=b`, fails with a `PARSE` error before any request, in the query too, since a JSON body holds one value per key. Send a list or a nested value as JSON with `--body '{"tag":["a","b"]}'`, or write a repeated query value in the path: `api '/users?tag=a&tag=b'`.
 - A body is sent with `Content-Type: application/json` unless a header sets it.
 
 #### Methods
@@ -229,10 +229,10 @@ The response body goes to stdout:
 - When stdout is not a terminal, such as a pipe, a file, or an `execute({ io })` sink, the body is written as its exact bytes, whatever its `Content-Type`, so `my-cli api /export.zip > export.zip` works and a text body keeps its line endings. Output captured by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, and so an [MCP](/docs/modules/mcp) tool result, is text: those bytes decoded as UTF-8, so a binary body arrives with replacement characters.
 - To a terminal, the body is printed as text, ending with exactly one newline; an empty body prints nothing. A body that is not valid UTF-8 can't be printed as text and fails the command with exit code 1 after the request, as `gh api` and `curl` refuse to print binary to a terminal; a non-2xx one is left out, and the command fails with the `ApiResponseError`.
 
-| Failure                                                                                                                                                                   | Result                                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Non-2xx response                                                                                                                                                          | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` and `headers` are the response's; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
-| `-F` without `=`, out of number range or with a key repeated in a field body, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                                                 |
+| Failure                                                                                                                                                   | Result                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-2xx response                                                                                                                                          | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` and `headers` are the response's; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
+| `-F` without `=`, out of number range or with a repeated key, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                                                 |
 
 The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`.
 
@@ -325,7 +325,7 @@ A generated command that would clash is left out of `acme.commands`, so the CLI 
 
 - Two operations that become the same command: the later one, in `api --list` order, is left out with `command-collision`, naming both.
 - An operation and a command you `.add()` to its group with the same name: the operation is left out and yours stays. The same goes for the `api` command: an operation that would be the root command `api`, or in a group `api` (such as one tagged `API`), is left out; set `group` or `name` in its override. To replace a generated command on purpose, set `exclude: true` in its override and add yours.
-- A parameter or body field whose flag would be a built-in one, `--request-body` or `--paginate`, is a `flag-collision`: set `flagName` for it in the operation's override, which keeps its input under another name.
+- A parameter or body field whose flag would be a built-in one, `--request-body` or `--paginate`, is a `flag-collision`: set `flagName` for it in the operation's override, which keeps its input under another name. Two parameters of one spec name, such as a query and a header `request_body`, would both move to the new name, so the fix there is one `bind` entry, a written command or `api`.
 - An alias of an added command, or a flag that clashes with an Extension's or a Context's (such as `--yes`), is a core `DEFINITION` error when the command is added or first used; `await app.snapshot()` in a test checks the whole tree.
 
 ## Overrides
@@ -578,7 +578,7 @@ Requests go through the global `fetch`, and the only retry is the [401 refresh](
 
 <include lang="ts">../../../examples/modules/openapi.ts#own-fetch</include>
 
-- It is called once per hop: the first request, each redirect and each `--paginate` page, with `redirect: "manual"`, since the client follows redirects itself. The 401 refresh still runs around it.
+- It is called once per hop: the first request, each redirect and each `--paginate` page. Where the client follows redirects, which is the default, it gets `redirect: "manual"`, since the client follows them itself; a request's own `"manual"` or `"error"` is passed as is. The 401 refresh still runs around it.
 - Each request arrives with the [`.auth()`](#authfn) headers already set where they may go. Keep credentials in `.auth()`: a header your `fetch` adds itself is sent on every hop, also to the other origins a redirect or a next page leads to.
 - A command that calls `call()` can read the wait from the error instead: `error.headers.get("retry-after")` of an `ApiResponseError`.
 

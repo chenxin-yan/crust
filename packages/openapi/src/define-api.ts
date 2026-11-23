@@ -60,7 +60,8 @@ export interface DefineApiOptions<Id extends string = string> {
 	readonly baseUrl: string;
 	/**
 	 * Sends every request instead of the global `fetch`: the first, each redirect and each next page
-	 * separately, with `redirect: "manual"` and the `.auth()` headers already set, so the app can add
+	 * separately, with `redirect: "manual"` where the client follows redirects itself, and the
+	 * `.auth()` headers already set, so the app can add
 	 * its own retry, proxy or logging. A 401 is still retried once after `.auth()` refreshes. Send
 	 * credentials through `.auth()`: headers this function adds itself also go to the other origins
 	 * redirects and next pages lead to.

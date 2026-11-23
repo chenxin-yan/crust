@@ -90,12 +90,14 @@ export async function userName<AuthDeps extends ContextMap>(
 //#endregion
 
 //#region own-fetch
-// The app's own rule: wait out a 429 as `Retry-After` asks, up to three tries.
+// The app's own rule: wait out a 429 that gives `Retry-After` in seconds, up to three tries.
+// Only a request without a body is sent again, since the first try may have read a streamed one.
 const patient = async (input: URL, init: RequestInit): Promise<Response> => {
 	for (let attempt = 1; ; attempt++) {
 		const response = await fetch(input, init);
-		const wait = Number(response.headers.get("retry-after"));
-		if (response.status !== 429 || attempt === 3 || !(wait >= 0 && wait <= 30)) return response;
+		const retryAfter = response.headers.get("retry-after") ?? "";
+		const wait = /^\d+$/.test(retryAfter) ? Number(retryAfter) : Infinity;
+		if (response.status !== 429 || attempt === 3 || init.body != null || wait > 30) return response;
 		await response.body?.cancel();
 		await setTimeout(wait * 1000, undefined, { signal: init.signal ?? undefined });
 	}

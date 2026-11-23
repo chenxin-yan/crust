@@ -283,7 +283,7 @@ export function planCommands(input: LintInput): {
 					const repeated = op.params.find(
 						(param) => param.in !== "cookie" && kebab(param.name) === kebab(field),
 					);
-					// The parameter keeps its input; the body field is sent only from `--body`.
+					// The parameter keeps its input; the body field is sent only from `--request-body`.
 					if (repeated !== undefined) continue;
 					inputs.push({
 						kind: "flag",
@@ -351,10 +351,10 @@ export function planCommands(input: LintInput): {
 			report(
 				"flag-collision",
 				`${label}: ${sources.slice(0, -1).join(", ")} and ${sources.at(-1)} share the input name "${name}"`,
-				fromSpec.length < same.length
-					? `Set \`flagName\` for the ${fromSpec.map(({ source }) => source).join(" and ")} in the operation's override`
-					: specNames.size === 1
-						? "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`"
+				specNames.size < fromSpec.length
+					? "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`"
+					: fromSpec.length < same.length
+						? `Set \`flagName\` for the ${fromSpec.map(({ source }) => source).join(" and ")} in the operation's override`
 						: "Set `flagName` for one of them in the operation's override",
 			);
 		}
