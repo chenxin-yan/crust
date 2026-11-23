@@ -91,7 +91,7 @@ console.log(source.startsWith(".Dd ")); // => true
 
 ## Page contents
 
-Each page documents its command: name, synopsis, description, `SUBCOMMANDS` (immediate visible children), `OPTIONS` (its effective flags, inherited ones included), `ARGUMENTS`, `EXAMPLES` from the command's `examples`, and `SEE ALSO`, which names the parent's page and each child's.
+Each page documents its command: name, synopsis, description (with its deprecation notice, if any), `SUBCOMMANDS` (immediate visible children), `OPTIONS` (its effective flags, inherited ones included), `ARGUMENTS`, `EXAMPLES` from the command's `examples`, and `SEE ALSO`, which names the parent's page and each child's, in name order.
 
 - Commands and flags of a [`.group()`](/docs/api/crust#grouptitle-block) are listed under a `.Ss` with its title. Grouped commands come first and the rest follow under `.Ss Additional commands`; ungrouped flags, including inherited ones, come first, without a subsection.
 - A value-taking flag shows its `valueName`, or its type, as its `Ar` argument. A flag that can repeat (`multiple`, or `type: "count"`) ends with `...`.

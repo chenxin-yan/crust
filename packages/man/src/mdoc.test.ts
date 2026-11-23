@@ -26,6 +26,7 @@ describe("renderManPageMdoc", () => {
 								(subcommand) => subcommand.args({ name: "key", type: "string" }).action(() => {}),
 							),
 						)
+						.add(defineCommand("get", (subcommand) => subcommand.action(() => {})))
 						.action(() => {}),
 			),
 		);
@@ -38,7 +39,9 @@ describe("renderManPageMdoc", () => {
 		expect(config).toContain(".Bd -literal\ndemo config\n.Ed");
 		expect(config).toContain(".Sh OVERVIEW\nconfig body\n.Sh DETAILS\nconfig details");
 		expect(config).not.toContain("config set body");
-		expect(config).toMatch(/\.Sh SEE ALSO\n\.Xr demo 1 ,\n\.Xr demo-config-set 1\n$/);
+		expect(config).toMatch(
+			/\.Sh SEE ALSO\n\.Xr demo 1 ,\n\.Xr demo-config-get 1 ,\n\.Xr demo-config-set 1\n$/,
+		);
 
 		const set = renderManPageMdoc({ root, path: ["config", "set"] });
 		expect(set).toContain(".Nm demo-config-set");
@@ -365,6 +368,9 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain("Old [deprecated: Use --new.]");
 		expect(mdoc).toContain("[deprecated: Use scout.]");
 		expect(mdoc).not.toContain("secret");
+		expect(renderManPageMdoc({ root: await app.snapshot(), path: ["scan"], section: 1 })).toContain(
+			".Sh DESCRIPTION\nNo description provided. [deprecated: Use scout.]\n",
+		);
 	});
 
 	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {

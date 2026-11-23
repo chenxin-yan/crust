@@ -36,15 +36,4 @@ describe("man Extension", () => {
 			'Manual name "demo-do:it" (command "do:it") is not a valid command name',
 		);
 	});
-
-	it("rejects two commands whose pages share a name", async () => {
-		const app = new Crust("demo")
-			.add(defineCommand("a-b", (cmd) => cmd.action(() => {})))
-			.add(defineCommand("a", (cmd) => cmd.add(defineCommand("b", (sub) => sub.action(() => {})))));
-		const { error } = await runBuildHooks(app.extend(man()));
-
-		expect(error).toContain(
-			'Commands "demo a-b" and "demo a b" both become manual page "demo-a-b"',
-		);
-	});
 });

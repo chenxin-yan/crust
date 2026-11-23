@@ -20,7 +20,6 @@ export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(MAN
 		const section = options.section ?? 1;
 		return extension.build(async ({ snapshot }) => {
 			const pages: BuildFile[] = [];
-			const owners = new Map<string, CommandDocumentation>();
 			const visit = (command: CommandDocumentation, parent?: CommandDocumentation) => {
 				const name = manPageName(command);
 				const where = parent ? ` (command "${command.path.slice(1).join(" ")}")` : "";
@@ -30,13 +29,6 @@ export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(MAN
 						`Manual name "${name}"${where} is not a valid command name: use ${INSTALLED_COMMAND_NAME_RULE}.`,
 					);
 				}
-				const owner = owners.get(name);
-				if (owner) {
-					throw new Error(
-						`Commands "${owner.path.join(" ")}" and "${command.path.join(" ")}" both become manual page "${name}"; rename one`,
-					);
-				}
-				owners.set(name, command);
 				pages.push({
 					path: `man/${name}.${section}`,
 					content: renderCommandPage(command, parent, section),

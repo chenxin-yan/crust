@@ -138,7 +138,16 @@ export function renderCommandPage(
 		...bodyLines(command.usage),
 		".Ed",
 		".Sh DESCRIPTION",
-		...bodyLines(description),
+		...bodyLines(
+			formatDescription(
+				description,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				command.deprecated,
+			),
+		),
 	];
 
 	// Each child has its own page; this one lists only the immediate children.
@@ -211,7 +220,7 @@ export function renderCommandPage(
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		lines.push(...bodyLines(metadataSection.body));
 	}
-	const related = [...(parent ? [parent] : []), ...command.children];
+	const related = [...(parent ? [parent] : []), ...[...command.children].sort(byName)];
 	if (related.length > 0) {
 		lines.push(
 			".Sh SEE ALSO",
