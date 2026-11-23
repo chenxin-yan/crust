@@ -337,19 +337,6 @@ export async function passThroughRequest(
 	}
 
 	const fields = (flags.field ?? []).map(parseField);
-	// A JSON object holds one value per key, so a repeated key would silently keep only the last;
-	// it is refused in the query too, so the rule does not depend on where the fields go.
-	const keys = new Set<string>();
-	for (const [key] of fields) {
-		if (keys.has(key)) {
-			throw new CrustError(
-				"PARSE",
-				`Invalid -F value for "${key}": the key is given more than once. Send a list or a nested value as JSON with --body, or write a repeated query value in the path.`,
-				{ flag: "field" },
-			);
-		}
-		keys.add(key);
-	}
 	const body = flags.body === undefined ? undefined : await readBodyFrom(flags.body, signal);
 	const method = parseMethod(
 		flags.method ?? (fields.length > 0 || body !== undefined ? "POST" : "GET"),
@@ -368,6 +355,19 @@ export async function passThroughRequest(
 			url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
 			path = url.href;
 		} else {
+			// A JSON object holds one value per key: a repeated key would silently keep only the last.
+			// The query keeps every value, as a list parameter is sent (`tag=a&tag=b`).
+			const keys = new Set<string>();
+			for (const [key] of fields) {
+				if (keys.has(key)) {
+					throw new CrustError(
+						"PARSE",
+						`Invalid -F value for "${key}": the key is given more than once in a JSON body. Send a list or a nested value as JSON with --body.`,
+						{ flag: "field" },
+					);
+				}
+				keys.add(key);
+			}
 			requestBody = JSON.stringify(Object.fromEntries(fields));
 		}
 	}

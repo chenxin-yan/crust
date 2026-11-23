@@ -479,17 +479,11 @@ describe("api <path>", () => {
 		});
 	});
 
-	it.each([
-		["a JSON body", []],
-		["the query of -X GET", ["-X", "GET"]],
-		// Checked before --body is read, so a missing file does not hide the error.
-		["the query beside --body", ["--body", "@missing-body.json"]],
-	])("rejects a -F key given twice for %s, pointing to --body", async (_, flags) => {
+	it("rejects a -F key given twice in a JSON body, pointing to --body", async () => {
 		const calls = stubFetch();
 		const { stderr, exitCode } = await captureExecute(buildApp(), [
 			"api",
 			"/users",
-			...flags,
 			"-F",
 			"tag=a",
 			"-F",
@@ -498,26 +492,26 @@ describe("api <path>", () => {
 
 		expect(exitCode).toBe(2);
 		expect(stderr).toContain(
-			'Invalid -F value for "tag": the key is given more than once. Send a list or a nested value as JSON with --body, or write a repeated query value in the path.',
+			'Invalid -F value for "tag": the key is given more than once in a JSON body. Send a list or a nested value as JSON with --body.',
 		);
 		expect(calls).toEqual([]);
 	});
 
-	it("sends fields as query parameters for -X GET, after the path's own query", async () => {
+	it("sends fields as query parameters for -X GET, a repeated key as often as given", async () => {
 		const calls = stubFetch();
 		await captureExecute(buildApp(), [
 			"api",
-			"/users?sort=name&page=1",
+			"/users?sort=name",
 			"-X",
 			"get",
 			"-F",
 			"page=2",
 			"-F",
-			"size=10",
+			"page=3",
 		]);
 
 		expect(calls[0]).toMatchObject({
-			url: "https://api.example.com/v1/users?sort=name&page=1&page=2&size=10",
+			url: "https://api.example.com/v1/users?sort=name&page=2&page=3",
 			method: "GET",
 			body: undefined,
 		});
