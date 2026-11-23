@@ -270,7 +270,7 @@ Runtime packages can be archived too, but must keep the layout of `.crust/root/`
 }
 ```
 
-Create `templates/` in your project, then build. Read the shipped copy with [`artifactPath("templates")`](/docs/api/crust#artifactpathpath) from `@crustjs/core`, not a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable.
+Create `templates/` in your project, then build. Read it with [`artifactPath("templates")`](/docs/api/crust#artifactpathpath) from `@crustjs/core`, not a path relative to the working directory. It finds the shipped copy from the staged tree, an npm install, or a standalone executable, and `templates/` in your project when you run from source, so edits show up without a build.
 
 npm never publishes a `.gitignore`, `.npmignore`, or `.npmrc`, so `crust build` rejects them inside included directories. Store them as `_gitignore` and similar, then restore the name when your CLI copies the file; [`scaffold()`](/docs/modules/create#copied-files) does this for you.
 

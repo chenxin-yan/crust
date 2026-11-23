@@ -142,10 +142,33 @@ describe("artifactPath", () => {
 	});
 
 	it("resolves the build output directory while crust build prepares the snapshot", async () => {
-		// .crust/root is wiped at this point; sections must read what earlier hooks wrote.
+		// .crust/root holds the previous build; sections must read what earlier hooks wrote.
 		await writeFile(join(tmpDir, "package.json"), "{}");
+		await mkdir(join(tmpDir, "src"));
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
+		await writeFile(process.argv[1], "");
 		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, ".crust", "artifacts"));
+		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
+	});
+
+	it("resolves a path under a crust.include folder to that folder in the project from source", async () => {
+		await writeFile(
+			join(tmpDir, "package.json"),
+			JSON.stringify({ crust: { include: ["./templates", "assets/icons/", 1] } }),
+		);
+		await mkdir(join(tmpDir, "src"));
+		process.argv[1] = join(tmpDir, "src", "cli.ts");
+		await writeFile(process.argv[1], "");
+		expect(artifactPath("templates")).toBe(join(tmpDir, "templates"));
+		expect(artifactPath("templates/base/a.txt")).toBe(join(tmpDir, "templates", "base", "a.txt"));
+		expect(artifactPath("assets/icons/x.png")).toBe(join(tmpDir, "assets", "icons", "x.png"));
+		// Build-only artifacts, and a name that only starts like an include, still come from the last build.
+		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
+		expect(artifactPath("assets")).toBe(join(tmpDir, ".crust", "root", "assets"));
+		expect(artifactPath("templates-old")).toBe(join(tmpDir, ".crust", "root", "templates-old"));
+		// Also while crust build prepares the snapshot, before the folder is staged.
+		vi.stubEnv(BUILD_OUT_DIR_ENV, join(tmpDir, ".crust", "artifacts"));
+		expect(artifactPath("templates/base")).toBe(join(tmpDir, "templates", "base"));
 		expect(artifactPath("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
 	});
 
