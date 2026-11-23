@@ -195,6 +195,7 @@ Crust doesn't detect agents or add a global `--no-input`: the TTY check is the r
 - Only the application's own commands are tools; Extension commands such as `completion`, `schema`, `skills`, and [`api`](#the-api-command) are left out unless `include` names them.
 - Flags with an `env` binding are optional tool inputs: a variable set in the client's `env` configuration reaches the server, as it would reach the CLI in a shell.
 - `.output()` schemas and generator events become the tool's output schema and progress notifications.
+- A command's [`mcp` key](/docs/modules/mcp#the-mcp-key) keeps it out of the tools (`mcp: false`) or gives the tool its annotations, such as `readOnlyHint`.
 - What a call writes to stderr, next steps included, follows its result in the tool result.
 - With [`discovery: "progressive"`](/docs/modules/mcp#discovery), a large CLI lists three tools instead of one per command: `search_tools` finds tools for a task in words, `get_tool_details` returns one tool's schemas, and `call_tool` calls it.
 
@@ -222,4 +223,4 @@ Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/
 - Commands that change things call [`confirmation()`](/docs/modules/extensions/confirmation)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
-- Optionally: an MCP server, a packaged skill, and an `api` command. `exclude` commands from the MCP server that an agent should not run unattended (generated API commands that write and delete are tools too; a [rule](/docs/modules/openapi#which-to-use) can leave them out), and set secrets through `env` bindings rather than tool arguments.
+- Optionally: an MCP server, a packaged skill, and an `api` command. Set [`mcp: false`](/docs/modules/mcp#the-mcp-key) on commands an agent should not run unattended (generated API commands that write and delete are tools too; a [rule](/docs/modules/openapi#which-to-use) can leave them out), and set secrets through `env` bindings rather than tool arguments.

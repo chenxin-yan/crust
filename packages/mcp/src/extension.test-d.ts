@@ -1,12 +1,6 @@
-import {
-	type AnyCrust,
-	type CommandShapeAt,
-	Crust,
-	defineCommand,
-	type RunInput,
-} from "@crustjs/core";
+import { type CommandShapeAt, Crust, defineCommand, type RunInput } from "@crustjs/core";
 
-import { mcpExtension } from "./extension.ts";
+import { mcp } from "./extension.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -21,7 +15,7 @@ function _typecheckKeepsHostCommandTreePrecise() {
 			.flags({ "dry-run": { type: "boolean" } })
 			.action(({ args }) => ({ target: args.target })),
 	);
-	const app = new Crust("cli").add(deploy).extend(mcpExtension({ app: (): AnyCrust => app }));
+	const app = new Crust("cli").add(deploy).extend(mcp());
 	type Shape = (typeof app)["_types"]["shape"];
 
 	type DeployInput = RunInput<CommandShapeAt<Shape, readonly ["deploy"]>>;
@@ -44,4 +38,18 @@ function _typecheckKeepsHostCommandTreePrecise() {
 	void app.run(["nonexistent"]);
 	// @ts-expect-error -- unknown flags stay rejected
 	void app.run(["mcp", "config"], { flags: { other: true } });
+}
+
+// `mcp` on command metadata takes `false` or the MCP specification's annotation names.
+function _typecheckMcpKey() {
+	defineCommand("status", { mcp: { readOnlyHint: true, title: "Status" } }, (c) =>
+		c.action(() => {}),
+	);
+	defineCommand("login", { mcp: false }, (c) => c.action(() => {}));
+	// @ts-expect-error -- `true` is not a value: a command is a tool unless it says `false`
+	defineCommand("on", { mcp: true }, (c) => c.action(() => {}));
+	// @ts-expect-error -- hints use the specification's names
+	defineCommand("reset", { mcp: { destructive: true } }, (c) => c.action(() => {}));
+	// @ts-expect-error -- `app` is gone: the Extension serves the tree it runs in
+	mcp({ app: () => new Crust("cli") });
 }

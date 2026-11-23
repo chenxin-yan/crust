@@ -1,6 +1,6 @@
 //#region extension
-import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
-import { mcpExtension } from "@crustjs/mcp";
+import { Crust, defineCommand } from "@crustjs/core";
+import { mcp } from "@crustjs/mcp";
 
 const deploy = defineCommand("deploy", { description: "Deploy the app" }, (command) =>
 	command
@@ -9,33 +9,46 @@ const deploy = defineCommand("deploy", { description: "Deploy the app" }, (comma
 		.action(({ args, flags }) => ({ target: args.target, dryRun: flags["dry-run"] === true })),
 );
 
-// `app` is read when `mcp` runs, so the callback may return the variable being
-// assigned; the return annotation breaks the type-inference cycle.
+// `mcp` serves the tree it runs in, so commands added after `.extend(mcp())` are tools too.
 export const app = new Crust("my-cli", { description: "Manage deployments", version: "1.2.3" })
+	.extend(mcp())
 	.add(deploy)
-	.add(defineCommand("wipe", { description: "Delete everything" }, (c) => c.action(() => {})))
-	.extend(mcpExtension({ app: (): AnyCrust => app, exclude: [["wipe"]] }));
+	.add(
+		defineCommand("wipe", { description: "Delete everything", mcp: false }, (c) =>
+			c.action(() => {}),
+		),
+	);
+//#endregion
+
+//#region key
+export const status = defineCommand(
+	"status",
+	{ description: "Show deployment status", mcp: { readOnlyHint: true, openWorldHint: false } },
+	(command) => command.action(() => ({ healthy: true })),
+);
+
+// Opens a browser; an agent cannot finish it.
+export const login = defineCommand("login", { description: "Sign in", mcp: false }, (command) =>
+	command.action(() => {}),
+);
 //#endregion
 
 //#region discovery
 // Lists search_tools, get_tool_details and call_tool instead of every tool.
-export const large = new Crust("my-cli")
-	.add(deploy)
-	.extend(mcpExtension({ app: (): AnyCrust => large, discovery: "progressive" }));
+export const large = new Crust("my-cli").extend(mcp({ discovery: "progressive" })).add(deploy);
 //#endregion
 
 //#region headless
 import { serveStdio } from "@crustjs/mcp";
 
-await serveStdio(app, { exclude: [["wipe"]] });
+await serveStdio(app);
 //#endregion
 
 //#region manifest
 import { toolsFromSnapshot } from "@crustjs/mcp";
 
-// Exclusions are per manifest or server, not part of the snapshot: without this
-// option `wipe` would be listed too.
-const tools = toolsFromSnapshot(await app.snapshot(), { exclude: [["wipe"]] });
+// `wipe` sets `mcp: false`, so it is not listed.
+const tools = toolsFromSnapshot(await app.snapshot());
 console.log(tools.map((tool) => tool.name)); // => ["deploy"]
 console.log(tools[0]?.inputSchema);
 // => {

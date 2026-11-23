@@ -1,11 +1,11 @@
-import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { json } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
 	currentLaunch,
 	MCP_CLIENTS,
-	mcpExtension,
+	mcp,
 	renderClaudeAddCommand,
 	renderClientConfig,
 	resolveLaunch,
@@ -13,8 +13,8 @@ import {
 
 const app = new Crust("demo", { version: "2.0.0" })
 	.add(defineCommand("deploy", (c) => c.action(() => "deployed")))
-	.add(defineCommand("wipe", (c) => c.action(() => "gone")))
-	.extend(mcpExtension({ app: (): AnyCrust => app, exclude: [["wipe"]] }));
+	.add(defineCommand("wipe", { mcp: false }, (c) => c.action(() => "gone")))
+	.extend(mcp());
 
 async function capture(argv: string[]) {
 	const stdout: string[] = [];
@@ -29,7 +29,7 @@ async function capture(argv: string[]) {
 	return { exitCode, stdout, stderr };
 }
 
-describe("mcpExtension", () => {
+describe("mcp", () => {
 	it("prints parseable client JSON on stdout and Claude's one-liner on stderr", async () => {
 		const claude = await capture(["mcp", "config"]);
 		expect(claude.exitCode).toBe(0);
@@ -48,10 +48,7 @@ describe("mcpExtension", () => {
 	});
 
 	it("returns the client JSON, so --json prints it as one JSON string", async () => {
-		const withJson = new Crust("demo").extend(
-			json(),
-			mcpExtension({ app: (): AnyCrust => withJson }),
-		);
+		const withJson = new Crust("demo").extend(json(), mcp());
 		let stdout = "";
 		let stderr = "";
 		const exitCode = await withJson.execute({
@@ -71,9 +68,7 @@ describe("mcpExtension", () => {
 			command: "/usr/bin/node",
 			args: ["--env-file=/proj/.env", "/proj/cli.ts", "mcp"],
 		};
-		const custom = new Crust("custom").extend(
-			mcpExtension({ app: (): AnyCrust => custom, launch }),
-		);
+		const custom = new Crust("custom").extend(mcp({ launch }));
 		const stdout: string[] = [];
 		const stderr: string[] = [];
 		expect(
