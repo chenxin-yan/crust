@@ -177,6 +177,8 @@ The `prompts()` Extension from `@crustjs/prompts/extension` asks on a terminal f
 | Anything else                                 | Text, [`input()`](#inputoptions-io), converted as the same word on the command line: its `type` or custom `parse` |
 
 - A value from argv, an environment variable, or another Extension, such as [`--input`](/docs/modules/extensions/json-input), is never asked for. A value that only has its `default` is asked for, with the default preselected; Enter keeps it.
+- An empty answer to a question without a default leaves an optional value unset; a required one shows `A value is required` and stays open, as an empty pick does for a required list.
+- A positional argument after one that is still omitted is not asked for: the command line could not take it either.
 - Text the command line would reject shows the command line's own error, and the question stays open. A flag validated by a `schema` is checked after the questions, with the other values.
 
 ```text

@@ -40,6 +40,7 @@ const app = new Crust("acme")
 					type: "string",
 					multiple: true,
 					choices: ["lint", "test", "release"],
+					required: true,
 					prompt: "Features",
 				},
 				tags: { type: "string", multiple: true, prompt: "Tags" },
@@ -73,6 +74,40 @@ const app = new Crust("acme")
 				const size: number = flags.size;
 				stdout(`port=${port} origin=${origin.href} out=${flags.out} size=${size}`);
 			}),
+	)
+	.command("new", (c) =>
+		c
+			.args(
+				{ name: "name", type: "string", default: "my-app", prompt: "Project name" },
+				{ name: "dir", type: "string", prompt: "Directory" },
+			)
+			.flags({
+				template: {
+					type: "string",
+					choices: ["vanilla", "vue"],
+					default: "vue",
+					prompt: "Framework",
+				},
+				features: {
+					type: "string",
+					multiple: true,
+					choices: ["lint", "test"],
+					default: ["test"],
+					prompt: "Features",
+				},
+				git: { type: "boolean", default: true, prompt: "Use git?" },
+				description: { type: "string", prompt: "Description" },
+			})
+			.action(({ args, flags, stdout }) =>
+				stdout(
+					`name=${args.name} dir=${args.dir} template=${flags.template} features=${String(flags.features)} git=${flags.git} description=${flags.description}`,
+				),
+			),
+	)
+	.command("copy", (c) =>
+		c
+			.args({ name: "from", type: "string" }, { name: "to", type: "string", prompt: "Destination" })
+			.action(({ args, stdout }) => stdout(`copy ${args.from} ${args.to}`)),
 	)
 	.add(deploy)
 	.add(db);
@@ -167,6 +202,47 @@ describe("prompts()", () => {
 		expect(run.screen()).not.toContain("Tags");
 	});
 
+	it("keeps every default on Enter, and leaves an optional value without one unset", async () => {
+		const run = runInteractive(app, ["new"]);
+		const result = await answer(
+			run,
+			[/Project name/, ""],
+			// A later positional follows the kept default.
+			[/Directory/, "out"],
+			[/Framework/, ""],
+			[/Features/, ""],
+			[/Use git\?/, ""],
+			[/Description/, ""],
+		);
+		expect(result).toMatchObject({
+			stdout: "name=my-app dir=out template=vue features=test git=true description=undefined\n",
+			stderr: "",
+			exitCode: 0,
+		});
+	});
+
+	it("asks for no positional after an omitted one", async () => {
+		const run = runInteractive(app, ["copy"]);
+		expect(await run.done).toEqual({
+			stdout: "copy undefined undefined\n",
+			stderr: "",
+			exitCode: 0,
+		});
+		expect(run.screen()).not.toContain("Destination");
+	});
+
+	it("refuses an empty pick for a required list and asks again", async () => {
+		const run = runInteractive(app, ["create", "web", "--template", "vanilla"]);
+		await run.waitFor(/Features/);
+		run.keys("return");
+		await run.waitFor(/At least one item must be selected/);
+		run.keys("space", "return");
+		expect(await run.done).toMatchObject({
+			stdout: "name=web template=vanilla features=lint tags=undefined\n",
+			exitCode: 0,
+		});
+	});
+
 	const serveFlags = {
 		port: ["--port", "80"],
 		origin: ["--origin", "https://example.com"],
@@ -183,10 +259,11 @@ describe("prompts()", () => {
 			"https://api.example.com",
 			"origin=https://api.example.com/",
 		],
-		["out", /Output folder/, "", "Path for --out cannot be empty", "/tmp/site", "out=/tmp/site"],
+		// A path takes any text but an empty one, which is refused as a required value.
+		["out", /Output folder/, "", "A value is required", "/tmp/site", "out=/tmp/site"],
 		["size", /Upload limit/, "big", "use a number of kilobytes, such as 10k", "10k", "size=10240"],
 	] as const)(
-		"shows the command line's error for a bad %s and asks again",
+		"shows the error for a bad %s and asks again",
 		async (flag, question, bad, error, good, expected) => {
 			const others = Object.entries(serveFlags).flatMap(([name, argv]) =>
 				name === flag ? [] : argv,

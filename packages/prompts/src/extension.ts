@@ -39,8 +39,9 @@ const PROMPTS: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:prompts");
 /**
  * Asks for `def`'s value and binds the answer: yes/no for a boolean, a list for `choices`
  * (several picks for a list value), otherwise text, converted as the same word on the command
- * line and asked again with the error until it converts. Asks nothing for a list value without
- * `choices`, a count flag, or an exclusive group.
+ * line and asked again with the error until it converts. An empty answer without a default
+ * leaves an optional value unset and is refused for a required one. Asks nothing for a list
+ * value without `choices`, a count flag, or an exclusive group.
  */
 async function ask(
 	def: ArgSnapshot | FlagSnapshot,
@@ -53,18 +54,26 @@ async function ask(
 		bindBoolean(await confirm({ message, default: def.default === true }));
 	} else if (def.choices && list) {
 		const preselected = Array.isArray(def.default) ? def.default.map(String) : undefined;
-		bindText(await multiselect({ message, choices: def.choices, default: preselected }));
+		bindText(
+			await multiselect({
+				message,
+				choices: def.choices,
+				default: preselected,
+				required: def.required,
+			}),
+		);
 	} else if (def.choices) {
 		const preselected = typeof def.default === "string" ? def.default : undefined;
 		bindText(await select({ message, choices: def.choices, default: preselected }));
 	} else if (!list && def.type !== "count" && def.type !== "exclusive") {
-		const preselected = def.default === undefined ? undefined : String(def.default);
 		await input({
 			message,
-			default: preselected,
-			// The default stays as declared: its text may not convert, as for a custom `parse`.
+			// A kept default is bound too, so a later positional argument can follow it; core
+			// parses declared defaults as text, so it converts as declared.
+			default: def.default === undefined ? undefined : String(def.default),
 			validate: (answer) => {
-				if (answer !== preselected) bindText(answer);
+				if (answer !== "") bindText(answer);
+				else if (def.required) throw new Error("A value is required");
 			},
 		});
 	}
@@ -85,14 +94,17 @@ export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension(PROMPTS
 			if (!ctx.stderr.isTTY || !canPrompt()) return;
 			const missing = (source: string | undefined) => source === undefined || source === "default";
 			for (const arg of ctx.command.args) {
-				if (arg.prompt === undefined || !missing(ctx.sources.args[arg.name])) continue;
-				await ask(
-					arg,
-					arg.prompt,
-					arg.variadic !== undefined,
-					(text) => ctx.bindText({ args: { [arg.name]: text } }),
-					(value) => ctx.bindInput({ args: { [arg.name]: value } }),
-				);
+				if (arg.prompt !== undefined && missing(ctx.sources.args[arg.name])) {
+					await ask(
+						arg,
+						arg.prompt,
+						arg.variadic !== undefined,
+						(text) => ctx.bindText({ args: { [arg.name]: text } }),
+						(value) => ctx.bindInput({ args: { [arg.name]: value } }),
+					);
+				}
+				// A positional argument cannot follow an omitted one, so asking for it could never bind.
+				if (missing(ctx.sources.args[arg.name])) break;
 			}
 			for (const [name, flag] of Object.entries(ctx.command.flags)) {
 				if (flag.prompt === undefined || !missing(ctx.sources.flags[name])) continue;
