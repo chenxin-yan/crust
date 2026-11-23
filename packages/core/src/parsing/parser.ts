@@ -23,7 +23,7 @@ import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { applySchemas } from "./schema.ts";
 import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
-/** Environment variables consulted by `FlagDef.env`; `process.env` unless an invocation passes its own. */
+/** Environment variables consulted by `FlagDef.env`; `parseArgs` defaults to `process.env`. */
 export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 
 // ────────────────────────────────────────────────────────────────────────────

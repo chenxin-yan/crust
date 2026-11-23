@@ -52,10 +52,10 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 <include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
 - Prompts, progress, and the action's `stderr` draw on the terminal; `screen()` returns it as plain text. The action's `stdout` is captured apart, as a pipe: read it with the handle's `stdout()` method or from `done`.
-- `waitFor()` polls the screen and defaults to a 5000 ms timeout. It fails as soon as the run ends without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
+- `waitFor()` polls the screen and defaults to a 5000 ms timeout; on a timeout it cancels the run. It fails as soon as the run ends without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
 - `type(text)` types text. `keys()` presses named keys (`"return"`, `"up"`, `"space"`, `"escape"`, …) and `ctrl+<letter>`; any other name is a compile error.
 - `resize(columns, rows)` resizes the terminal: later output wraps at the new width, `stderr.columns` reports it, and the terminal emits `resize`. It starts at 80 by 24.
-- `cancel()` cancels the run as Ctrl-C does: a waiting prompt, or any work that honors [`signal`](/docs/guide/error-handling#cancellation), ends it with exit code `130`.
+- `cancel()` cancels the run as Ctrl-C does, with `signal.reason.cause` set to `"SIGINT"`: a waiting prompt, or any work that honors [`signal`](/docs/guide/error-handling#cancellation), ends it with exit code `130`.
 - `done` resolves after cleanup with `stdout`, `stderr` (what the run wrote to stderr, without prompt frames), and `exitCode`, as `captureExecute()` does. It never rejects: a failure is its rendered error and exit code.
 
 The action's `stdin` is the terminal. The fake terminal counts as interactive even when `CI` is set, so a test that answers a [`confirm()`](/docs/modules/extensions/confirm) prompt passes on CI runners too. Test reading piped stdin and `--input -` with `captureExecute()`'s `stdin` option.
@@ -72,7 +72,7 @@ Options for `captureExecute()` and `runInteractive()`:
 
 <include lang="ts">../../../examples/modules/testing.ts#env</include>
 
-The environment and the working directory belong to the process, so one run at a time may replace them: a second call with `env` or `cwd` while one is running throws, and so does `withEnv()`. Run these tests one after another (Vitest runs the tests of one file in order unless they are `concurrent`). For `runInteractive()`, the run lasts until `done` settles.
+The environment and the working directory belong to the process, so one run at a time may replace them: a call with `env` or `cwd`, or `withEnv()`, throws while another run is active. A run without them that starts during a replacement sees the replaced environment and directory. Run these tests one after another (Vitest runs the tests of one file in order unless they are `concurrent`). For `runInteractive()`, the replacement lasts until `done` settles: a `waitFor()` that times out cancels the run, and a test that can fail before awaiting `done` otherwise should call `cancel()`, for example in `afterEach`.
 
 <auto-type-table path="../../../../../packages/testing/src/capture.ts" name="CaptureOptions" />
 

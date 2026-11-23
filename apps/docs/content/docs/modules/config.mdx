@@ -100,7 +100,6 @@ What differs from a flag:
 
 - Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `.flags()` throws a `DEFINITION` `CrustError` for it.
 - In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a `noNegate` boolean only `true`.
-- `flag: false` settings read `process.env` even under `run({ env })`, because a Context's setup does not get the invocation's environment.
 
 ### One config per app
 

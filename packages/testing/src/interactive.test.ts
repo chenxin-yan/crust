@@ -119,8 +119,12 @@ describe("runInteractive", () => {
 		expect(run.screen()).toContain(`${"x".repeat(20)}\n${"x".repeat(10)}`);
 	});
 
-	it("cancels a waiting prompt with exit code 130", async () => {
-		const app = new Crust("test-cli").action(async () => {
+	it("cancels a waiting prompt with exit code 130, as Ctrl-C does", async () => {
+		let cause: unknown;
+		const app = new Crust("test-cli").action(async ({ signal }) => {
+			signal.addEventListener("abort", () => {
+				cause = (signal.reason as Error).cause;
+			});
 			await input({ message: "Name?" });
 		});
 
@@ -129,6 +133,22 @@ describe("runInteractive", () => {
 		run.cancel();
 
 		expect(await run.done).toMatchObject({ exitCode: 130 });
+		expect(cause).toBe("SIGINT");
+	});
+
+	it("cancels the run when waitFor times out, so the environment is restored", async () => {
+		vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
+		try {
+			const app = new Crust("test-cli").action(async () => {
+				await input({ message: "Name?" });
+			});
+			const run = runInteractive(app, [], { env: {} });
+			await expect(run.waitFor(/never rendered/, 50)).rejects.toThrow("timed out");
+			expect(await run.done).toMatchObject({ exitCode: 130 });
+			expect(process.env.CRUST_TEST_TOKEN).toBe("from-shell");
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("resolves done with the failure's exit code and rendered error", async () => {

@@ -110,6 +110,20 @@ describe("captureExecute", () => {
 		);
 	});
 
+	it("rejects a replacing run while another run is active", async () => {
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const app = new Crust("test-cli").action(async () => {
+			await gate;
+		});
+		const plain = captureExecute(app, []);
+		await expect(captureExecute(app, [], { env: {} })).rejects.toThrow("one after another");
+		release();
+		expect((await plain).exitCode).toBe(0);
+	});
+
 	it("restores the environment when withEnv's function throws", async () => {
 		const before = { ...process.env };
 		await expect(

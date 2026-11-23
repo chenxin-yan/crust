@@ -56,7 +56,7 @@ export interface InteractiveRun {
 	 * terminal emits `resize`.
 	 */
 	resize(columns: number, rows: number): void;
-	/** Cancel the run as Ctrl-C does: a prompt, or any work that honors `ctx.signal`, ends with exit code 130. */
+	/** Cancel the run as Ctrl-C does: a prompt, or any work that honors `signal`, ends with exit code 130. */
 	cancel(): void;
 	/** What the terminal shows: prompts and stderr, as plain text. */
 	screen(): string;
@@ -70,7 +70,7 @@ export interface InteractiveRun {
  * Run `argv` through `app.execute()` on a fake terminal: prompts and `stderr` draw on it and read
  * keys from it, and `stdout` is captured apart, as a pipe. `options.env` and `options.cwd`
  * replace the process's until `done` settles, and captured text is plain unless `options.raw`
- * is set. Throws while another run has replaced the environment or working directory.
+ * is set. Throws for `env` or `cwd` while another run is active.
  */
 export function runInteractive(
 	app: ExecutableApp,
@@ -103,6 +103,10 @@ export function runInteractive(
 			return terminal.columns;
 		},
 	};
+	const cancel = () =>
+		controller.abort(
+			Object.assign(new DOMException("Cancelled", "AbortError"), { cause: "SIGINT" }),
+		);
 	let exitCode: number | undefined;
 	const done = isolate(options, () =>
 		withTerminalIO(harness.io, () =>
@@ -137,6 +141,8 @@ export function runInteractive(
 					);
 				}
 				if (Date.now() > deadline) {
+					// A failing test may never await `done`; ending the run restores `env` and `cwd`.
+					cancel();
 					throw new Error(
 						`waitFor(${matcher}) timed out after ${timeoutMs}ms. Screen:\n${harness.screen()}`,
 					);
@@ -147,7 +153,7 @@ export function runInteractive(
 		type: (text) => harness.type(text),
 		keys: (...keys) => harness.keys(...keys),
 		resize: (columns, rows) => harness.resize(columns, rows),
-		cancel: () => controller.abort(),
+		cancel,
 		screen: () => harness.screen(),
 		stdout: () => captureText(stdoutChunks, options),
 		done,

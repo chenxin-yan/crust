@@ -61,21 +61,23 @@ function replaceEnv(env: Environment): void {
 		if (value !== undefined) process.env[name] = value;
 }
 
-// The environment and working directory belong to the process: a second run replacing them
-// while one is active would change what the first one reads.
+// The environment and working directory belong to the process: replacing them while another
+// run is active would change what that run reads.
 let replacing = false;
 
 /**
  * Run `fn` with `options.env` and `options.cwd` in place, restoring both once it settles. Both
- * are in place when this returns, and it throws without running `fn` while another run has them.
+ * are in place when this returns, and it throws without running `fn` while another run is active.
  */
 export function isolate<T>(options: CaptureOptions | undefined, fn: () => Promise<T>): Promise<T> {
 	const env = options?.env;
 	const cwd = options?.cwd;
 	if (env === undefined && cwd === undefined) return fn();
-	if (replacing) {
+	// shortcut: a run without `env` or `cwd` that starts during a replacement is not caught, because
+	// telling it from a run nested in withEnv() needs AsyncLocalStorage.
+	if (replacing || activeExecutions > 0) {
 		throw new Error(
-			"Another run has replaced process.env or the working directory. Run tests that pass `env` or `cwd`, or use withEnv(), one after another, not concurrently.",
+			"Another run is active. Run tests that pass `env` or `cwd`, or use withEnv(), one after another, not concurrently.",
 		);
 	}
 	const savedEnv = { ...process.env };
@@ -97,8 +99,7 @@ export function isolate<T>(options: CaptureOptions | undefined, fn: () => Promis
 /**
  * Run `fn` with `process.env` replaced by `env`, then restore it, for typed
  * `app.run(path, input)` tests: `fn`'s result keeps its type. `{}` is an empty environment;
- * an `undefined` value leaves its variable out. Rejects while another run has replaced the
- * environment or working directory.
+ * an `undefined` value leaves its variable out. Rejects while another run is active.
  */
 export async function withEnv<T>(env: Environment, fn: () => Promise<T>): Promise<T> {
 	return await isolate({ env }, fn);
