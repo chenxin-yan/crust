@@ -9,7 +9,7 @@ import type {
 	InvocationIO,
 	MergeFlags,
 	MergeProviders,
-	RuntimeCommandSectionInput,
+	CommandSectionInput,
 } from "../types.ts";
 import type {
 	ContextOwnedFlags,
@@ -329,7 +329,7 @@ export interface ContextBuilder<
 		flags: F & FlagRecordErrors<F>,
 	): ContextBuilder<Name, Use, AppendedFlags<OF, DefinedFlags<F>>>;
 	/** Document only the providing command (the root for Extension-provided Contexts). */
-	sections(...sections: readonly RuntimeCommandSectionInput[]): ContextBuilder<Name, Use, OF>;
+	sections(...sections: readonly CommandSectionInput[]): ContextBuilder<Name, Use, OF>;
 	/**
 	 * Finish the definition. `setup` runs lazily, once per invocation, when a
 	 * consumer first reads the Context. Annotate its optional second parameter to
@@ -388,7 +388,7 @@ function createContextBuilder(
 				Object.freeze(toFlagsRecord(flagRecordEntries(record), ownedFlags)),
 				sections,
 			),
-		sections: (...inputs: readonly RuntimeCommandSectionInput[]) =>
+		sections: (...inputs: readonly CommandSectionInput[]) =>
 			createContextBuilder(
 				name,
 				use,

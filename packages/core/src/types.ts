@@ -828,9 +828,6 @@ type SectionContent = {
 /** A plain-text documentation section accepted from command and Extension authors. */
 export type CommandSectionInput = SectionContent & SectionAudience;
 
-/** Typed dynamic audiences may be empty until their consuming operation checks them. */
-export type RuntimeCommandSectionInput = SectionContent & Audience<readonly SectionConsumer[]>;
-
 /** A validated documentation section rendered after built-in command documentation. */
 export type CommandSection = SectionContent & Audience<readonly [ExtensionId, ...ExtensionId[]]>;
 

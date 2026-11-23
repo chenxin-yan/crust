@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { unwrap } from "../../tests/helpers.ts";
+import { type Equal, type Expect, unwrap } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ExecuteOptions } from "../types.ts";
@@ -150,7 +150,7 @@ it("rejects dynamically named Extension commands that collide with another root 
 		new Crust("app").add(deploy).extend(contribute("alias", "ship", ["deploy"])),
 		"ship",
 	);
-	// Added after `.extend()`, as the types also reject.
+	// Added after `.extend()`.
 	await expectCollision(
 		new Crust("app").extend(contribute("before-add", "deploy")).add(deploy),
 		"deploy",
@@ -166,6 +166,29 @@ it("rejects dynamically named Extension commands that collide with another root 
 		.extend(contribute("same", "lint"))
 		.extend(contribute("same", "lint", ["l"]));
 	expect(await replaced.run(["l"])).toMatchObject({ status: "completed", result: "extension" });
+});
+
+it("types a same-id Extension re-registration by the replacement's flags and commands", async () => {
+	const id = defineExtensionId("replaced");
+	const app = new Crust("app")
+		.extend(
+			defineExtension(id)
+				.flags({ mode: { type: "number" } })
+				.add(defineCommand("lint", (c) => c.action(() => 1))),
+		)
+		.extend(
+			defineExtension(id)
+				.flags({ mode: { type: "string" } })
+				.add(defineCommand("lint", (c) => c.action(() => "linted"))),
+		)
+		.action(({ flags }) => flags.mode);
+	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
+	const root = await unwrap(app.run([], { flags: { mode: "fast" } }));
+	type _flag = Expect<Equal<ResultOf<typeof root>, string | undefined>>;
+	expect(root).toMatchObject({ status: "completed", result: "fast" });
+	const lint = await unwrap(app.run(["lint"]));
+	type _command = Expect<Equal<ResultOf<typeof lint>, string>>;
+	expect(lint).toMatchObject({ status: "completed", result: "linted" });
 });
 
 it("owns the checked parser function instead of rereading the mutable author object", async () => {

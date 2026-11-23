@@ -30,7 +30,7 @@ import { validateCommandSections } from "../sections.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
-	RuntimeCommandSectionInput,
+	CommandSectionInput,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
@@ -158,13 +158,13 @@ export interface CrustCommandContext<
 /** Static configuration for a reusable command definition. */
 export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
 	/** Plain-text sections rendered after built-in command documentation. */
-	readonly sections?: readonly RuntimeCommandSectionInput[];
+	readonly sections?: readonly CommandSectionInput[];
 }
 
 /** Static metadata accepted by the root command constructor. */
 export type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usage"> & {
 	/** Plain-text sections rendered after built-in command documentation. */
-	readonly sections?: readonly RuntimeCommandSectionInput[];
+	readonly sections?: readonly CommandSectionInput[];
 };
 
 export type AnyCommandDefinitionBuilder = Crust<
@@ -622,6 +622,15 @@ type AppShape<
 	ActionEvents<S>
 >;
 
+// Literal keys only: an open record's index signature names no entry to replace.
+type LiteralKeys<T> = keyof { [K in keyof T as string extends K ? never : K]: 0 };
+
+// An Extension entry that overlaps an earlier one passes preparation only as a same-id
+// re-registration, where the later Extension replaces the earlier, so its entries win.
+type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extends [never]
+	? Base & Next
+	: { [K in keyof Base as K extends LiteralKeys<Next> ? never : K]: Base[K] } & Next;
+
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
 // call (TS2589 at about 90 calls).
@@ -640,7 +649,7 @@ type ExtensionCommandTree<
 				Record<string, CommandShape> extends infer R extends object
 			? R
 			: never
-		: Tree & DefinitionsTree<ExtensionCommands<Es>> extends infer R extends object
+		: ReplaceEntries<Tree, DefinitionsTree<ExtensionCommands<Es>>> extends infer R extends object
 			? R
 			: never;
 
@@ -705,8 +714,8 @@ function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): valu
  * Static metadata belongs in `config`. Use `.as(name)`
  * to add one definition under a different name; configured aliases travel with it.
  *
- * The types check `name` where the definition is passed to `.add()`, so a generic
- * name such as `N extends "staging" | "production"` compiles here.
+ * `name` and the aliases are checked here when the CLI runs from source and in
+ * `crust build`.
  */
 export function defineCommand<
 	const Name extends string,
@@ -1074,13 +1083,14 @@ type AfterExtend<
 	Meta extends RootCommandMeta | undefined,
 	Caps extends "app" | "recipe",
 > = Crust<
-	// `&`, not `MergeFlags`: re-instantiating an alias revisits its type arguments, so a chain of
+	// Not `MergeFlags`: re-instantiating an alias revisits its type arguments, so a chain of
 	// `.extend()` calls would nest one `MergeFlags<…>` level per call (TS2589 at about 100 calls).
-	Flags & ExtensionFlags<Es>,
+	// `ReplaceEntries` is a conditional, resolved at each call.
+	ReplaceEntries<Flags, ExtensionFlags<Es>>,
 	A,
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	ExtensionCommandTree<Tree, Es, ExtensionCommandsOf<Facts>>,
-	CtxFlags & ExtensionsProvidedFlags<Es>,
+	ReplaceEntries<CtxFlags, ExtensionsProvidedFlags<Es>>,
 	BuilderFacts<
 		Facts["demands"] & ExtensionDemandValues<Es>,
 		RecipeDepsOf<Facts>,
@@ -1088,9 +1098,9 @@ type AfterExtend<
 		ActionDepsOf<Facts>,
 		// An open call adds no precise entries (see ExtensionCommandTree).
 		ExtensionCommandsOf<Facts> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
-		AppRecursiveFlagsOf<Facts> & RecursiveExtensionFlags<Es>,
+		ReplaceEntries<AppRecursiveFlagsOf<Facts>, RecursiveExtensionFlags<Es>>,
 		Facts["output"],
-		AppInlineFlagsOf<Facts> & ExtensionsProvidedFlags<Es>
+		ReplaceEntries<AppInlineFlagsOf<Facts>, ExtensionsProvidedFlags<Es>>
 	>,
 	Result,
 	Meta,
@@ -1654,8 +1664,9 @@ export class Crust<
 	 * except that registering an `ExtensionId` again keeps only the last
 	 * registration — its contributions and providers replace the earlier ones
 	 * and its hooks run once, at the later position. ID deduplication is
-	 * runtime-only, so removed paths can remain statically visible and reject
-	 * with `COMMAND_NOT_FOUND`. An Extension with runtime-only command names makes
+	 * runtime-only: a literal flag or command name the later registration
+	 * contributes again takes its type, but removed paths can remain statically
+	 * visible and reject with `COMMAND_NOT_FOUND`. An Extension with runtime-only command names makes
 	 * `run()` results `unknown` for Extension commands registered up to and in that
 	 * call, since it may replace their registration; app commands keep their types.
 	 * Required root metadata keys are checked against the constructor's inferred

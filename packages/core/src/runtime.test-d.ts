@@ -20,6 +20,7 @@ import {
 	defineContext,
 	defineExtension,
 	defineExtensionId,
+	type ExtensionId,
 } from "./index.ts";
 import type { CommandSectionInput } from "./types.ts";
 
@@ -114,7 +115,7 @@ function _genericCommandNameWithLiteralAliases() {
 function _localMetadata(
 	title: string,
 	aliases: string[],
-	only: ReturnType<typeof defineExtensionId>[],
+	only: [ExtensionId, ...ExtensionId[]],
 	text: string,
 ) {
 	// @ts-expect-error -- audiences are constructively nonempty

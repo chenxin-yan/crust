@@ -127,7 +127,7 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 		"invalid-sections",
 		() => defineCommand("a", { sections: [{ title: "a\nb", body: "x" }] }, action),
 	],
-	["invalid-sections", () => defineContext("env").sections({ title: "Env", body: "x", only: [] })],
+	["invalid-sections", () => defineContext("env").sections({ title: "Env", body: " " })],
 	[
 		"duplicate-section",
 		() =>

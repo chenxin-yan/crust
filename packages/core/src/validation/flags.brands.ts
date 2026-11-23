@@ -82,12 +82,15 @@ type PresentRecord<F> = false extends StrictNulls
 		: F;
 
 type RecordErrors<F, Def> = DropEmpty<{
-	[K in keyof F as KnownFlagKey<K>]: K extends symbol
-		? { readonly FIX_SYMBOL_KEY: "Flag names must be string keys; .flags() ignores symbol keys" }
-		: UndefinedFlagBrand<F, K> & UnknownKeysBrand<F[K], Def> & FlagValueBrand<F[K]>;
+	[K in keyof F as KnownFlagKey<K>]: K extends string
+		? UndefinedFlagBrand<F, K> & UnknownKeysBrand<F[K], Def> & FlagValueBrand<F[K]>
+		: K extends number
+			? // `keyof` keeps the number, so the flag would have no string key (`keyof F & string`).
+				{ readonly FIX_NUMBER_KEY: "Flag names must be string keys; quote a numeric name" }
+			: { readonly FIX_SYMBOL_KEY: "Flag names must be string keys; .flags() ignores symbol keys" };
 }>;
 
-// Only an index signature is dropped: a symbol key stays so it can be rejected.
+// Only index signatures are dropped; number and symbol keys stay so they can be rejected.
 type KnownFlagKey<K> = string extends K ? never : number extends K ? never : K;
 
 // Only these fields can make one flag's values invalid; most flags skip the check.

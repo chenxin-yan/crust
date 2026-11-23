@@ -176,6 +176,11 @@ type ReservedNameBrand<F> = [Extract<keyof F, "$schema" | "__proto__">] extends 
 	? unknown
 	: { readonly FIX_RESERVED_NAME: "no setting may be named $schema or __proto__" };
 
+/** As core's `.flags()`: a symbol key would never become a setting, a number key has no string name. */
+type StringKeyBrand<F> = [Exclude<keyof F, string>] extends [never]
+	? unknown
+	: { readonly FIX_SETTING_KEY: "setting names must be string keys; quote a numeric name" };
+
 type NoFileBrand<G, P> = [G, P] extends [undefined, undefined]
 	? { readonly FIX_NO_FILE: "set global, project, or both" }
 	: unknown;
@@ -342,7 +347,8 @@ export interface ConfigBuilder<G extends ConfigFileOption | undefined> {
 		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
 		settings: F & {
 			readonly [K in keyof F]: LocalValueBrand<Omit<F[K], "flag">> & KnownPropertiesBrand<F[K]>;
-		} & ReservedNameBrand<F>,
+		} & ReservedNameBrand<F> &
+			StringKeyBrand<F>,
 	): Config<F, G>;
 }
 

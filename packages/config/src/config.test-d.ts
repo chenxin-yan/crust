@@ -313,6 +313,13 @@ defineConfig({ name: "acme", global: true }).flags({ $schema: { type: "string" }
 // @ts-expect-error -- also without a flag
 defineConfig({ name: "acme", global: true }).flags({ $schema: { type: "string", flag: false } });
 
+// Settings have string keys: a symbol key would never become a setting.
+const hiddenSetting: unique symbol = Symbol("hidden");
+// @ts-expect-error -- a symbol key
+defineConfig({ name: "acme", global: true }).flags({ [hiddenSetting]: { type: "string" } });
+// @ts-expect-error -- a number key
+defineConfig({ name: "acme", global: true }).flags({ 1.5: { type: "string" } });
+
 // Spellings and collisions are checked when the CLI runs from source and by `crust build`.
 defineConfig({
 	name: "acme",

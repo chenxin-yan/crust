@@ -118,6 +118,29 @@ function _symbolKeysAreRejected(dynamic: symbol) {
 	new Crust("cli").flags({ [dynamic]: { type: "string" } });
 }
 
+// `keyof` keeps a number key as a number, so the flag would have no string key.
+function _numberKeysMustBeQuoted() {
+	new Crust("cli").flags({
+		// @ts-expect-error -- quote the numeric name
+		1.5: { type: "boolean" },
+		a: { type: "boolean" },
+	});
+	defineContext("ctx").flags({
+		// @ts-expect-error -- Contexts reject number keys
+		1.5: { type: "boolean" },
+	});
+	defineExtension(defineExtensionId("test:number")).flags({
+		// @ts-expect-error -- as do Extensions
+		1.5: { type: "boolean" },
+	});
+	// A quoted numeric name is a string key; an integer-like one is left to the definition checks.
+	new Crust("cli").flags({ "1": { type: "boolean" } });
+	const app = new Crust("cli").flags({ "1.5": { type: "boolean" } }).action(({ flags }) => {
+		type _numeric = Expect<Equal<(typeof flags)["1.5"], boolean | undefined>>;
+	});
+	void app.run([], { flags: { "1.5": true } });
+}
+
 function _unionDefinitionsCheckEveryBranch(
 	asyncParse: { type: "boolean" } | { type: "string"; parse: (raw: string) => Promise<string> },
 ) {

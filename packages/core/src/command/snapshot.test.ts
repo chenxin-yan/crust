@@ -374,12 +374,7 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects malformed authored section data", () => {
-		const badSections = [
-			[{ title: "   ", body: "Body" }],
-			[{ title: "Notes", body: "" }],
-			[{ title: "Notes", body: "Body", only: [] }],
-			[{ title: "Notes", body: "Body", except: [] }],
-		];
+		const badSections = [[{ title: "   ", body: "Body" }], [{ title: "Notes", body: "" }]];
 		for (const sections of badSections) {
 			expect(() => new Crust("cli", { sections })).toThrow(
 				expect.objectContaining({

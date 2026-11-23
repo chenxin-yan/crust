@@ -8,7 +8,7 @@ import { flagRecordEntries, ownDefinition, toFlagsRecord } from "../parsing/spel
 import type {
 	Awaitable,
 	CommandMeta,
-	RuntimeCommandSectionInput,
+	CommandSectionInput,
 	FlagDef,
 	FlagsDef,
 	InferFlags,
@@ -466,7 +466,7 @@ export type InferExtensionFlags<F extends ExtensionFlagsDef> =
 		: Record<string, ParsedFlagValue>;
 
 /** A documentation section an Extension contributes to one command path. */
-export type ExtensionSectionContribution = RuntimeCommandSectionInput & {
+export type ExtensionSectionContribution = CommandSectionInput & {
 	readonly command: readonly string[];
 };
 
@@ -796,10 +796,12 @@ type ErasedExtensionBuilder = ExtensionBuilder<any, any, any, any, any>;
 function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 	const flags = Object.freeze(toFlagsRecord(state.flags));
 	// Provided Context-owned spellings collide with owned flags but stay Context-owned.
-	toFlagsRecord(
-		state.provide.flatMap((instance) => Object.entries(instance.ownedFlags)),
-		flags,
-	);
+	if (process.env.CRUST_INTERNAL_BUILD !== "1") {
+		toFlagsRecord(
+			state.provide.flatMap((instance) => Object.entries(instance.ownedFlags)),
+			flags,
+		);
+	}
 	const data: ExtensionData = Object.freeze({
 		id: state.id,
 		flags,

@@ -19,7 +19,7 @@ type WithoutFlagOnlyKeys<D> = D extends unknown
 /**
  * One environment variable: the {@link FlagDef} vocabulary without argv-only
  * keys. Omitted per variant, so `type`/`multiple`/`schema` constraints hold;
- * the argv-only keys are typed `never` and rejected at runtime.
+ * the argv-only keys are typed `never`.
  */
 export type EnvVarDef = WithoutFlagOnlyKeys<FlagDef>;
 
