@@ -6,67 +6,53 @@ import { man } from "./extension.ts";
 import { renderManPageMdoc } from "./mdoc.ts";
 
 describe("renderManPageMdoc", () => {
-	it("renders visible subcommand sections in canonical path order", async () => {
-		const app = new Crust("demo")
-			.add(
-				defineCommand("zeta", { sections: [{ title: "Notes", body: "zeta body" }] }, (cmd) =>
-					cmd.action(() => {}),
-				),
-			)
-			.add(
-				defineCommand(
-					"config",
-					{
-						sections: [
-							{ title: "Overview", body: "config body" },
-							{ title: "Details", body: "config details" },
-						],
-					},
-					(cmd) =>
-						cmd
-							.add(
-								defineCommand(
-									"set",
-									{ sections: [{ title: "Examples", body: "config set body" }] },
-									(subcommand) => subcommand.action(() => {}),
-								),
-							)
-							.action(() => {}),
-				),
-			)
-			.add(
-				defineCommand("alpha", { sections: [{ title: "Notes", body: "alpha body" }] }, (cmd) =>
-					cmd.action(() => {}),
-				),
-			);
-
-		const output = renderManPageMdoc({ root: await app.snapshot() });
-
-		expect(output).toContain(".Sh COMMANDS");
-		expect(output).toContain(
-			".Ss config\n.Sy OVERVIEW\nconfig body\n.Pp\n.Sy DETAILS\nconfig details",
-		);
-		expect(output).toContain(".Ss config set\n.Sy EXAMPLES\nconfig set body");
-		const paths = ["alpha", "config", "config set", "zeta"].map((path) =>
-			output.indexOf(`.Ss ${path}\n`),
-		);
-		expect(paths.every((index) => index >= 0)).toBe(true);
-		expect(paths).toEqual([...paths].sort((a, b) => a - b));
-	});
-
-	it("omits COMMANDS when subcommands have no sections", async () => {
+	it("renders a subcommand's page with its own sections, linked to its parent and children", async () => {
 		const app = new Crust("demo").add(
-			defineCommand("config", {}, (cmd) =>
-				cmd.add(defineCommand("set", {}, (subcommand) => subcommand.action(() => {}))),
+			defineCommand(
+				"config",
+				{
+					description: "Manage settings",
+					sections: [
+						{ title: "Overview", body: "config body" },
+						{ title: "Details", body: "config details" },
+					],
+				},
+				(cmd) =>
+					cmd
+						.add(
+							defineCommand(
+								"set",
+								{ sections: [{ title: "Examples", body: "config set body" }] },
+								(subcommand) => subcommand.args({ name: "key", type: "string" }).action(() => {}),
+							),
+						)
+						.action(() => {}),
 			),
 		);
+		const root = await app.snapshot();
 
-		const output = renderManPageMdoc({ root: await app.snapshot() });
+		const config = renderManPageMdoc({ root, path: ["config"], date: "January 1, 2026" });
+		expect(config).toContain(
+			".Dt DEMO_CONFIG 1\n.Os\n.Sh NAME\n.Nm demo-config\n.Nd Manage settings",
+		);
+		expect(config).toContain(".Bd -literal\ndemo config\n.Ed");
+		expect(config).toContain(".Sh OVERVIEW\nconfig body\n.Sh DETAILS\nconfig details");
+		expect(config).not.toContain("config set body");
+		expect(config).toMatch(/\.Sh SEE ALSO\n\.Xr demo 1 ,\n\.Xr demo-config-set 1\n$/);
 
-		expect(output).not.toContain(".Sh COMMANDS");
+		const set = renderManPageMdoc({ root, path: ["config", "set"] });
+		expect(set).toContain(".Nm demo-config-set");
+		expect(set).toContain(".Sh ARGUMENTS");
+		expect(set).toContain(".Sh EXAMPLES\nconfig set body");
+		expect(set).toMatch(/\.Sh SEE ALSO\n\.Xr demo-config 1\n$/);
+
+		// The root page lists its children, not their sections.
+		const rootPage = renderManPageMdoc({ root });
+		expect(rootPage).not.toContain("config body");
+		expect(rootPage).toMatch(/\.Sh SEE ALSO\n\.Xr demo-config 1\n$/);
 	});
 
-	it("filters subcommand sections by audience and omits hidden commands", async () => {
+	it("filters a page's sections by audience, and gives hidden commands no page", async () => {
 		const app = new Crust("demo")
 			.add(
 				defineCommand(
@@ -80,20 +66,16 @@ describe("renderManPageMdoc", () => {
 					(cmd) => cmd.action(() => {}),
 				),
 			)
-			.add(
-				defineCommand(
-					"internal",
-					{ hidden: true, sections: [{ title: "Secrets", body: "hidden body" }] },
-					(cmd) => cmd.action(() => {}),
-				),
-			);
+			.add(defineCommand("internal", { hidden: true }, (cmd) => cmd.action(() => {})));
+		const root = await app.snapshot();
 
-		const output = renderManPageMdoc({ root: await app.snapshot() });
-
-		expect(output).toContain(".Ss publish\n.Sy MAN NOTES\nman body");
+		const output = renderManPageMdoc({ root, path: ["publish"] });
+		expect(output).toContain(".Sh MAN NOTES\nman body");
 		expect(output).not.toContain("other body");
-		expect(output).not.toContain("hidden body");
-		expect(output).not.toContain(".Ss internal");
+		expect(renderManPageMdoc({ root })).not.toContain("internal");
+		expect(() => renderManPageMdoc({ root, path: ["internal"] })).toThrow(
+			'No manual page for "demo internal": no visible command has that path',
+		);
 	});
 
 	it("honors only and except audiences", async () => {
