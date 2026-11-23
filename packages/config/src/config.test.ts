@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -130,6 +138,28 @@ describe("flags take the files' values", () => {
 		);
 	});
 
+	it("takes a value from the next file when a file's converts to nothing, as get() does", async () => {
+		write(projectFile(), { tags: [] });
+		write(userFile(), { tags: ["u"] });
+		expect((await deploy()).flags.tags).toEqual(["u"]);
+		expect(await acme().config.get("tags")).toEqual(["u"]);
+	});
+
+	it("keeps two configs' same-named settings apart", async () => {
+		const a = defineConfig({ name: "aaa", settings: { region: { type: "string" } } });
+		const b = defineConfig({ name: "bbb", settings: { region: { type: "string" } } });
+		write(join(root, "xdg", "aaa", "config.json"), { region: "from-a" });
+		write(join(root, "xdg", "bbb", "config.json"), { region: "from-b" });
+		const app = new Crust("x")
+			.extend(a.extension, b.extension)
+			.command("c", (command) =>
+				command
+					.flags({ ra: a.flag("region"), rb: b.flag("region") })
+					.action(({ flags, stdout }) => stdout(`${flags.ra} ${flags.rb}`)),
+			);
+		expect((await captureExecute(app, ["c"])).stdout).toBe("from-a from-b\n");
+	});
+
 	it("leaves --help working whatever the files hold", async () => {
 		write(userFile(), "{ broken");
 		const help = await captureExecute(acme().app, ["deploy", "--help"]);
@@ -160,7 +190,8 @@ describe("flags take the files' values", () => {
 
 it("composes with prompts(): a value found in a file is not asked for", async () => {
 	const { config } = acme();
-	const app = new Crust("acme").extend(prompts(), config.extension).command("deploy", (command) =>
+	// Before prompts(), so a file's error fails the run before anything is asked.
+	const app = new Crust("acme").extend(config.extension, prompts()).command("deploy", (command) =>
 		command
 			.flags({
 				region: { ...config.flag("region"), prompt: "Region" },
@@ -188,9 +219,12 @@ describe("the project file", () => {
 		const { flags, stderr } = await deploy();
 		expect(flags).toMatchObject({ region: "eu" });
 		expect(flags.pager).toBeUndefined();
-		expect(stderr).toBe(
-			`Warning: ${projectFile()} sets "pager", which only ${userFile()} may set; ignored.\n`,
-		);
+		const warning = `Warning: ${projectFile()} sets "pager", which only ${userFile()} may set; ignored.\n`;
+		expect(stderr).toBe(warning);
+		// Every run warns, also a second one of the same app.
+		const { app } = acme();
+		expect((await captureExecute(app, ["deploy"])).stderr).toBe(warning);
+		expect((await captureExecute(app, ["deploy"])).stderr).toBe(warning);
 	});
 
 	it("is not read without a project list", async () => {
@@ -224,6 +258,14 @@ describe("files", () => {
 		expect(JSON.parse(stdout)).toMatchObject({ region: "eu", replicas: 3 });
 		await config.set({ pager: "less" });
 		expect(readFileSync(userFile("acmerc"), "utf8")).toBe("region=eu\npager=less\n");
+	});
+
+	it("names a file that cannot be read", async () => {
+		mkdirSync(userFile(), { recursive: true });
+		expect(await captureExecute(acme().app, ["deploy"])).toMatchObject({
+			exitCode: 2,
+			stderr: `Error: Cannot read config file: ${userFile()}\n`,
+		});
 	});
 
 	it("names a file that does not hold an object", async () => {
@@ -275,6 +317,23 @@ describe("get, list and set", () => {
 		const { config } = acme();
 		await config.set({ region: "eu", pager: undefined });
 		expect(JSON.parse(readFileSync(userFile(), "utf8"))).toEqual({ other: true, region: "eu" });
+	});
+
+	it("set() saves one call at a time, each keeping the others' keys and the file's mode", async () => {
+		write(userFile(), {});
+		chmodSync(userFile(), 0o600);
+		const { config } = acme();
+		await Promise.all([
+			config.set({ region: "eu" }),
+			config.set({ pager: "less" }),
+			config.set({ replicas: 2 }),
+		]);
+		expect(JSON.parse(readFileSync(userFile(), "utf8"))).toEqual({
+			region: "eu",
+			pager: "less",
+			replicas: 2,
+		});
+		if (process.platform !== "win32") expect(statSync(userFile()).mode & 0o777).toBe(0o600);
 	});
 
 	it("set(values, { project: true }) writes the nearest project file, or one here", async () => {

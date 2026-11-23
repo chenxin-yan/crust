@@ -161,7 +161,10 @@ export interface Config<
 	/** Save settings in the user's file; `undefined` removes one. */
 	set(values: ConfigValues<S, keyof S>): Promise<void>;
 	/** Save settings in the project file, the nearest, or a new one in the working directory. */
-	set(values: ConfigValues<S, P>, options: { readonly project: true }): Promise<void>;
+	set(
+		values: [P] extends [never] ? never : ConfigValues<S, P>,
+		options: { readonly project: true },
+	): Promise<void>;
 	/** Binds the files' values into the flags `config.flag()` gave: `.extend(config.extension)`. */
 	readonly extension: Extension<{}, [], {}, Commands>;
 	/** The JSON Schema (draft 2020-12) of a JSON config file. */
@@ -217,7 +220,7 @@ async function readValues(path: string, parse: (text: string) => unknown): Promi
 	} catch (error) {
 		const code = (error as { code?: unknown }).code;
 		if (code === "ENOENT" || code === "ENOTDIR") return {};
-		throw error;
+		throw new CrustError("PARSE", `Cannot read config file: ${path}`).withCause(error);
 	}
 	let values: unknown;
 	try {
@@ -232,16 +235,19 @@ async function readValues(path: string, parse: (text: string) => unknown): Promi
 	return values as FileValues;
 }
 
-/** Replaces `path` with `text` in one step, so a failed write leaves the old file whole. */
+/**
+ * Replaces `path` with `text` in one step, so a failed write leaves the old file whole; the file
+ * keeps its mode.
+ */
 async function writeFile(path: string, text: string): Promise<void> {
 	const fs = process.getBuiltinModule("node:fs/promises");
-	// A linked file, such as one from a dotfiles repository, stays a link.
-	const target = await fs.realpath(path).catch(() => path);
-	await fs.mkdir(process.getBuiltinModule("node:path").dirname(target), { recursive: true });
-	const temporary = `${target}.${process.pid}.tmp`;
+	await fs.mkdir(process.getBuiltinModule("node:path").dirname(path), { recursive: true });
+	const existing = await fs.stat(path).catch(() => undefined);
+	const temporary = `${path}.${crypto.randomUUID()}.tmp`;
 	try {
-		await fs.writeFile(temporary, text);
-		await fs.rename(temporary, target);
+		await fs.writeFile(temporary, text, { flag: "wx" });
+		if (existing !== undefined) await fs.chmod(temporary, existing.mode & 0o7777);
+		await fs.rename(temporary, path);
 	} catch (error) {
 		await fs.rm(temporary, { force: true });
 		throw error;
@@ -293,13 +299,14 @@ export function defineConfig<
 	const userName = fileOptions.user ?? "config.json";
 	const keys = Object.keys(settings);
 	const isKey = (key: string) => Object.hasOwn(settings, key);
+	// A flag's `config` is `<name>:<key>`, so two configs with a same-named setting stay apart.
+	const prefix = `${name}:`;
 	// The store loads when a command first reads the files, never at start-up.
 	const userPath = async () =>
 		process
 			.getBuiltinModule("node:path")
 			.join((await import("@crustjs/store")).configDir(name), userName);
 
-	const warned = new Set<string>();
 	/** The files in the order they apply: the project file's allowed settings, then the user's file. */
 	const readFiles = async (warn: (line: string) => void): Promise<ConfigFile[]> => {
 		const user = await userPath();
@@ -310,9 +317,6 @@ export function defineConfig<
 			for (const key of Object.keys(values)) {
 				if (!isKey(key) || project!.includes(key as P)) continue;
 				delete values[key];
-				// Once per process: the Extension and an action's `get()` read the same files.
-				if (warned.has(`${found}\0${key}`)) continue;
-				warned.add(`${found}\0${key}`);
 				warn(`Warning: ${found} sets "${key}", which only ${user} may set; ignored.`);
 			}
 			read.push({ path: found, values });
@@ -327,6 +331,23 @@ export function defineConfig<
 		return () => (pending ??= readFiles(warn));
 	};
 
+	/** The first file that gives `key` a value: a value that converts to nothing gives none. */
+	const fromFiles = async (key: string, files: readonly ConfigFile[]) => {
+		const def = settings[key]!;
+		for (const { path, values } of files) {
+			if (!Object.hasOwn(values, key)) continue;
+			const words = fileWords(key, def, values[key], path);
+			const converted = await Promise.all(
+				words.map((word) => convert(def, { [TEXT]: word }, TEXT, `"${key}" in ${path}`)),
+			);
+			const value = def.multiple ? converted.flat() : converted[0];
+			if (value !== undefined && !(Array.isArray(value) && value.length === 0)) {
+				return { path, words, value };
+			}
+		}
+		return undefined;
+	};
+
 	const resolve = async (
 		key: string,
 		files: () => Promise<ConfigFile[]>,
@@ -336,24 +357,15 @@ export function defineConfig<
 			const value = await convert(def, process.env, variable, `"${key}" (from $${variable})`);
 			if (value !== undefined) return { value, source: { kind: "env", name: variable } };
 		}
-		for (const { path, values } of await files()) {
-			if (!Object.hasOwn(values, key)) continue;
-			const label = `"${key}" in ${path}`;
-			const converted = await Promise.all(
-				fileWords(key, def, values[key], path).map((word) =>
-					convert(def, { [TEXT]: word }, TEXT, label),
-				),
-			);
-			const value = def.multiple ? converted.flat() : converted[0];
-			return { value, source: { kind: "file", path } };
-		}
+		const file = await fromFiles(key, await files());
+		if (file !== undefined) return { value: file.value, source: { kind: "file", path: file.path } };
 		// Core's own default: a `parse` setting's default is parsed, as on the flag.
 		const { env: _env, required: _required, ...withDefault } = def;
 		const value = (await parseFlagValues({ value: withDefault }, {})).value;
 		return { value, source: value === undefined ? { kind: "unset" } : { kind: "default" } };
 	};
 
-	const save = async (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
+	const saveNow = async (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
 		if (inProject) {
 			const refused = Object.keys(values).filter((key) => !(project ?? []).includes(key as P));
 			if (refused.length > 0) {
@@ -363,10 +375,13 @@ export function defineConfig<
 				);
 			}
 		}
+		const fs = process.getBuiltinModule("node:fs/promises");
+		// A linked user file, such as one from a dotfiles repository, stays a link; a project file
+		// arrives with a clone, so a link there is replaced, never written through.
 		const path = inProject
 			? (nearest(projectName) ??
 				process.getBuiltinModule("node:path").join(process.cwd(), projectName))
-			: await userPath();
+			: await userPath().then((user) => fs.realpath(user).catch(() => user));
 		const next: Record<string, unknown> = { ...(await readValues(path, parse)) };
 		for (const [key, value] of Object.entries(values)) {
 			if (value === undefined) delete next[key];
@@ -375,6 +390,13 @@ export function defineConfig<
 		await writeFile(path, stringify(next));
 		return path;
 	};
+	// One save at a time, so each reads what the one before it wrote.
+	let saving: Promise<unknown> = Promise.resolve();
+	const save = (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
+		const next = saving.then(() => saveNow(values, inProject));
+		saving = next.catch(() => {});
+		return next;
+	};
 
 	const toStderr = (line: string) => void process.stderr.write(`${line}\n`);
 
@@ -382,25 +404,18 @@ export function defineConfig<
 		const wanted = Object.entries(ctx.command.flags).filter(([flagName, flag]) => {
 			const source = ctx.sources.flags[flagName];
 			return (
-				flag.config !== undefined &&
-				isKey(flag.config) &&
+				flag.config?.startsWith(prefix) === true &&
+				isKey(flag.config.slice(prefix.length)) &&
 				(source === undefined || source === "default")
 			);
 		});
 		if (wanted.length === 0) return;
 		const read = await readFiles((line) => ctx.stderr(line));
 		for (const [flagName, flag] of wanted) {
-			const key: string = flag.config!;
-			const file = read.find(({ values }) => Object.hasOwn(values, key));
-			if (file === undefined) continue;
-			const words = fileWords(key, settings[key]!, file.values[key], file.path);
-			try {
-				ctx.bindText({ flags: { [flagName]: flag.multiple ? words : words[0]! } });
-			} catch (error) {
-				if (error instanceof CrustError) {
-					error.message = error.message.replaceAll(`--${flagName}`, `"${key}" in ${file.path}`);
-				}
-				throw error;
+			const file = await fromFiles(flag.config!.slice(prefix.length), read);
+			// Converted once already, so binding the same words cannot fail.
+			if (file !== undefined) {
+				ctx.bindText({ flags: { [flagName]: flag.multiple ? file.words : file.words[0]! } });
 			}
 		}
 	};
@@ -435,10 +450,12 @@ export function defineConfig<
 				title: "Configuration",
 				body: [
 					`A flag for a setting that the run does not give takes its environment variable, then ${where.join(", then ")}, then its default.`,
-					...keys.map((key) => {
-						const def = settings[key]!;
-						return `${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}`.trimEnd();
-					}),
+					...keys
+						.filter((key) => !settings[key]!.hidden)
+						.map((key) => {
+							const def = settings[key]!;
+							return `${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}`.trimEnd();
+						}),
 				].join("\n"),
 			},
 		]);
@@ -518,7 +535,7 @@ export function defineConfig<
 	};
 
 	const config = {
-		flag: (key: string) => ({ ...settings[key], config: key }),
+		flag: (key: string) => ({ ...settings[key], config: `${prefix}${key}` }),
 		get: async (key: string) => {
 			const { value } = await resolve(key, filesOnce(toStderr));
 			const def = settings[key]!;

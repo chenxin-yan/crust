@@ -49,7 +49,9 @@ $ ACME_ORG=env-org acme deploy --region us
 deploying env-org to us
 ```
 
-Each setting is settled on its own: here `org` comes from the user's file and `region` from the project file. Core resolves the command line and the variable as for any flag; the Extension binds a file's value only into a flag the run left without one, or with only its default. So `--help` shows the flag's `default` and `env`, `required` is checked after the files, and [`prompts()`](/docs/modules/prompts#ask-for-missing-values) does not ask for a value a file gave, whatever the `.extend()` order.
+Each setting is settled on its own: here `org` comes from the user's file and `region` from the project file. Core resolves the command line and the variable as for any flag; the Extension binds a file's value only into a flag the run left without one, or with only its default. So `--help` shows the flag's `default` and `env`, `required` is checked after the files, and [`prompts()`](/docs/modules/prompts#ask-for-missing-values) does not ask for a value a file gave.
+
+List `config.extension` after [`jsonInput()`](/docs/modules/extensions/json-input) and before `prompts()`: `.extend(jsonInput(), config.extension, prompts())`. An error in a file surfaces in that order, so a broken file then fails before anything is asked, and a flag given in `--input` does not fail on the file.
 
 The files are read when the command has such a flag, and not for `--help` output to fail on: an error in a file waits for the action.
 
@@ -57,7 +59,7 @@ The files are read when the command has such a flag, and not for `--help` output
 
 A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env`, `multiple`, `delimiter`, `choices`, `negatable`, `min`, `max`, `parse`, `default`, `required`, `valueName`, `hidden` and `deprecated`. Other types, `schema` and `requires` are not settings, and an unknown property is a compile error.
 
-`config.flag(key)` returns that definition with the setting's key in a `config` property, which only `config.flag()` can write. A command gives the flag any name, and two commands can give two settings the same flag name:
+`config.flag(key)` returns that definition with the config's name and the setting's key in a `config` property (`"acme:region"`), which only `config.flag()` can write, so two configs with a same-named setting each fill their own flag. A command gives the flag any name, and two commands can give two settings the same flag name:
 
 <include lang="ts">../../../examples/modules/config.ts#flag-name</include>
 
@@ -71,7 +73,7 @@ A setting is the [flag definition](/docs/api/types#flagdef) of a string, number 
 - The user's file is always read. Its name is `config.json` in `configDir(name)`.
 - `project: [...]` turns on the project file, `<name>.config.json`, and lists the settings it may set, checked against `settings` at compile time. The project file is the first one found in the working directory, then in each parent up to the root.
 - `files: { user, project }` changes the names: the user's file is joined to the configuration directory, and the project file is searched for as written.
-- A missing file holds no values, and reading creates nothing. Keys that are not settings, such as `"$schema"`, are ignored.
+- A missing file holds no values, and reading creates nothing. A value that converts to nothing, an empty list or empty text, is no value either: the next file, then the default, applies. Keys that are not settings, such as `"$schema"`, are ignored.
 
 ### Why the project file is limited
 
@@ -116,6 +118,7 @@ $ acme deploy                                   # acme.config.json is not JSON
 Error: Malformed config file: /home/me/repo/acme.config.json
 ```
 
+- A file that cannot be read, such as a folder of that name or one without read permission, fails with `Cannot read config file: <path>` and exit code 2.
 - A value that does not convert fails as an invalid environment value does, naming the setting and the file, with exit code 2. The message never repeats the value or the parser's message, which may quote the file.
 - A file is read only for the settings a command takes and its run did not give: `acme serve --listen 8080` works whatever the files hold.
 - `--help` works whatever the files hold.
@@ -127,8 +130,8 @@ Error: Malformed config file: /home/me/repo/acme.config.json
 - `await config.get(key)` reads a setting as a flag would get it, without the command line: its variable, the project file, the user's file, its default. It throws a `VALIDATION` `CrustError` for a `required` setting that none of them gives.
 - `await config.list()` returns every setting with its value and source: `{ key, value, source }`, where `source` is `{ kind: "env", name }`, `{ kind: "file", path }`, `{ kind: "default" }` or `{ kind: "unset" }`.
 - `await config.set(values)` saves settings in the user's file; `config.set(values, { project: true })` saves them in the nearest project file, or a new one in the working directory. A value is what a file holds (the text of a `parse` setting), and `undefined` removes a setting. The keys and values are checked at compile time, and the project form takes only the keys in `project`.
-- Saving keeps the other keys of the file, creates the folder when needed, and replaces the file in one step. A linked file stays a link.
-- `get()` and `list()` print the project file's warnings on the process's stderr, once per process.
+- Saving keeps the other keys and the mode of the file, creates the folder when needed, and replaces the file in one step. Saves of one config run one at a time, each reading what the one before wrote. A linked user file stays a link; a linked project file is replaced, never written through.
+- `get()` and `list()` print the project file's warnings on the process's stderr.
 
 ## The `config` command
 
@@ -155,6 +158,7 @@ Removed org from /home/me/.config/acme/config.json
 - `set` converts the text as the setting's environment variable would and saves the value, or the text for a `parse` setting.
 - `--project`, on `set` and `unset` when the config has a project file, writes the project file, and refuses settings outside `project`.
 - `get` prints nothing for a setting with no value, and a list one item per line.
+- Typed `run()` does not know the subcommands of `config`: run them through argv, as with `captureExecute(app, ["config", "list"])`.
 - Without `command: true`, write the commands your CLI needs with `get()`, `list()` and `set()`.
 
 ## Run in another folder
@@ -184,7 +188,7 @@ A [`bind`](/docs/modules/openapi#overrides) reads a setting with `config.get()`:
 
 ## Help
 
-`.extend(config.extension)` adds a "Configuration" section to the root's help, `--llms` output and man page, listing the files and every setting:
+`.extend(config.extension)` adds a "Configuration" section to the root's help, `--llms` output and man page, listing the files and every setting that is not `hidden`:
 
 ```text
 Configuration:

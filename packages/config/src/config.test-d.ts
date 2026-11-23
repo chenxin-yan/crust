@@ -62,6 +62,9 @@ void config.set({ timeout: 30 });
 void config.set({ regoin: "eu" });
 // @ts-expect-error -- the project file may not set org
 void config.set({ org: "acme" }, { project: true });
+const userOnly = defineConfig({ name: "acme", settings: { pager: { type: "string" } } });
+// @ts-expect-error -- no project list, so no project file to save in
+void userOnly.set({ pager: "less" }, { project: true });
 
 // flag(): the setting's definition, with its key in `config`, under any flag name.
 const deploy = defineCommand("deploy", (command) =>
