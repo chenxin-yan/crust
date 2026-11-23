@@ -141,7 +141,7 @@ describe("api --list and --spec", () => {
 		const browse = argv[0].slice(2);
 		const { stdout, stderr, exitCode } = await captureExecute(buildApp(), ["api", ...argv]);
 
-		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 2 });
 		expect(stderr).toContain(
 			`--${browse} sends no request: leave out the path, -X, -H, -F, --body and --paginate.`,
 		);
@@ -496,7 +496,7 @@ describe("api <path>", () => {
 			"tag=b",
 		]);
 
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toContain(
 			'Invalid -F value for "tag": the key is given more than once. Send a list or a nested value as JSON with --body, or write a repeated query value in the path.',
 		);

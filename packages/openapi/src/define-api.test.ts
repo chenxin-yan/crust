@@ -90,6 +90,7 @@ describe("defineApi() chain", () => {
 describe("defineApi() options", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 	});
 
 	it.each(["api.example.com/v1", "localhost:8080", "ftp://example.com"])(
@@ -98,6 +99,9 @@ describe("defineApi() options", () => {
 			expect(() => defineApi({ spec, baseUrl })).toThrow(
 				`defineApi: \`baseUrl\` must be an http: or https: URL, such as "https://api.example.com/v1"; got ${JSON.stringify(baseUrl)}`,
 			);
+			// A definition check: built CLIs leave it out, as core's do.
+			vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
+			expect(() => defineApi({ spec, baseUrl })).not.toThrow();
 		},
 	);
 

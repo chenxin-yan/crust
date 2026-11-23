@@ -288,7 +288,10 @@ export function defineApi<const Id extends string = never>(
 ): Api<SpecOperationsOf<Specs, Id>>;
 export function defineApi(options: DefineApiOptions): Api {
 	const { spec, id = "openapi", paginate, baseUrl, fetch } = options;
-	if (!/^https?:$/.test(URL.parse(baseUrl)?.protocol ?? "")) {
+	if (
+		process.env.CRUST_INTERNAL_BUILD !== "1" &&
+		!/^https?:$/.test(URL.parse(baseUrl)?.protocol ?? "")
+	) {
 		throw new CrustError(
 			"DEFINITION",
 			`defineApi: \`baseUrl\` must be an http: or https: URL, such as "https://api.example.com/v1"; got ${JSON.stringify(baseUrl)}`,
