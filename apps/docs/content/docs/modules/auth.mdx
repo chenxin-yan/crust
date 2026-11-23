@@ -25,7 +25,7 @@ npm install @crustjs/auth
 - `env` names a variable, such as `ACME_TOKEN`, whose value `token()` returns, trimmed, instead of the stored login when it is not blank, so CI and agents need no login. It is never stored, refreshed, or revoked, and not checked against `apiOrigins`.
 - `issuer`, `clientId`, `clientSecret`, `redirectPath`, and `allowInsecureLoopback` follow the rules of [Servers](#servers); `hosts` and `ports` those of [Browser login](#browser-login).
 - `resource` names the API every login asks tokens for (RFC 8707 resource indicators, absolute URIs without a fragment), for a server that issues tokens per API; both logins and the code exchange send it, and the stored login records it, so every refresh sends it too. Nothing is derived from `apiOrigins`.
-- The login's tokens are encrypted under a key in the OS keyring. Without a keyring they are stored in plaintext, and `onWarning` receives `{ code: "plaintext-storage" }` once per process; with `strict: true` the login fails with `CredentialKeyError` instead. See [Encryption and the OS keyring](#encryption-and-the-os-keyring).
+- The login's tokens are encrypted under a key in the OS keyring. Without a keyring they are stored in plaintext, and the `onWarning` of the `login()` or `token()` call that stored them receives `{ code: "plaintext-storage" }`; with `strict: true` the login fails with `CredentialKeyError` instead. See [Encryption and the OS keyring](#encryption-and-the-os-keyring).
 
 <include lang="ts">../../../examples/modules/auth.ts#storage</include>
 
@@ -35,11 +35,11 @@ npm install @crustjs/auth
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="LoginOptions" />
 
-1. It picks the login as [Choosing a login](#choosing-a-login) describes, with `device` as the user's `--device` flag. On `"refuse"` it throws `LoginRequiresInteractionError`, whose message says to use the device login, before any request.
+1. It picks the login with `flow`. `"device"` and `"browser"` always run that login, even on CI, such as for the user's `--device` or `--web` flag; `"auto"`, the default, picks one as [Choosing a login](#choosing-a-login) describes. On `"refuse"` it throws `LoginRequiresInteractionError`, whose message says to use the device login, before any request.
 2. It discovers the server, once per process.
 3. **Browser:** it listens on the loopback address, calls `onUrl`, waits for the browser, and exchanges the code once. The listener closes on every path.
 4. **Device code:** it starts the device login, calls `onCode`, and polls until the user approves.
-5. It stores the tokens. A login opens its place in the file before the browser or device step, so a logout (or another login) that commits while it waits is not undone: this login then fails with `StaleCommitError` and stores nothing.
+5. It stores the tokens. A login opens its place in the file before the browser or device step, so a logout (or another login) that commits while it waits is not undone: this login then fails with `StaleCommitError` and stores nothing. When they are stored in plaintext for want of a keyring, `onWarning` receives `{ code: "plaintext-storage" }`.
 
 The client prints nothing and opens no browser by itself: it does not know your command's output stream. Show the prompts yourself, usually in two lines:
 
@@ -62,10 +62,11 @@ If `onUrl` or `onCode` throws or rejects, the login fails with that error, close
 
 <include lang="ts">../../../examples/modules/auth.ts#token</include>
 
-- `auth.token({ signal?, baseUrl? })` returns the `env` variable's value, trimmed, when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. A token from `env` is not checked against `apiOrigins`. No login → `LoginRequiredError`.
+- `auth.token({ signal?, baseUrl?, onWarning? })` returns the `env` variable's value, trimmed, when it is set and not blank, with `source` `"env"` and no `refresh`. Otherwise it returns the stored login's token, refreshed first when it expires within 30 seconds; with `baseUrl`, its origin must be one of `apiOrigins`, or it throws `CredentialMismatchError` before anything is sent. A token from `env` is not checked against `apiOrigins`. No login → `LoginRequiredError`.
 - `refresh()` on a stored login's token refreshes it unless another process already did, for a 401 retry.
+- `onWarning` receives `{ code: "plaintext-storage" }` when the call's refresh, or its token's `refresh()`, stores the login in plaintext for want of a keyring. `bearerAuth(auth.token)` passes none; wrap `auth.token` to pass one.
 - `auth.status()` reads where the token would come from, the stored login's `expiresAt` and `scope`, and `storage`: the keyring `kind` (`"file"` without one) and `plaintextRecords`, the logins not yet encrypted. It sends no request, refreshes nothing, and waits for no lock; it asks the keyring for the key once, within 5 seconds, and never writes it. A corrupt file or an unsafe directory still throws its error. When the `env` variable is set, it returns `{ source: "env" }` without reading the file or the keyring.
-- `auth.logout({ signal? })` deletes the login, then revokes it at the server, and reports both outcomes as in [Login and logout](#login-and-logout).
+- `auth.logout({ signal? })` deletes the login, then revokes it at the server, and reports both outcomes as in [Login and logout](#login-and-logout); `local` is `"absent"` when there was no login.
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="AuthToken" />
 
@@ -81,11 +82,14 @@ A profile is a named login, so one CLI can keep a work account and a personal on
 
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="ProfilesOptions" />
 
+<auto-type-table path="../../../../../packages/auth/src/types.ts" name="ProfileLoginOptions" />
+
 <auto-type-table path="../../../../../packages/auth/src/types.ts" name="ProfileAuthStatus" />
 
 <include lang="ts">../../../examples/modules/auth.ts#profiles</include>
 
 - `auth.profile(name)` returns the same four methods, `login`, `token`, `status`, and `logout`, for the login named `name`; they work detached. A name is 1 to 64 letters, digits, `-`, `_`, and `.`, not starting with `.` or `-`; another is refused with `OAuthConfigError` (`invalid-option`) by the call that receives it, and the error does not quote it. A profile's first login creates it, a later one replaces only that profile's login, and its logout removes it. `auth.profile()` and `auth.profile(undefined)` are the current profile, so an optional `--profile` flag passes straight through.
+- The client's own `login({ profile })` stores the login as the profile `profile` names instead of the current one. A string is the same as `auth.profile(name).login()`. A function receives the new tokens once the user has signed in, such as to ask your API for the account name, and returns the name; it runs before the login is stored, and when it throws, is aborted, or returns a name that is refused, nothing is stored. The login's place in the file is then opened only after the function returns, so a logout of that profile while the user signs in does not make it fail. A profile's own `login()` has no `profile` option.
 - The client's own methods use the current profile, picked at each call: the profiles `env` variable when it is set and not blank (trimmed, and refused like a bad name), else the profile last chosen with `auth.profiles.use()`, else `"default"`. A login does not change it.
 - The `env` token still wins over every profile: when it is set, `token()` returns it for any profile, and `status()` returns `{ source: "env" }` without reading the file or the keyring.
 - `auth.profiles.list()` returns the profiles with a stored login for this server and client id, sorted by name, each with `current` set when it is the current profile. It lists only logins `profile()` can reach: a login a building block stored under another kind of name is left out. It reads the credentials file only: no request, refresh, lock, or keyring.
@@ -209,7 +213,7 @@ Call `session.close()` in a `finally`, as above, so an early error never leaves 
 | A terminal, but an SSH session or Linux with no display                            | `"device"`  |
 | Otherwise                                                                          | `"browser"` |
 
-On `"refuse"`, nobody is there to read a code, or nobody asked for one that someone else might approve. `auth.login()` throws `LoginRequiresInteractionError` then; with the building blocks, throw it yourself with a message naming your device-login flag and your token environment variable. With `"device"`, show `deviceCodeMessage()` on the terminal the user is at. It does not check that the server offers a device login; `startDeviceFlow()` does.
+On `"refuse"`, nobody is there to read a code, or nobody asked for one that someone else might approve. `auth.login()` with `flow: "auto"` throws `LoginRequiresInteractionError` then; with the building blocks, throw it yourself with a message naming your device-login flag and your token environment variable. With `"device"`, show `deviceCodeMessage()` on the terminal the user is at. It does not check that the server offers a device login; `startDeviceFlow()` does.
 
 ## Opening the browser
 
@@ -236,7 +240,7 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 
 `credentialStore({ app, name?, lockTimeout?, keyring? })` names the credentials file, and `createTokenSource({ config, identity, store, skewMs?, fetch? })` one login in it. Neither touches the disk or the network until you call a method.
 
-The client keeps its login this way too: `createAuth()` opens `credentialStore({ app, keyring: { strict, onWarning } })` and a token source for `{ issuer, clientId, apiOrigins, profile }`, with `profile` `"default"` unless [profiles](#profiles) pick another, so everything below about the file, refreshes, and locks applies to it.
+The client keeps its login this way too: `createAuth()` opens `credentialStore({ app, keyring: { strict } })` and a token source for `{ issuer, clientId, apiOrigins, profile }`, with `profile` `"default"` unless [profiles](#profiles) pick another, so everything below about the file, refreshes, and locks applies to it.
 
 <include lang="ts">../../../examples/modules/auth.ts#credentials</include>
 
@@ -255,7 +259,7 @@ With `keyring` (which `createAuth()` always passes), the tokens in the file are 
 - **Created once.** The first login or refresh that stores a secret creates the key. Creation holds an app-wide lock, `key-init.lock` in the state directory, until the keyring has stored the key, so two processes never create two keys. Nothing rewrites it afterwards. Every keyring call has a 5-second deadline.
 - **The file** records the key's id and the backend that holds it: `encryption: { kind: "aes-256-gcm", keyId, keyring }`, with `keyring` `"bun-secrets"` or `"napi-keyring"`. Only each login's access and refresh tokens are encrypted, with a fresh random IV every time and bound to the login (app, key, issuer, client id, profile, API origins, and generation). A ciphertext changed or copied to another login fails as `CredentialStoreCorruptError` for that login. The rest stays readable, so locks and logouts work without the key.
 
-**No keyring.** When a secret must be stored in a file that records no key and there is no keyring (Node without `@napi-rs/keyring`, a Linux host without a Secret Service, or a keyring that does not answer within 5 seconds), the secret is stored in plaintext in the same `0600` file, and `onWarning` receives `{ code: "plaintext-storage" }` once per process. Nothing is printed: tell the user yourself. With `strict: true`, the write fails with `CredentialKeyError` (`unavailable`) and stores nothing. A key write that fails or runs past its deadline fails the same way; it never falls back to plaintext. Without the `keyring` option, `credentialStore()` never touches a keyring and stores plaintext without a warning.
+**No keyring.** When a secret must be stored in a file that records no key and there is no keyring (Node without `@napi-rs/keyring`, a Linux host without a Secret Service, or a keyring that does not answer within 5 seconds), the secret is stored in plaintext in the same `0600` file, and `onWarning` receives `{ code: "plaintext-storage" }`: the store's `keyring.onWarning` once per process, or the `onWarning` of the client's `login()` or `token()` call each time that call stores one. Nothing is printed: tell the user yourself. With `strict: true`, the write fails with `CredentialKeyError` (`unavailable`) and stores nothing. A key write that fails or runs past its deadline fails the same way; it never falls back to plaintext. Without the `keyring` option, `credentialStore()` never touches a keyring and stores plaintext without a warning.
 
 **Encrypted on the next write.** A file is never converted at once. Once a keyring is available, each login is encrypted the next time a login or a refresh writes it, so a file can hold encrypted and plaintext logins until then, and `status()` reports the plaintext ones as `plaintextRecords`. A file that records a key never takes a plaintext write again.
 
@@ -304,6 +308,7 @@ On Node, add `@napi-rs/keyring` to your `dependencies`. A CLI that `crust build`
 | `"deleted"` | `"failed"`      | Logged out; the server refused or failed (such as a 503): the token may still work |
 | `"deleted"` | `"unknown"`     | Logged out; the request was sent but no answer came (a timeout or an abort)        |
 | `"deleted"` | `"skipped"`     | Logged out; there was no readable token of this identity, or no key to decrypt it  |
+| `"absent"`  | `"skipped"`     | There was no login to delete, or it was already logged out                         |
 | `"failed"`  | `"skipped"`     | The file could not be written: still logged in, and nothing was sent               |
 
 A failed revocation is a result, not an error. Revocation waits at most 10 seconds.

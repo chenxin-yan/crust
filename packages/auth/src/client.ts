@@ -38,7 +38,9 @@ import type {
 	ProfileAuthClient,
 	ProfileAuthStatus,
 	ProfileClient,
+	ProfileLoginOptions,
 	ProfilesOptions,
+	TokenOptions,
 	TokenSet,
 	TokenSource,
 } from "./types.ts";
@@ -116,7 +118,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient;
 export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuthClient {
 	const app = checkName(options?.app, "app");
 	const name = checkName(options.name ?? app, "name");
-	const { issuer, scope, hosts, ports, fetch, env, strict, onWarning, profiles } = options;
+	const { issuer, scope, hosts, ports, fetch, env, strict, profiles } = options;
 	const isVariable = (value: unknown) => typeof value === "string" && value.trim() !== "";
 	if (env !== undefined && !isVariable(env)) {
 		throw new OAuthConfigError("invalid-option", "env must name an environment variable");
@@ -160,7 +162,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 	checkScope(scope);
 	const resource = checkResources(options.resource);
 	checkLoopbackOptions({ hosts, ports });
-	const store = credentialStore({ app, keyring: { strict, onWarning } });
+	const store = credentialStore({ app, keyring: { strict } });
 	const files = credentialStoreInternals(store);
 	const sourceOf = (profile: string) =>
 		tokenSource(
@@ -236,35 +238,48 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			read: () => Promise<CredentialsDocument | undefined>;
 		}>,
 	): ProfileClient {
-		async function login(loginOptions: LoginOptions): Promise<void> {
-			const mode = detectLoginMode({ device: loginOptions.device });
+		async function login(loginOptions: ProfileLoginOptions): Promise<void> {
+			const { flow = "auto", signal, onWarning, profile } = loginOptions;
+			const mode = flow === "auto" ? detectLoginMode() : flow;
 			if (mode === "refuse") {
 				throw new LoginRequiresInteractionError(
 					`Signing in to ${name} needs a person at a terminal. Use the device login to sign in with a code instead${env === undefined ? "" : `, or set ${env} to a token`}.`,
 				);
 			}
-			const { signal } = loginOptions;
 			throwIfAborted(signal);
-			const { source } = await select();
+			// The login's token source, or the function that names its profile after sign-in.
+			const target =
+				typeof profile === "function"
+					? profile
+					: profile === undefined
+						? (await select()).source
+						: sourceOf(checkProfile(profile, "profile"));
 			const server = await discover(config, issuer, { signal, fetch });
+			const save = async (source: TokenSource, tokens: () => Promise<TokenSet>) => {
+				const ticket = await tokenSourceInternals(source).beginLogin({ signal, onWarning });
+				try {
+					// Recorded with the login, so every refresh asks for the same resource.
+					await ticket.commit(await tokens(), {
+						resource: resource.length > 0 ? resource : undefined,
+						signal,
+					});
+				} finally {
+					ticket.cancel();
+				}
+			};
 			// Opened before the flow, so a logout while it runs makes the commit fail, not undo it.
-			const ticket = await source.beginLogin({ signal });
-			try {
-				// Recorded with the login, so every refresh asks for the same resource.
-				await ticket.commit(await signIn(server, mode, loginOptions), {
-					resource: resource.length > 0 ? resource : undefined,
-					signal,
-				});
-			} finally {
-				ticket.cancel();
-			}
+			if (typeof target !== "function")
+				return save(target, () => signIn(server, mode, loginOptions));
+			const tokens = await signIn(server, mode, loginOptions);
+			const profileName = checkProfile(await unlessAborted(target(tokens), signal), "profile");
+			return save(sourceOf(profileName), async () => tokens);
 		}
 
 		const loginToken = (
 			source: TokenSource,
 			profile: Profile | undefined,
 			stored: AccessToken,
-			baseUrl: string | undefined,
+			{ baseUrl, onWarning }: TokenOptions,
 		): AuthToken =>
 			redacted(
 				{
@@ -274,27 +289,24 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 						loginToken(
 							source,
 							profile,
-							await source
-								.forceRefresh({ signal, ifGeneration: stored.generation, baseUrl })
+							await tokenSourceInternals(source)
+								.forceRefresh({ signal, ifGeneration: stored.generation, baseUrl, onWarning })
 								.catch(named(profile)),
-							baseUrl,
+							{ baseUrl, onWarning },
 						),
 				},
 				["value"],
 			);
 
-		async function token({
-			signal,
-			baseUrl,
-		}: { signal?: AbortSignal; baseUrl?: string } = {}): Promise<AuthToken> {
+		async function token({ signal, baseUrl, onWarning }: TokenOptions = {}): Promise<AuthToken> {
 			throwIfAborted(signal);
 			const value = envValue();
 			if (value !== undefined) return redacted({ value, source: "env" as const }, ["value"]);
 			const { source, profile, read } = await select();
 			const stored = await tokenSourceInternals(source)
-				.get(await read(), { signal, baseUrl })
+				.get(await read(), { signal, baseUrl, onWarning })
 				.catch(named(profile));
-			return loginToken(source, profile, stored, baseUrl);
+			return loginToken(source, profile, stored, { baseUrl, onWarning });
 		}
 
 		async function status(): Promise<ProfileAuthStatus> {

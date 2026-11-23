@@ -549,6 +549,15 @@ describe("logout", () => {
 		await expect(source.get()).rejects.toMatchObject({ reason: "missing" });
 	});
 
+	it("reports a logout without a login as absent, and still writes the logged-out record", async () => {
+		const w = world();
+		const source = w.source();
+		await expect(source.logout()).resolves.toEqual({ local: "absent", remote: "skipped" });
+		expect(record(w, source.key).tombstone).toBe(true);
+		await expect(source.logout()).resolves.toEqual({ local: "absent", remote: "skipped" });
+		expect(w.requests).toHaveLength(0);
+	});
+
 	it("reports a server without revocation as unsupported", async () => {
 		const w = world({ metadata: { revocation_endpoint: undefined } });
 		const source = w.source();

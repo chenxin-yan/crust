@@ -4,7 +4,7 @@ import { connect } from "node:net";
 import { importKey } from "./cipher.ts";
 import { AbortError, CredentialKeyError, LoginRequiredError } from "./errors.ts";
 import { throwIfAborted } from "./http.ts";
-import type { KeyringOptions } from "./types.ts";
+import type { AuthWarning, KeyringOptions } from "./types.ts";
 
 // The OS keyring holds one entry per app, `service=<app>`, `name="credentials-key"`: the key that
 // encrypts the tokens in the credentials file, `{ keyId, key }`. It is created once and never
@@ -294,13 +294,15 @@ export interface FileKeys {
 	/**
 	 * How a write into a file recording `fileKeyId` and `fileKeyring` stores its secret. Creates the key when the
 	 * keyring has none. Only a `login` may replace a file key that is missing or another.
-	 * `signal` is observed until the key's write is dispatched.
+	 * `signal` is observed until the key's write is dispatched. A plaintext fallback is reported
+	 * to `onWarning` each time, else to the keyring options' `onWarning` once per process.
 	 */
 	forWrite(
 		fileKeyId: string | undefined,
 		fileKeyring: KeyringKind | undefined,
 		login: boolean,
 		signal: AbortSignal | undefined,
+		onWarning?: (warning: AuthWarning) => void,
 	): Promise<WriteKey>;
 	/**
 	 * Where the key of a file recording `fileKeyId` and `fileKeyring` is (the file's backend when
@@ -415,6 +417,7 @@ export function fileKeys(
 		fileKeyring: KeyringKind | undefined,
 		login: boolean,
 		signal: AbortSignal | undefined,
+		onWarning?: (warning: AuthWarning) => void,
 	): Promise<WriteKey> {
 		if (fileKeyId !== undefined && (!login || validated?.keyId === fileKeyId)) {
 			return sealed(await forFile(fileKeyId, fileKeyring, signal));
@@ -427,7 +430,9 @@ export function fileKeys(
 		}
 		if (found.state === "unavailable") {
 			if (options?.strict) throw new CredentialKeyError("unavailable");
-			if (!warned.has(app)) {
+			if (onWarning) {
+				onWarning({ code: "plaintext-storage" });
+			} else if (!warned.has(app)) {
 				warned.add(app);
 				options?.onWarning?.({ code: "plaintext-storage" });
 			}

@@ -13,16 +13,20 @@ export const auth = createAuth({
 
 export const login = defineCommand("login", { description: "Sign in to Acme" }, (command) =>
 	command
-		.flags({ device: { type: "boolean", description: "Sign in with a code on another device" } })
+		.flags({
+			device: { type: "boolean", description: "Sign in with a code on another device" },
+			web: { type: "boolean", description: "Sign in with a browser" },
+		})
 		.action(({ flags, signal, stderr }) =>
 			auth.login({
-				device: flags.device,
+				flow: flags.device ? "device" : flags.web ? "browser" : "auto",
 				signal,
 				onUrl: async ({ url, open }) => {
 					stderr(`Sign in at: ${url}`);
 					await open();
 				},
 				onCode: ({ message }) => stderr(message),
+				onWarning: () => stderr("No OS keyring found: your login is stored unencrypted."),
 			}),
 		),
 );

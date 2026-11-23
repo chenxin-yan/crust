@@ -36,6 +36,7 @@ import { throwIfAborted, unsentRequests } from "./http.ts";
 import { createTokenClient, redacted } from "./token-client.ts";
 import type {
 	AccessToken,
+	AuthWarning,
 	Credential,
 	LoginTicket,
 	LogoutResult,
@@ -84,9 +85,21 @@ interface TokenSourceInternals {
 	/** `get()` from `document`, a snapshot of the file; a refresh still rereads it under the lock. */
 	get(
 		document: CredentialsDocument | undefined,
-		options: { signal?: AbortSignal; baseUrl?: string },
+		options: { signal?: AbortSignal; baseUrl?: string; onWarning?: OnWarning },
 	): Promise<AccessToken>;
+	/** `forceRefresh()`, reporting a plaintext write to `onWarning`. */
+	forceRefresh(options: {
+		signal?: AbortSignal;
+		ifGeneration?: string;
+		baseUrl?: string;
+		onWarning?: OnWarning;
+	}): Promise<AccessToken>;
+	/** `beginLogin()`, whose commit reports a plaintext write to `onWarning`. */
+	beginLogin(options: { signal?: AbortSignal; onWarning?: OnWarning }): Promise<LoginTicket>;
 }
+
+/** A call's own receiver of a plaintext write, instead of the store's `keyring.onWarning`. */
+type OnWarning = (warning: AuthWarning) => void;
 
 const sourceInternals = new WeakMap<TokenSource, TokenSourceInternals>();
 
@@ -237,7 +250,11 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 	 * Refreshes the credential observed at `generation` under the identity lock.
 	 * `signal` (all waiters gone) is observed only until the mark is written.
 	 */
-	async function refresh(generation: string, signal: AbortSignal): Promise<AccessToken> {
+	async function refresh(
+		generation: string,
+		signal: AbortSignal,
+		onWarning: OnWarning | undefined,
+	): Promise<AccessToken> {
 		return store.lockIdentity(
 			key,
 			async () => {
@@ -251,7 +268,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 				// The keys come first: one that can't be read or created stops the refresh unmarked.
 				const secret = await store.reveal(document, key, record, signal);
 				if (secret.refreshToken === undefined) throw new LoginRequiredError("expired");
-				const writeKey = await store.writeKey(document, false, signal);
+				const writeKey = await store.writeKey(document, false, signal, onWarning);
 				const server = await discoverServer(signal);
 				throwIfAborted(signal);
 				const storeId = document.storeId;
@@ -349,11 +366,16 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 	}
 
 	/** Joins this credential's refresh in this process, or starts it. */
-	function sharedRefresh(generation: string, signal: AbortSignal | undefined) {
+	function sharedRefresh(
+		generation: string,
+		signal: AbortSignal | undefined,
+		onWarning: OnWarning | undefined,
+	) {
 		let flight = refreshFlights.get(id);
 		if (!flight) {
 			const controller = new AbortController();
-			const promise = refresh(generation, controller.signal).finally(() => {
+			// A joined refresh reports to the caller that started it.
+			const promise = refresh(generation, controller.signal, onWarning).finally(() => {
 				if (refreshFlights.get(id) === flight) refreshFlights.delete(id);
 			});
 			promise.catch(() => {});
@@ -373,6 +395,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 		snapshot: CredentialsDocument | undefined,
 		signal: AbortSignal | undefined,
 		baseUrl: string | undefined,
+		onWarning: OnWarning | undefined,
 	) {
 		const record = liveRecord(snapshot, baseUrl);
 		const document = snapshot as CredentialsDocument;
@@ -382,7 +405,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			(record.expiresAt === undefined || Date.now() < record.expiresAt - skewMs);
 		return fresh
 			? tokenOf(document, record, signal)
-			: sharedRefresh(record.generation as string, signal);
+			: sharedRefresh(record.generation as string, signal, onWarning);
 	}
 
 	async function readRecord(signal: AbortSignal | undefined, baseUrl: string | undefined) {
@@ -421,19 +444,26 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 		}
 	}
 
-	const source: TokenSource = Object.freeze({
+	// Not annotated: the internals reuse its methods with their wider options.
+	const source = Object.freeze({
 		key,
 
 		async get({ signal, baseUrl }: { signal?: AbortSignal; baseUrl?: string } = {}) {
 			throwIfAborted(signal);
-			return getFrom(await store.read(), signal, baseUrl);
+			return getFrom(await store.read(), signal, baseUrl, undefined);
 		},
 
 		async forceRefresh({
 			signal,
 			ifGeneration,
 			baseUrl,
-		}: { signal?: AbortSignal; ifGeneration?: string; baseUrl?: string } = {}) {
+			onWarning,
+		}: {
+			signal?: AbortSignal;
+			ifGeneration?: string;
+			baseUrl?: string;
+			onWarning?: OnWarning;
+		} = {}): Promise<AccessToken> {
 			const { document, record } = await readRecord(signal, baseUrl);
 			// A newer credential than the one that failed is used as is.
 			if (
@@ -443,10 +473,13 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			) {
 				return tokenOf(document, record, signal);
 			}
-			return sharedRefresh(record.generation as string, signal);
+			return sharedRefresh(record.generation as string, signal, onWarning);
 		},
 
-		async beginLogin({ signal }: { signal?: AbortSignal } = {}): Promise<LoginTicket> {
+		async beginLogin({
+			signal,
+			onWarning,
+		}: { signal?: AbortSignal; onWarning?: OnWarning } = {}): Promise<LoginTicket> {
 			throwIfAborted(signal);
 			if (openLogins.has(id)) throw new LoginInProgressError();
 			openLogins.add(id);
@@ -525,7 +558,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 							key,
 							async () => {
 								throwIfAborted(stop);
-								const writeKey = await store.writeKey(await store.read(), true, stop);
+								const writeKey = await store.writeKey(await store.read(), true, stop, onWarning);
 								const stored = await store.withSecret(writeKey, key, record, {
 									accessToken: tokens.accessToken,
 									refreshToken: tokens.refreshToken,
@@ -583,7 +616,8 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 				key,
 				async (): Promise<LogoutResult["local"]> => {
 					const document = await store.read();
-					const record = parseRecord(document?.records[key]);
+					const raw = document?.records[key];
+					const record = parseRecord(raw);
 					// Revoke only this identity's readable tokens; logout still happens, also when
 					// the keyring's key can't decrypt them.
 					if (
@@ -596,6 +630,9 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 							.catch(() => undefined);
 					}
 					throwIfAborted(signal);
+					// No login still gets the logged-out record: its new epoch makes stale a login
+					// opened before this logout.
+					const absent = raw === undefined || record?.tombstone === true;
 					try {
 						await store.update((current) => {
 							const next = withRecord(current ?? emptyDocument(), tombstone(identity));
@@ -607,7 +644,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 							delete chosen[server];
 							return withCurrentProfiles(next, chosen);
 						}, signal);
-						return "deleted";
+						return absent ? "absent" : "deleted";
 					} catch (error) {
 						if (error instanceof CredentialStoreCorruptError || error instanceof AbortError) {
 							throw error;
@@ -626,7 +663,10 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			const { expiresAt, scope } = liveRecord(document);
 			return { expiresAt, scope };
 		},
-		get: (document, { signal, baseUrl }) => getFrom(document, signal, baseUrl),
+		get: (document, { signal, baseUrl, onWarning }) =>
+			getFrom(document, signal, baseUrl, onWarning),
+		forceRefresh: source.forceRefresh,
+		beginLogin: source.beginLogin,
 	});
 	return source;
 }

@@ -94,6 +94,18 @@ void client.login({ onCode });
 void client.login({ onUrl });
 // @ts-expect-error -- the options are required
 void client.login();
+// The flow is one of three; `device` is gone.
+void client.login({ onUrl, onCode, flow: "browser" });
+// @ts-expect-error -- not a flow
+void client.login({ onUrl, onCode, flow: "web" });
+// @ts-expect-error -- replaced by flow
+void client.login({ onUrl, onCode, device: true });
+// Warnings go to the call that stores the login, not to createAuth().
+void client.login({ onUrl, onCode, onWarning: () => {} });
+void client.token({ onWarning: () => {} });
+export type NoCreateAuthWarning = Expect<
+	Equal<"onWarning" extends keyof CreateAuthOptions ? true : false, false>
+>;
 
 // The prompt never carries the device code.
 export type NoDeviceCodeInPrompt = Expect<
@@ -150,6 +162,13 @@ export type ProfileStatus = Expect<
 >;
 declare const flag: string | undefined;
 void profiled.profile(flag).login({ onUrl, onCode });
+// Only the client's own login() may store as another profile, named before or after sign-in.
+void profiled.login({ onUrl, onCode, profile: "work" });
+void profiled.login({ onUrl, onCode, profile: async (tokens: TokenSet) => tokens.scope ?? "x" });
+// @ts-expect-error -- a profile's login() is already for that profile
+void profiled.profile("work").login({ onUrl, onCode, profile: "other" });
+// @ts-expect-error -- no profiles without the profiles option
+void withoutProfiles.login({ onUrl, onCode, profile: "work" });
 export const profileAuth: ApiAuth = bearerAuth(profiled.profile("work").token);
 export type ListedProfiles = Expect<
 	Equal<

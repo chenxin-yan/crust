@@ -267,8 +267,6 @@ export interface CreateAuthOptions extends AuthServerOptions {
 	 * @default false
 	 */
 	strict?: boolean;
-	/** Receives what you may want to tell the user, such as a login stored in plaintext. */
-	onWarning?: (warning: AuthWarning) => void;
 	/**
 	 * Turns on profiles: named logins, such as a work account and a personal one. The client then
 	 * has `profile(name)` and `profiles`. `{}` is enough.
@@ -288,7 +286,7 @@ export interface ProfilesOptions {
 
 /**
  * A notice for your CLI to show; the library prints nothing. `"plaintext-storage"`: there is no
- * OS keyring, so a login's tokens were stored in plaintext. Reported once per process.
+ * OS keyring, so a login's tokens were stored in plaintext.
  */
 export type AuthWarning = { readonly code: "plaintext-storage" };
 
@@ -317,8 +315,12 @@ export interface DeviceLoginPrompt {
 
 /** Options of `login()`. */
 export interface LoginOptions {
-	/** Use the device login even where a browser login is possible, such as for a `--device` flag. */
-	device?: boolean;
+	/**
+	 * The login to run: `"auto"` picks one for where the CLI runs; `"device"` and `"browser"`
+	 * always run that one, even on CI, such as for a `--device` or `--web` flag.
+	 * @default "auto"
+	 */
+	flow?: "auto" | "device" | "browser";
 	signal?: AbortSignal;
 	/** Replaces the configured `scope` for this login. */
 	scope?: string;
@@ -328,6 +330,27 @@ export interface LoginOptions {
 	onCode: (prompt: DeviceLoginPrompt) => void | Promise<void>;
 	/** Renders the browser result page; a throw serves the default page. */
 	page?: (view: CallbackPageView) => string;
+	/** Receives what you may want to tell the user, such as this login stored in plaintext. */
+	onWarning?: (warning: AuthWarning) => void;
+}
+
+/** Options of `login()` on a client with `profiles`. */
+export interface ProfileLoginOptions extends LoginOptions {
+	/**
+	 * The profile the login is stored as, instead of the current one. A function receives the
+	 * new tokens after sign-in, such as to ask your API for the account name, and returns the
+	 * name; nothing is stored when it throws or returns an invalid name.
+	 */
+	profile?: string | ((tokens: TokenSet) => string | Promise<string>);
+}
+
+/** Options of `token()`. */
+export interface TokenOptions {
+	signal?: AbortSignal;
+	/** The API URL the token is for: the stored login's token is returned only for `apiOrigins`. */
+	baseUrl?: string;
+	/** Receives what you may want to tell the user, such as a refreshed login stored in plaintext. */
+	onWarning?: (warning: AuthWarning) => void;
 }
 
 /** The token `token()` returns. Its `value` prints as `[Redacted]`. */
@@ -371,8 +394,8 @@ export interface ProfileAuthStatus extends AuthStatus {
 /** The client `createAuth()` returns. Its methods work detached from it. */
 export interface AuthClient {
 	/**
-	 * Signs in and stores the login: a browser login on a desktop, a device login elsewhere or
-	 * with `device`, and `LoginRequiresInteractionError` on CI or without a terminal. A logout
+	 * Signs in and stores the login. With `flow: "auto"`: a browser login on a desktop, a device
+	 * login elsewhere, and `LoginRequiresInteractionError` on CI or without a terminal. A logout
 	 * that runs meanwhile is not undone: the login then fails with `StaleCommitError`.
 	 */
 	readonly login: (options: LoginOptions) => Promise<void>;
@@ -381,7 +404,7 @@ export interface AuthClient {
 	 * first when it is about to expire. With `baseUrl`, the stored login's token is returned only
 	 * when its origin is one of `apiOrigins`. No login → `LoginRequiredError`.
 	 */
-	readonly token: (options?: { signal?: AbortSignal; baseUrl?: string }) => Promise<AuthToken>;
+	readonly token: (options?: TokenOptions) => Promise<AuthToken>;
 	/**
 	 * Where the token would come from, the stored login's expiry and scope, and where logins are
 	 * stored. Without an `env` token, reads the login file and asks the OS keyring for the key,
@@ -409,6 +432,8 @@ export interface ProfileClient extends AuthClient {
  * the profiles `env` variable's, else the one chosen with `profiles.use()`, else `"default"`.
  */
 export interface ProfileAuthClient extends ProfileClient {
+	/** `login()`, which may store the login as another profile than the current one. */
+	readonly login: (options: ProfileLoginOptions) => Promise<void>;
 	/**
 	 * The same methods for the profile `name`: 1 to 64 letters, digits, `-`, `_` and `.`, not
 	 * starting with `.` or `-` (else `OAuthConfigError`). No name means the current profile. A
@@ -560,8 +585,11 @@ export interface LoginTicket {
 
 /** `logout()`'s outcome: the local logout and the revocation at the server, reported apart. */
 export interface LogoutResult {
-	/** `"failed"`: the credential is still stored and nothing was revoked. */
-	readonly local: "deleted" | "failed";
+	/**
+	 * `"absent"`: there was no login to delete; `"failed"`: the credential is still stored and
+	 * nothing was revoked.
+	 */
+	readonly local: "deleted" | "absent" | "failed";
 	/**
 	 * `"unsupported"`: the server has no revocation endpoint; `"unknown"`: sent, but no answer
 	 * arrived; `"skipped"`: not attempted, as there was no token to revoke.
