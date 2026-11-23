@@ -107,7 +107,7 @@ Links emit OSC 8 sequences when modifiers are enabled (see [Color control](#colo
 
 <include lang="ts">../../../examples/modules/style.ts#layout</include>
 
-`padStart`, `padEnd`, `center`, and `stringWidth` measure visible terminal columns rather than ANSI bytes. Bun uses `Bun.stringWidth`; the Node fallback may differ for uncommon grapheme clusters. `table()` uses headers for its column count, supports per-column alignment, and accepts readonly (`as const`) headers, rows, and alignments.
+`padStart`, `padEnd`, `center`, and `stringWidth` measure visible terminal columns rather than ANSI bytes. Bun uses `Bun.stringWidth`; the Node fallback may differ for uncommon grapheme clusters. `table()` uses headers for its column count, supports per-column alignment, and accepts readonly (`as const`) headers, rows, and alignments. It draws Markdown-style `|` borders by default; `{ border: false }` separates columns with two spaces and leaves no trailing spaces, the layout of `docker ps` and `kubectl get`.
 
 ## Reference
 

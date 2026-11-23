@@ -15,9 +15,9 @@ import {
 import { defaultThemeFor } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 
-const ESC = "\x1B[";
-const HIDE_CURSOR = `${ESC}?25l`;
-const SHOW_CURSOR = `${ESC}?25h`;
+export const ESC = "\x1B[";
+export const HIDE_CURSOR: string = `${ESC}?25l`;
+export const SHOW_CURSOR: string = `${ESC}?25h`;
 const ERASE_LINE = `${ESC}2K`;
 const CURSOR_TO_START = "\r";
 
@@ -128,7 +128,7 @@ export interface SpinnerOptions<T> extends SpinnerHandleOptions {
 	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => T | Promise<T>;
 }
 
-function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
+export function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	if (spinnerType === undefined) {
 		return BUILTIN_SPINNERS.dots;
 	}
@@ -140,7 +140,7 @@ function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	return spinnerType;
 }
 
-function frameAt(frames: readonly string[], index: number): string {
+export function frameAt(frames: readonly string[], index: number): string {
 	const frame = frames[index];
 	if (frame === undefined) throw new Error("Spinner frame index is out of bounds");
 	return frame;
@@ -160,7 +160,7 @@ const LINE_BREAK = /[\n\v\f\x85]/;
  * `text` if it fits one row of `width` columns; otherwise cut to fit, ending in "…". A cut keeps
  * every escape sequence, so styles the kept part opened are still closed.
  */
-function fitRow(text: string, width: number): string {
+export function fitRow(text: string, width: number): string {
 	graphemes ??= new Intl.Segmenter();
 	let column = 0;
 	let cut = 0;
@@ -183,7 +183,7 @@ function fitRow(text: string, width: number): string {
 	return text;
 }
 
-function renderFinal(
+export function renderFinal(
 	message: string,
 	theme: ProgressTheme,
 	outcome: SpinnerOutcome,
@@ -192,6 +192,34 @@ function renderFinal(
 	const symbol = outcome === "success" ? SUCCESS_SYMBOL : ERROR_SYMBOL;
 	const styleSymbol = outcome === "success" ? theme.success : theme.error;
 	return `${erase}${styleSymbol(symbol)} ${theme.message(message)}\n`;
+}
+
+/**
+ * Apply the `"exit"` {@link SpinnerSigintPolicy} to a running indicator until the returned
+ * function runs. `abort` runs when another listener owns ending the process; otherwise
+ * `restore` runs and the signal is re-raised.
+ */
+export function listenForSigint(abort: () => void, restore: () => void): () => void {
+	// An inherited ignore (background job) stays: listening would make SIGINT fatal again.
+	if (isSignalIgnored("SIGINT")) return () => {};
+	const handler = () => {
+		// `once` already removed this listener for an emitted signal.
+		process.removeListener("SIGINT", handler);
+		// A host that kept its own persistent listener (Crust's `execute()`) already ran it
+		// for this signal and owns ending the process; re-raising would invoke it twice. Stop
+		// like an abort, so a host whose cancellation never reaches the indicator (its own
+		// listener, an unrelated `signal`) is not kept alive by the animation timer.
+		if (process.listenerCount("SIGINT") > 0) {
+			abort();
+			return;
+		}
+		restore();
+		// With no listeners left the re-raise hits the default disposition and terminates
+		// with real signal semantics — shells observe exit status 130.
+		process.kill(process.pid, "SIGINT");
+	};
+	process.once("SIGINT", handler);
+	return () => process.removeListener("SIGINT", handler);
 }
 
 export type { TerminalIO, TerminalOutput } from "@crustjs/utils/terminal";
@@ -217,7 +245,7 @@ export function createSpinnerHandle(
 	let started = false;
 	let finished = false;
 	let timerId: ReturnType<typeof setInterval> | undefined;
-	let sigintHandler: (() => void) | undefined;
+	let removeSigint: (() => void) | undefined;
 	let exitHandler: (() => void) | undefined;
 	let releaseFrame: (() => void) | undefined;
 	// Deferred a turn so a `stop()` with its own message, run by the cancellation itself, wins.
@@ -242,10 +270,8 @@ export function createSpinnerHandle(
 			clearInterval(timerId);
 			timerId = undefined;
 		}
-		if (sigintHandler) {
-			process.removeListener("SIGINT", sigintHandler);
-			sigintHandler = undefined;
-		}
+		removeSigint?.();
+		removeSigint = undefined;
 		if (exitHandler) {
 			process.removeListener("exit", exitHandler);
 			exitHandler = undefined;
@@ -288,29 +314,12 @@ export function createSpinnerHandle(
 				redraw: drawFrame,
 			});
 
-			// An inherited ignore (background job) stays: listening would make SIGINT fatal again.
-			if (sigint === "exit" && !isSignalIgnored("SIGINT")) {
-				const handler = () => {
-					// `once` already removed this listener for an emitted signal.
-					process.removeListener("SIGINT", handler);
-					sigintHandler = undefined;
-					// A host that kept its own persistent listener (Crust's `execute()`) already ran it
-					// for this signal and owns ending the process; re-raising would invoke it twice. Stop
-					// like an abort, so a host whose cancellation never reaches the spinner (its own
-					// listener, an unrelated `signal`) is not kept alive by the animation timer.
-					if (process.listenerCount("SIGINT") > 0) {
-						onAbort();
-						return;
-					}
+			if (sigint === "exit") {
+				removeSigint = listenForSigint(onAbort, () => {
 					cleanup();
 					finished = true;
 					sink.write(SHOW_CURSOR);
-					// With no listeners left the re-raise hits the default disposition and terminates
-					// with real signal semantics — shells observe exit status 130.
-					process.kill(process.pid, "SIGINT");
-				};
-				sigintHandler = handler;
-				process.once("SIGINT", handler);
+				});
 			}
 		},
 

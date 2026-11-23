@@ -16,6 +16,15 @@ export class NonInteractiveError extends Error {
 	}
 }
 
+/** OpenTUI's renderer config plus the signal that cancels the app. */
+export interface RunTuiConfig extends CliRendererConfig {
+	/**
+	 * Destroys the renderer when aborted; `runTui()` then rejects with the signal's reason. Pass
+	 * the action's `signal` so the app closes when the invocation is cancelled.
+	 */
+	signal?: AbortSignal;
+}
+
 /** Mounts an app onto the OpenTUI renderer; may be async. */
 export type TuiMount = (renderer: CliRenderer) => void | Promise<void>;
 
@@ -37,12 +46,14 @@ function isCtrlC(event: KeyEvent): boolean {
  * Throws {@link NonInteractiveError} unless stdin and stdout are TTYs. Defaults to the alternate
  * screen, a disabled console, and `exitOnCtrlC: true`; explicit `config` values win. A `mount`
  * error destroys the renderer and is rethrown; an output failure rejects with its error; Ctrl+C
- * cancellation rejects with an `AbortError`.
+ * cancellation rejects with an `AbortError`, and an aborted `signal` with its reason.
  */
-export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): Promise<void> {
+export async function runTui(mount: TuiMount, options: RunTuiConfig = {}): Promise<void> {
+	const { signal, ...config } = options;
 	if (!(config.stdin ?? process.stdin).isTTY || !(config.stdout ?? process.stdout).isTTY) {
 		throw new NonInteractiveError();
 	}
+	signal?.throwIfAborted();
 
 	let aborted = false;
 	const { promise: destroyed, resolve: settle } = Promise.withResolvers<void>();
@@ -72,6 +83,16 @@ export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): P
 	};
 	if (exitOnCtrlC) renderer.keyInput.on("keypress", onKeypress);
 
+	let cancelled: { reason: unknown } | undefined;
+	const onAbort = () => {
+		if (renderer.isDestroyed) return;
+		cancelled = { reason: signal?.reason };
+		renderer.destroy();
+	};
+	// The signal may have aborted while the renderer was being created.
+	if (signal?.aborted) onAbort();
+	else signal?.addEventListener("abort", onAbort, { once: true });
+
 	// The app may destroy the renderer while `mount` is still pending (e.g. mount awaits the
 	// app's lifetime), so settle on destroy rather than on mount completion.
 	let mountFailure: { error: unknown } | undefined;
@@ -88,10 +109,12 @@ export async function runTui(mount: TuiMount, config: CliRendererConfig = {}): P
 		await destroyed;
 	} finally {
 		renderer.keyInput.off("keypress", onKeypress);
+		signal?.removeEventListener("abort", onAbort);
 	}
 	// destroy() restores the terminal asynchronously; settle once callers can write to it again.
 	const closeFailure = await closed;
 	if (mountFailure) throw mountFailure.error;
 	if (closeFailure) throw closeFailure.error;
+	if (cancelled) throw cancelled.reason;
 	if (aborted) throw Object.assign(new Error("TUI cancelled"), { name: "AbortError" });
 }

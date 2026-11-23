@@ -105,6 +105,33 @@ describe("runTui", () => {
 		});
 	});
 
+	it("destroys the renderer and rejects with the reason when the signal aborts", () => {
+		const { outcome, rendererDestroyed } = observe("signal-aborts");
+
+		expect(outcome).toMatchObject({ status: "rejected", name: "AbortError" });
+		expect(rendererDestroyed).toBe(true);
+	});
+
+	it("rejects before creating a renderer when the signal has already aborted", async () => {
+		const stdin = Object.assign(new PassThrough(), { isTTY: true });
+		const stdout = Object.assign(new Writable({ write() {} }), { isTTY: true });
+		let mounted = false;
+
+		await expect(
+			runTui(
+				() => {
+					mounted = true;
+				},
+				{
+					stdin: asReadStream(stdin),
+					stdout: stdout as NodeJS.WriteStream,
+					signal: AbortSignal.abort(new Error("cancelled")),
+				},
+			),
+		).rejects.toThrow("cancelled");
+		expect(mounted).toBe(false);
+	});
+
 	it("does not destroy on Ctrl+C when exitOnCtrlC is false", () => {
 		const { outcome, rendererDestroyed, manualTeardownReached } = observe("ctrl-c-without-exit");
 

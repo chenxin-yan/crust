@@ -23,5 +23,8 @@ console.log(table(["Name", "State"], [["build", "ok"]]));
 // | Name  | State |
 // |-------|-------|
 // | build | ok    |
+console.log(table(["Name", "State"], [["build", "ok"]], { border: false }));
+// Name   State
+// build  ok
 console.log(link("docs", "https://crustjs.com")); // docs
 //#endregion

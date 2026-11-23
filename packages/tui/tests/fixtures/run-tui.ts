@@ -95,7 +95,8 @@ export type TuiScenario =
 	| "ctrl-j-latin-base-code-99"
 	| "ctrl-c-without-exit"
 	| "waits-for-close"
-	| "output-failure";
+	| "output-failure"
+	| "signal-aborts";
 
 /** Ctrl+C on a non-Latin (Cyrillic) layout, where only `baseCode` identifies the physical C key. */
 function baseCodeCtrlC(baseCode: 99 | 67) {
@@ -225,6 +226,21 @@ const scenarios = {
 			}, config),
 		);
 		return { outcome, rendererDestroyed: renderer?.isDestroyed, manualTeardownReached };
+	},
+	"signal-aborts": async () => {
+		const { config } = createTtyConfig();
+		const controller = new AbortController();
+		let renderer: CliRenderer | undefined;
+		const outcome = await settle(
+			runTui(
+				(created) => {
+					renderer = created;
+					setTimeout(() => controller.abort(), 10);
+				},
+				{ ...config, signal: controller.signal },
+			),
+		);
+		return { outcome, rendererDestroyed: renderer?.isDestroyed };
 	},
 } satisfies Record<TuiScenario, () => Promise<TuiObservation>>;
 
