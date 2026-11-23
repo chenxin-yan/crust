@@ -147,12 +147,12 @@ describe("confirm", () => {
 		expect(await captureExecute(scoped, ["list", "--input", '{"yes":true}'])).toEqual({
 			stdout: "",
 			stderr: 'Error: Unknown flag "--yes"',
-			exitCode: 1,
+			exitCode: 2,
 		});
 		expect(await captureExecute(scoped, ["list", "--yes"])).toEqual({
 			stdout: "",
 			stderr: 'Error: Unknown flag "--yes"',
-			exitCode: 1,
+			exitCode: 2,
 		});
 	});
 

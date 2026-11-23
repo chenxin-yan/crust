@@ -553,8 +553,8 @@ describe("Context-owned flags at use sites", () => {
 		await unwrap(app.run(["inline"], { flags: { "api-key": "two" } }));
 		expect(seen).toEqual(["one", "two"]);
 		const io = { stdout: () => {}, stderr: () => {} };
-		expect(await app.execute({ argv: ["status", "--api-key", "x"], io })).toBe(1);
-		expect(await app.execute({ argv: ["--api-key", "x", "status"], io })).toBe(1);
+		expect(await app.execute({ argv: ["status", "--api-key", "x"], io })).toBe(2);
+		expect(await app.execute({ argv: ["--api-key", "x", "status"], io })).toBe(2);
 		await expect(
 			// @ts-expect-error -- status does not use auth, so it does not parse --api-key
 			unwrap(app.run(["status"], { flags: { "api-key": "x" } })),

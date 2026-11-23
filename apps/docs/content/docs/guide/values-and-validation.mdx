@@ -114,7 +114,7 @@ TypeScript also infers the action value. For `type` or `parse`, it is the conver
 
 ### At runtime
 
-Crust converts and validates input before the Command Action. A failed conversion, a thrown `parse`, or a schema issue prints an error, exits with `1`, and skips the action:
+Crust converts and validates input before the Command Action. A failed conversion, a thrown `parse`, or a schema issue prints an error, exits with `2`, and skips the action:
 
 ```sh
 $ wait --seconds soon

@@ -70,6 +70,21 @@ const configured = new Crust("app").action(async () => {
 });
 //#endregion
 
+//#region exit-code
+// Like `grep`: 0 when a line matches, 1 when none does, 2 for a usage error.
+export const search = new Crust("search")
+	.args(
+		{ name: "pattern", type: "string", required: true },
+		{ name: "lines", type: "string", variadic: true },
+	)
+	.action(({ args, stdout, exitCode }) => {
+		const matches = args.lines.filter((line) => line.includes(args.pattern));
+		for (const line of matches) stdout(line);
+		// [!code highlight]
+		if (matches.length === 0) exitCode(1);
+	});
+//#endregion
+
 //#region debug
 import { defineExtension, defineExtensionId } from "@crustjs/core";
 
@@ -132,6 +147,7 @@ if (import.meta.main) {
 		validate: declared,
 		cleanup: deploy,
 		config: configured,
+		search,
 		debug: traced,
 		quiet: quieted,
 		cancel: cancelled,

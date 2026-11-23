@@ -29,8 +29,8 @@ export interface InteractiveRun<Outcome = RunOutcome<unknown, readonly unknown[]
 	stdout(): string;
 	/**
 	 * Settles after cleanup like `app.run()`: resolves with the typed `result` (or the handling
-	 * Extension) and the captured `stdout` and `stderr` (plain unless `raw` is set), or rejects
-	 * with a failed outcome's `error`.
+	 * Extension), the `exitCode`, and the captured `stdout` and `stderr` (plain unless `raw` is
+	 * set), or rejects with a failed outcome's `error`.
 	 */
 	readonly done: Promise<Exclude<Outcome, { readonly status: "failed" }>>;
 }

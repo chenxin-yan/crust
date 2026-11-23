@@ -211,6 +211,30 @@ function isObjectLike(value: CaughtError): value is object {
 	return typeof value === "object" && value !== null;
 }
 
+/** Errors in how the CLI was called rather than in the work: exit 2, as `rg`, `grep`, and argparse do. */
+const USAGE_ERROR_CODES: ReadonlySet<string> = new Set([
+	"PARSE",
+	"VALIDATION",
+	"COMMAND_NOT_FOUND",
+]);
+
+/**
+ * The exit code of a failed invocation: `cancelledExitCode` for cancellation, the thrown
+ * value's own integer `exitCode` (e.g. a child process error), `2` for a usage error, else `1`.
+ */
+function failureExitCode(error: CaughtError, cancelledExitCode = EXIT_CODE_CANCELLED): number {
+	if (cancellationCleanupFailures(error) !== undefined) return cancelledExitCode;
+	try {
+		// SAFETY: structural probe of an arbitrary thrown value; a throwing getter falls through to 1.
+		const code = isObjectLike(error) ? (error as { exitCode?: unknown }).exitCode : undefined;
+		// `process.exitCode` rejects anything but an integer.
+		if (typeof code === "number" && Number.isInteger(code)) return code;
+	} catch {
+		// Not readable: the failure keeps the generic code.
+	}
+	return error instanceof CrustError && USAGE_ERROR_CODES.has(error.code) ? 2 : 1;
+}
+
 /**
  * The underlying failures of one caught value: `SuppressedError` chains and
  * `AggregateError`s contribute their members, not their own boilerplate message,
@@ -708,8 +732,8 @@ async function dispatch(
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<
-	| { status: "completed"; result: unknown; events?: readonly unknown[] }
-	| { status: "handled"; by: ExtensionId }
+	| { status: "completed"; result: unknown; exitCode: number; events?: readonly unknown[] }
+	| { status: "handled"; by: ExtensionId; exitCode: 0 }
 > {
 	const { rootNode, extensions } = prepared;
 	// Nothing to wait for without a selector: action-side output stays immediate and in order.
@@ -725,6 +749,8 @@ async function dispatch(
 	const resolvedNode = route.command;
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
+	// Set by the action's `exitCode(n)`; the last call wins.
+	let actionExitCode = 0;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
@@ -809,6 +835,9 @@ async function dispatch(
 				},
 				stdout: output.routed.stdout,
 				stderr: output.routed.stderr,
+				exitCode: (code: number) => {
+					actionExitCode = code;
+				},
 			} satisfies CrustCommandContext;
 			result = await resolvedNode.run(context);
 			if (isAsyncGenerator(result)) result = await drain(result, (stream.events = []));
@@ -925,8 +954,13 @@ async function dispatch(
 		await resolver.settle();
 	}
 	return outcome.status === "handled"
-		? { status: "handled", by: outcome.by }
-		: { status: "completed", result: outcome.result, ...eventsOf(stream) };
+		? { status: "handled", by: outcome.by, exitCode: 0 }
+		: {
+				status: "completed",
+				result: outcome.result,
+				exitCode: actionExitCode,
+				...eventsOf(stream),
+			};
 }
 
 /** `events` only after a generator action started: its presence is what marks one. */
@@ -1095,6 +1129,7 @@ export async function runInvocation(
 		return {
 			status: "failed",
 			error,
+			exitCode: failureExitCode(error),
 			...eventsOf(stream),
 			stdout: stdout.join("\n"),
 			stderr: stderr.join("\n"),
@@ -1151,13 +1186,8 @@ export async function executeInvocation(
 		} catch (error) {
 			// Extension-application failures render directly: hooks belong to
 			// Extensions that just failed to apply.
-			if (isAbortError(error)) {
-				process.exitCode = EXIT_CODE_CANCELLED;
-				return EXIT_CODE_CANCELLED;
-			}
-			io.stderr(describeFailure(error));
-			process.exitCode = 1;
-			return 1;
+			if (!isAbortError(error)) io.stderr(describeFailure(error));
+			return failureExitCode(error);
 		}
 
 		// Persistent, not `once`: spinner-style one-shot listeners re-raise SIGINT only when nobody listens.
@@ -1192,7 +1222,7 @@ export async function executeInvocation(
 		let rendered: { error: CaughtError } | undefined;
 		let exitCode = 0;
 		try {
-			await dispatch(
+			({ exitCode } = await dispatch(
 				{ argv, env },
 				prepared,
 				output,
@@ -1203,11 +1233,9 @@ export async function executeInvocation(
 				},
 				async (error, context) => {
 					rendered = { error };
-					const cancelled = cancellationCleanupFailures(error) !== undefined;
-					process.exitCode = cancelled ? cancelledExitCode : 1;
 					return renderFailure(error, argv, prepared, output, signal, env, context);
 				},
-			);
+			));
 		} catch (error) {
 			// Disposal wraps the failure rendered above as `suppressed` (Object.is: the
 			// body may have thrown NaN or any primitive). Render only the cleanup side;
@@ -1227,14 +1255,10 @@ export async function executeInvocation(
 			}
 			if (cleanupFailure) renderCleanupFailure(cleanupFailure.error, output, "Cleanup failed");
 			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
-			// while unwinding it (callers such as shell loops must still see the interrupt). Core
-			// always preserves a nonzero failure outcome, regardless of what onError hooks do.
-			exitCode = cancellationCleanupFailures(error) === undefined ? 1 : cancelledExitCode;
-			process.exitCode = exitCode;
+			// while unwinding it (callers such as shell loops must still see the interrupt).
+			exitCode = failureExitCode(error, cancelledExitCode);
 			if (!rendered) {
 				await renderFailure(error, argv, prepared, output, signal, env, extensionContext);
-				// Reassert: a presentation hook may have reassigned process.exitCode.
-				process.exitCode = exitCode;
 			}
 		} finally {
 			// A signal that arrived while synchronous work blocked the event loop is still pending,
@@ -1254,7 +1278,6 @@ export async function executeInvocation(
 		// for the event loop to drain, so `execute()` still resolves 130/143 to the caller. The exit
 		// code stays as the fallback when the re-raise can't kill: another listener owns the signal,
 		// or Windows, where `process.kill` on self is a forced kill without the 128+n status.
-		process.exitCode = cancelledExitCode;
 		if (!inProcess && process.platform !== "win32") {
 			pendingSignalExit = { name: cancelledBy, exitCode: cancelledExitCode };
 			process.once("beforeExit", exitBySignal);
@@ -1263,7 +1286,10 @@ export async function executeInvocation(
 	};
 
 	// Prompts, spinners and `runSteps()` cancel with the invocation unless given their own signal.
-	return await (inProcess
+	const code = await (inProcess
 		? withAmbientTerminalIO(io, invoke, signal)
 		: withProcessTerminalSignal(signal, invoke));
+	// The one write: hooks and the action cannot change the status by assigning `process.exitCode`.
+	process.exitCode = code;
+	return code;
 }

@@ -185,7 +185,7 @@ JSON inputs accept JSON primitives, structurally JSON-compatible objects, and ar
 
 ### `RunOutcome<Result, Events>`
 
-The inferred return value of `run()`. Every branch carries readonly captured `stdout` and `stderr`. Narrow `status` before reading its branch-specific field:
+The inferred return value of `run()`. Every branch carries readonly captured `stdout` and `stderr`, and the `exitCode` that `execute()` would end with for the same invocation (see [exit status](/docs/guide/error-handling#exit-status); a cancelled `run()` reports `130`). Narrow `status` before reading its branch-specific field:
 
 - `completed`: the `result`: the awaited output of the command's [`.output()`](/docs/api/crust#outputschema) schema, or else the action's awaited return value (an async generator's `return` value).
 - `handled`: the handling Extension id, `by`.
@@ -193,7 +193,7 @@ The inferred return value of `run()`. Every branch carries readonly captured `st
 
 `Events` is the array of values an [async generator action](/docs/guide/commands#stream-events) yields, inferred from its yields, or `undefined` (the default) for any other command. When it is an array, `completed` carries `events`, `[]` if the action yielded nothing, and `failed` carries the events yielded so far once the action started. Without it, neither branch has `events`.
 
-See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/typed-run.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries the result but no captured output.
+See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/typed-run.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries the result but no captured output or exit code.
 
 ### Parser boundary types
 
@@ -228,7 +228,7 @@ The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions).
   name="CrustCommandContext"
 />
 
-`ctx` is a lazy `ContextBag` of the Contexts available on the command path. `rootCommand` is the root snapshot, including Extension contributions.
+`ctx` is a lazy `ContextBag` of the Contexts available on the command path. `rootCommand` is the root snapshot, including Extension contributions. `exitCode(n)` sets the invocation's exit code for when the action completes; the action carries on, the last call wins, and a throw replaces it (see [exit status](/docs/guide/error-handling#exit-status)).
 
 ## Context types
 

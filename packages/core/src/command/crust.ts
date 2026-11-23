@@ -149,6 +149,12 @@ export interface CrustCommandContext<
 	command: CommandSnapshot;
 	/** Readonly snapshot of the application root, including Extension contributions */
 	rootCommand: CommandSnapshot;
+	/**
+	 * Set the invocation's exit code for when the action completes; the action carries on and the
+	 * last call wins. To stop, `return` or `throw`. A throw exits `1`, or with the thrown value's
+	 * integer `exitCode`.
+	 */
+	exitCode: (code: number) => void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1974,9 +1980,11 @@ export class Crust<
 	 *
 	 * This is the terminal CLI boundary — call it on the root builder. It
 	 * renders a failure once (through Extension `onError` hooks, ending in the
-	 * chosen Renderer's `error` or Core's default rendering), sets `process.exitCode` (`1`, or
-	 * `130` for an `AbortError` cancellation, `143` when `SIGTERM` cancelled it), and resolves
-	 * to the exit code. After a `SIGINT` or `SIGTERM` cancelled the run, the exit code is
+	 * chosen Renderer's `error` or Core's default rendering), and resolves to the exit code, which
+	 * it also assigns to `process.exitCode` once at the end: `0`, or the action's `exitCode(n)`;
+	 * `1`, or a thrown value's integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or
+	 * `COMMAND_NOT_FOUND` error; `130` for an `AbortError` cancellation, `143` when `SIGTERM`
+	 * cancelled it. After a `SIGINT` or `SIGTERM` cancelled the run, the exit code is
 	 * `130` / `143` whatever the action did, and without injected `io` the process dies by
 	 * that signal once its event loop drains (on `beforeExit`): code after `execute()` still
 	 * runs, and calling `process.exit()` or changing `process.exitCode` keeps that exit instead.
@@ -1986,7 +1994,7 @@ export class Crust<
 	 *                   an `onEvent(event)` callback for an async generator action's
 	 *                   events, a caller `signal` that cancels the invocation, and the
 	 *                   `env` that flags' `env` bindings read (`process.env` by default)
-	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation, `143` after `SIGTERM`)
+	 * @returns The terminal exit code
 	 */
 	execute(
 		this: { readonly _types: { readonly caps: "app" } },

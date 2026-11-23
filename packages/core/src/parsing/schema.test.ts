@@ -226,7 +226,7 @@ describe("Standard Schema on json flags", () => {
 	it("reports invalid JSON text without echoing it", async () => {
 		const { app } = bodyApp();
 		const result = await executeCrust(app, ["--body", "{secret"]);
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(2);
 		expect(result.stderr).toContain("Invalid JSON for --body");
 		expect(result.stderr).not.toContain("secret");
 	});

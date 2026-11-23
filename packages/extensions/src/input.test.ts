@@ -141,7 +141,7 @@ describe("input", () => {
 		expect(valid.exitCode, valid.stderr).toBe(0);
 		expect(JSON.parse(valid.stdout)).toEqual({ name: "a" });
 		const invalid = await captureExecute(app, ["--input", '{"body":{}}']);
-		expect(invalid.exitCode).toBe(1);
+		expect(invalid.exitCode).toBe(2);
 		expect(invalid.stderr).toContain("flags.body: name is required");
 	});
 
@@ -270,7 +270,7 @@ describe("input", () => {
 
 		expect(valid.exitCode).toBe(0);
 		expect(valid.stdout).toContain("--input");
-		expect(unreadable).toMatchObject({ stdout: "", exitCode: 1 });
+		expect(unreadable).toMatchObject({ stdout: "", exitCode: 2 });
 		expect(unreadable.stderr).toContain("--input: cannot read");
 	});
 
@@ -297,7 +297,7 @@ describe("input", () => {
 		expect(await captureExecute(app, ["--input", JSON.stringify({ [flag]: true })])).toEqual({
 			stdout: "",
 			stderr: `Error: Flag "--${flag}" is not command input: set it on the command line`,
-			exitCode: 1,
+			exitCode: 2,
 		});
 	});
 
@@ -321,7 +321,7 @@ describe("input", () => {
 		const app = new Crust("app").extend(...extensions()).action(() => ({ ok: true }));
 
 		const { stdout, stderr, exitCode } = await captureExecute(app, ["--json", "--input", "{bad"]);
-		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 2 });
 		expect(stderr.split("\n")).toHaveLength(1);
 		expect(JSON.parse(stderr)).toMatchObject({ code: "PARSE", message: expect.any(String) });
 	});
@@ -374,7 +374,7 @@ describe("input", () => {
 		expect(run.stderr).toBe(
 			"Error: --input: cannot read stdin (stdin is in use by another reader)\n",
 		);
-		expect(run.status).toBe(1);
+		expect(run.status).toBe(2);
 	});
 
 	// An earlier consumer read stdin to EOF; its `end` event cannot fire again.
@@ -392,7 +392,7 @@ describe("input", () => {
 		const run = runScript(command, options, script, '{"region":"eu"}');
 
 		expect(run.stderr).toContain("--input: invalid JSON from stdin.");
-		expect(run.status).toBe(1);
+		expect(run.status).toBe(2);
 	});
 
 	it.each([

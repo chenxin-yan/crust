@@ -33,7 +33,7 @@ test("captures terminal errors", async () => {
 	expect(result.stdout).toBe("");
 	// [!code highlight:2]
 	expect(result.stderr).toContain("Unknown flag");
-	expect(result.exitCode).toBe(1);
+	expect(result.exitCode).toBe(2);
 });
 //#endregion
 

@@ -79,7 +79,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			"verbose=true",
 		);
 		const localResult = await executeCrust(app, ["group", "deploy", "--root-only"]);
-		expect(localResult.exitCode).toBe(1);
+		expect(localResult.exitCode).toBe(2);
 		expect(localResult.stderr).toContain("Unknown flag");
 	});
 
@@ -93,7 +93,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			.add(defineCommand("deploy", (command) => command.use(auth).action(() => {})));
 
 		const result = await executeCrust(app, ["deploy"]);
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(2);
 		expect(result.stderr).toContain('Missing required flag "--token"');
 	});
 

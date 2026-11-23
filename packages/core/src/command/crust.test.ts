@@ -976,7 +976,7 @@ describe("Extension named hooks", () => {
 				message: "Argument <target> cannot be provided after omitted argument <source>",
 			};
 			const { app, execute, received } = bindingApp({ args: { target: "new" } });
-			expect(await execute([])).toEqual({ exitCode: 1, stderr: `Error: ${gap.message}` });
+			expect(await execute([])).toEqual({ exitCode: 2, stderr: `Error: ${gap.message}` });
 			await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: gap });
 			expect(received).toEqual([]);
 		});
@@ -1001,7 +1001,7 @@ describe("Extension named hooks", () => {
 			const stderr: string[] = [];
 			const io = { stdout: () => {}, stderr: (line: string) => void stderr.push(line) };
 			expect(await app({ flags: { region: "eu" } }).execute({ argv: [], io })).toBe(0);
-			expect(await app({}).execute({ argv: [], io })).toBe(1);
+			expect(await app({}).execute({ argv: [], io })).toBe(2);
 			expect(regions).toEqual(["eu"]);
 			expect(stderr).toEqual(['Error: Missing required flag "--region"']);
 		});
@@ -1023,7 +1023,7 @@ describe("Extension named hooks", () => {
 				const stderr: string[] = [];
 				expect(
 					await app.execute({ argv: [], io: { stderr: (line) => void stderr.push(line) } }),
-				).toBe(1);
+				).toBe(2);
 				expect(errors).toEqual([expect.objectContaining({ code: "PARSE" })]);
 				expect(stderr.join("\n")).toContain("Expected a number for --port.");
 				expect(outcomes).toEqual(["failed"]);
@@ -1057,7 +1057,7 @@ describe("Extension named hooks", () => {
 			const app = new Crust("cli")
 				.extend(renderer)
 				.add(defineCommand("known", (cmd) => cmd.action(() => {})));
-			expect(await app.execute({ argv: ["nope"] })).toBe(1);
+			expect(await app.execute({ argv: ["nope"] })).toBe(2);
 			expect(flags).toEqual({});
 		});
 	});
@@ -1287,7 +1287,7 @@ describe("Extension named hooks", () => {
 				vi.unstubAllEnvs();
 				for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
 				const result = await execute(argv);
-				expect(result.exitCode, argv.join(" ")).toBe(1);
+				expect(result.exitCode, argv.join(" ")).toBe(2);
 				// Core's default renderer still prints the unchanged message.
 				expect(result.stderr).toContain(message);
 				expect(errors.at(-1)).toBeInstanceOf(CrustError);
@@ -1310,7 +1310,7 @@ describe("Extension named hooks", () => {
 			const io = { stdout: () => {}, stderr: () => {} };
 
 			expect(await app.execute({ argv: ["--port", "abc", "--stop"], io })).toBe(0);
-			expect(await app.execute({ argv: ["--port", "abc"], io })).toBe(1);
+			expect(await app.execute({ argv: ["--port", "abc"], io })).toBe(2);
 			expect(seen).toEqual([
 				["setup", undefined],
 				["post", undefined, "handled"],
@@ -1322,13 +1322,13 @@ describe("Extension named hooks", () => {
 		it("keeps structural argv errors ahead of preRun", async () => {
 			const { execute, seen } = deferringApp();
 			expect(await execute(["--port", "--stop"])).toMatchObject({
-				exitCode: 1,
+				exitCode: 2,
 				stderr: expect.stringContaining(
 					'Missing value for flag "--port"; to pass a value starting with "-", write --port=<value>',
 				),
 			});
 			expect(await execute(["--nope", "--stop"])).toMatchObject({
-				exitCode: 1,
+				exitCode: 2,
 				stderr: expect.stringContaining('Unknown flag "--nope"'),
 			});
 			expect(seen).toEqual([]);
@@ -1892,7 +1892,7 @@ describe("Extension renderer", () => {
 		const routed = new Crust("cli")
 			.extend(render)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
-		expect(await execute(routed, ["nope"], lines)).toBe(1);
+		expect(await execute(routed, ["nope"], lines)).toBe(2);
 		expect(selected).toBe(false);
 		expect(lines).toEqual([expect.stringMatching(/^stderr:Error: /)]);
 
@@ -2393,7 +2393,7 @@ describe("Crust .execute()", () => {
 		await app.execute({ argv: ["sesion", "status"] });
 
 		expect(ran).toBe(false);
-		expect(process.exitCode).toBe(1);
+		expect(process.exitCode).toBe(2);
 		expect(stderrChunks.join("\n")).toContain("Unexpected positional arguments");
 		process.exitCode = 0;
 	});
@@ -2784,7 +2784,7 @@ describe("value errors never echo the raw value", () => {
 		[[SECRET], "Expected a number for <count>."],
 	])("execute() with argv %j", async (argv, message) => {
 		const { exitCode, stderr, error } = await valueApp().execute(argv);
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toContain(message);
 		expect(stderr).not.toContain(SECRET);
 		expectNoEcho(error);
@@ -2801,7 +2801,7 @@ describe("value errors never echo the raw value", () => {
 	])("execute() with %s names the variable", async (variable, message) => {
 		vi.stubEnv(variable, SECRET);
 		const { exitCode, stderr, error } = await valueApp().execute([]);
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toContain(message);
 		expect(stderr).not.toContain(SECRET);
 		expectNoEcho(error);

@@ -272,7 +272,7 @@ describe("settings", () => {
 		process.env.ACME_TELEMETRY = "1";
 		expect(await viaRun()).toMatchObject({ telemetry: true });
 		const { exitCode, stderr } = await captureExecute(acme().app, ["show", "--telemetry"]);
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toContain("--telemetry");
 		const outcome = await acme().app.run(["show"], { flags: { telemetry: true } });
 		expect(outcome).toMatchObject({ status: "failed" });
@@ -289,7 +289,7 @@ describe("settings", () => {
 		});
 		const app = shows(config);
 		const { exitCode, stderr } = await captureExecute(app, ["show"], { env: {} });
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toContain(
 			`Missing setting "org" of acme: pass --org, set ACME_ORG, or set "org" in acme.config.json or ${globalFile()}.`,
 		);
@@ -351,7 +351,7 @@ describe("errors", () => {
 		write(projectFile(), { when: "soon" });
 		const app = shows(config);
 		const { exitCode, stderr } = await captureExecute(app, ["show"]);
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		// As core shows a parser's message for a flag, the file path shows it too.
 		expect(stderr).toContain(`Invalid value for "when" in ${projectFile()}: not a date`);
 	});
@@ -433,7 +433,7 @@ describe("one Context per setting", () => {
 			result: 8080,
 		});
 		const unknown = await captureExecute(app, ["serve", "--org", "x"]);
-		expect(unknown.exitCode).toBe(1);
+		expect(unknown.exitCode).toBe(2);
 		expect(unknown.stderr).toContain('Unknown flag "--org"');
 		write(projectFile(), { org: "file" });
 		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ result: "file" });

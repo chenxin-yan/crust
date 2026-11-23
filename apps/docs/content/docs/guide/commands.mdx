@@ -154,9 +154,9 @@ Events are for programs: Crust never prints them. A terminal user sees only the 
 $ tool deploy
 Error: Unknown command "deploy".
 $ echo $?
-1
+2
 ```
 
-`tool` from [Grow in one file](#grow-in-one-file) has subcommands but no action of its own, so an unknown name fails with exit code `1`.
+`tool` from [Grow in one file](#grow-in-one-file) has subcommands but no action of its own, so an unknown name fails with exit code `2`, the [usage error](/docs/guide/error-handling#exit-status) status.
 
 If the parent has its own `.action()`, matching subcommands still win, and unmatched words become its [positional arguments](/docs/guide/arguments-and-flags#arguments).

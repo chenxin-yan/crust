@@ -100,7 +100,7 @@ async function callCommandTool(
 		input = parseCommandInput(command, values);
 	} catch (error) {
 		// Input shaping failures (bad URL, bad raw) surface like action failures.
-		return toolResultFromOutcome({ status: "failed", error, stdout: "", stderr: "" });
+		return toolResultFromOutcome({ status: "failed", error, exitCode: 2, stdout: "", stderr: "" });
 	}
 	const { signal, notify } = ctx.mcpReq;
 	const progressToken = ctx.mcpReq._meta?.progressToken;
@@ -222,7 +222,7 @@ async function serverFactory(app: AnyCrust, options: McpServerOptions): Promise<
 	};
 	/** A discovery tool's own result, shaped like a command's. */
 	const discovered = (result: unknown) =>
-		toolResultFromOutcome({ status: "completed", result, stdout: "", stderr: "" });
+		toolResultFromOutcome({ status: "completed", result, exitCode: 0, stdout: "", stderr: "" });
 	return () => {
 		const server = new Server(
 			{ name: snapshot.meta.name, version: snapshot.meta.version ?? DEFAULT_SERVER_VERSION },

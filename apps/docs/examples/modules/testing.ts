@@ -14,7 +14,7 @@ const app = new Crust("my-cli").add(
 
 //#region execute
 const captured = await captureExecute(app, ["unknown"]);
-console.log(captured.exitCode); // 1
+console.log(captured.exitCode); // 2
 console.log(captured.stderr); // Error: Unknown command "unknown".
 //#endregion
 

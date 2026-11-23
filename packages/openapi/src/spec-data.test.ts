@@ -758,9 +758,13 @@ describe("spec data files", () => {
 			const acme = chained();
 			const app = appOf(acme);
 
-			for (const argv of [["--help"], ["users", "list-users"]]) {
+			// Without the commands, a generated command's name is a usage error (2) the hook still explains.
+			for (const [argv, code] of [
+				[["--help"], 1],
+				[["users", "list-users"], 2],
+			] as const) {
 				const { stdout, stderr, exitCode } = await captureExecute(app, argv);
-				expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+				expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: code });
 				expect(stderr).toContain(problem);
 				expect(stderr).toContain(join(built.dir, "openapi", "index.json"));
 			}
@@ -775,8 +779,13 @@ describe("spec data files", () => {
 			.extend(help(), acme.extension, didYouMean())
 			.add(...acme.commands);
 
-		for (const argv of [["--help"], ["ping"], ["users", "list-users"], ["--nope"]]) {
-			expect(await captureExecute(app, argv)).toEqual({ stdout: "", stderr: missing, exitCode: 1 });
+		for (const [argv, exitCode] of [
+			[["--help"], 1],
+			[["ping"], 2],
+			[["users", "list-users"], 2],
+			[["--nope"], 2],
+		] as const) {
+			expect(await captureExecute(app, argv)).toEqual({ stdout: "", stderr: missing, exitCode });
 		}
 		// An Extension extended before claims a failure first: `didYouMean()` reports the unknown command.
 		const late = chained();
@@ -784,7 +793,7 @@ describe("spec data files", () => {
 			new Crust("acme").extend(didYouMean(), late.extension).add(...late.commands),
 			["users", "list-users"],
 		);
-		expect(suggested.exitCode).toBe(1);
+		expect(suggested.exitCode).toBe(2);
 		expect(suggested.stderr).not.toContain("api:");
 	});
 });

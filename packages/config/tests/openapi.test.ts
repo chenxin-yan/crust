@@ -104,7 +104,7 @@ it("a generated command fails a missing setting before any request", async () =>
 	mkdirSync(join(root, "xdg"));
 	const urls = requests();
 	const { exitCode, stderr } = await captureExecute(app, ["zones", "list-zones"], { env: {} });
-	expect(exitCode).toBe(1);
+	expect(exitCode).toBe(2);
 	expect(stderr).toContain('Missing setting "account" of acme: pass --account, set ACME_ACCOUNT');
 	expect(urls).toEqual([]);
 });

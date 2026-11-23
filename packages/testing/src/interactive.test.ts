@@ -57,6 +57,7 @@ describe("runInteractive", () => {
 		expect(await run.done).toEqual({
 			status: "completed",
 			result: { name: "Ada" },
+			exitCode: 0,
 			stdout: "saved",
 			stderr: "Hello, Ada!",
 		});

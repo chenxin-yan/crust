@@ -97,7 +97,8 @@ describe("captureExecute", () => {
 
 		const pendingFailure = captureExecute(failingApp, []);
 		await sleep(0);
-		expect(process.exitCode).toBe(1);
+		// Core sets the exit code once, after rendering.
+		expect(process.exitCode).toBe(7);
 		const pendingSuccess = captureExecute(successfulApp, []);
 		await sleep(0);
 

@@ -199,7 +199,7 @@ describe("typed programmatic invocation", () => {
 			try {
 				expect(await echo.execute({ argv: [], io })).toBe(0);
 				expect(await echo.execute({ argv: [], io, env: { CRUST_TEST_TOKEN: "given" } })).toBe(0);
-				expect(await echo.execute({ argv: [], io, env: {} })).toBe(1);
+				expect(await echo.execute({ argv: [], io, env: {} })).toBe(2);
 			} finally {
 				process.exitCode = exitCode;
 			}
@@ -273,7 +273,7 @@ describe("afterDoubleDash arguments", () => {
 		expect(await app.execute({ argv: ["run", "build", "core", "--", "--watch", "src"], io })).toBe(
 			0,
 		);
-		expect(await app.execute({ argv: ["run", "--", "build"], io })).toBe(1);
+		expect(await app.execute({ argv: ["run", "--", "build"], io })).toBe(2);
 		expect(stderr.join("\n")).toContain('Missing required argument "<task>"');
 		expect(received).toEqual([
 			{ args: { task: "build", pkgs: ["core"], extra: ["--watch", "src"] }, rawArgs: [] },

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import { Crust, type CommandDefinition, defineCommand } from "./crust.ts";
+import { type AnyCrust, Crust, type CommandDefinition, defineCommand } from "./crust.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
@@ -303,7 +303,7 @@ describe("Invocation pipeline — snapshot projection", () => {
 		// An unknown flag fails before dispatch builds a context.
 		const originalExitCode = process.exitCode;
 		try {
-			expect(await app.execute({ argv: ["--nope"], io: { stderr: () => {} } })).toBe(1);
+			expect(await app.execute({ argv: ["--nope"], io: { stderr: () => {} } })).toBe(2);
 		} finally {
 			process.exitCode = originalExitCode ?? 0;
 		}
@@ -610,6 +610,94 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 			details: { input: "nope", commandPath: ["app", "users"] },
 		});
 		expect(await failures(["other", "users"], [])).toMatchObject({ code: "PARSE" });
+	});
+});
+
+describe("Invocation pipeline — exit status", () => {
+	let originalExitCode: typeof process.exitCode;
+	beforeEach(() => {
+		originalExitCode = process.exitCode;
+	});
+	afterEach(() => {
+		process.exitCode = originalExitCode ?? 0;
+	});
+
+	async function execute(app: AnyCrust, argv: string[]) {
+		const stdout: string[] = [];
+		const stderr: string[] = [];
+		const exitCode = await app.execute({
+			argv,
+			io: { stdout: (text) => void stdout.push(text), stderr: (text) => void stderr.push(text) },
+		});
+		return { exitCode, processExitCode: process.exitCode, stdout, stderr };
+	}
+
+	it("ends with the last exitCode(n) the action set, and the action carries on", async () => {
+		const app = new Crust("app").action(({ exitCode, stdout }) => {
+			exitCode(3);
+			exitCode(4);
+			stdout("after");
+			return "done";
+		});
+		expect(await execute(app, [])).toEqual({
+			exitCode: 4,
+			processExitCode: 4,
+			stdout: ["after"],
+			stderr: [],
+		});
+		expect(await app.run([])).toMatchObject({ status: "completed", result: "done", exitCode: 4 });
+	});
+
+	it("ends with a thrown value's integer exitCode, else 1, whatever exitCode(n) set", async () => {
+		const failing = (error: unknown) =>
+			new Crust("app").action(({ exitCode }) => {
+				exitCode(3);
+				throw error;
+			});
+		const child = Object.assign(new Error("child failed"), { exitCode: 137 });
+		expect(await execute(failing(child), [])).toMatchObject({
+			exitCode: 137,
+			processExitCode: 137,
+			stderr: ["Error: child failed"],
+		});
+		expect(await failing(child).run([])).toMatchObject({ status: "failed", exitCode: 137 });
+		expect((await execute(failing(new Error("plain")), [])).exitCode).toBe(1);
+		expect((await execute(failing({ exitCode: 1.5 }), [])).exitCode).toBe(1);
+		expect((await execute(failing({ exitCode: "2" }), [])).exitCode).toBe(1);
+	});
+
+	it("ends with 2 for PARSE, VALIDATION, and COMMAND_NOT_FOUND errors", async () => {
+		const app = new Crust("app")
+			.flags({ mode: { type: "string", required: true } })
+			.add(defineCommand("known", (command) => command.action(() => {})));
+		const leaf = new Crust("leaf")
+			.flags({ mode: { type: "string", required: true } })
+			.action(() => {});
+		expect((await execute(leaf, ["--nope"])).exitCode).toBe(2);
+		expect((await execute(leaf, [])).exitCode).toBe(2);
+		expect((await execute(app, ["nope"])).exitCode).toBe(2);
+		expect(process.exitCode).toBe(2);
+		const erased: AnyCrust = leaf;
+		expect(await erased.run([])).toMatchObject({ status: "failed", exitCode: 2 });
+	});
+
+	it("ignores process.exitCode set by the action or a hook", async () => {
+		const hooks = defineExtension(defineExtensionId("hooks"))
+			.onError(() => {
+				process.exitCode = 0;
+				return true;
+			})
+			.postRun(() => {
+				process.exitCode = 9;
+			});
+		const passing = new Crust("app").extend(hooks).action(() => {
+			process.exitCode = 7;
+		});
+		expect(await execute(passing, [])).toMatchObject({ exitCode: 0, processExitCode: 0 });
+		const failing = new Crust("app").extend(hooks).action(() => {
+			throw new Error("failed");
+		});
+		expect(await execute(failing, [])).toMatchObject({ exitCode: 1, processExitCode: 1 });
 	});
 });
 

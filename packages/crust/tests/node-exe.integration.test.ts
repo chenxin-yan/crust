@@ -186,9 +186,9 @@ if (import.meta.main) await new Crust("greet", { description: "Greets from a Nod
 		join(project, "src", "admin.cjs"),
 		`const { Crust } = require(${JSON.stringify(coreDist)});
 if (require.main === module) {
-	new Crust("admin").action(({ stdout }) => {
+	new Crust("admin").action(({ stdout, exitCode }) => {
 		stdout("admin ran");
-		process.exitCode = 3;
+		exitCode(3);
 	}).execute();
 }
 `,
@@ -417,7 +417,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				expect(help.exitCode, help.stderr).toBe(0);
 				expect(help.stdout).toContain("Greets from a Node binary");
 				const invalid = await runWithoutNode(greetBinary, []);
-				expect(invalid.exitCode).toBe(1);
+				expect(invalid.exitCode).toBe(2);
 				expect(invalid.stderr).toContain('Missing required argument "<name>"');
 				const admin = await runWithoutNode(join(platformDir, "bin", `admin-${host}${exe}`), []);
 				expect(admin.stdout.trim()).toBe("admin ran");

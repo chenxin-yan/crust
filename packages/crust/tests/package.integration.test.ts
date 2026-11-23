@@ -93,9 +93,9 @@ await new Crust("bun-greet", { description: "Greets under Bun" })
 		writeFileSync(
 			join(project, "src", "admin.ts"),
 			`import { Crust } from ${JSON.stringify(coreDist)};
-await new Crust("bun-admin").action(({ stdout }) => {
+await new Crust("bun-admin").action(({ stdout, exitCode }) => {
 	stdout("admin under " + (process.versions.bun ? "bun" : "node"));
-	process.exitCode = 3;
+	exitCode(3);
 }).execute();
 `,
 		);
@@ -207,7 +207,7 @@ await new Crust("bun-admin").action(({ stdout }) => {
 				cwd: elsewhere,
 				timeout: 25_000,
 			});
-			expect(missing.exitCode).toBe(1);
+			expect(missing.exitCode).toBe(2);
 			expect(missing.stderr).toContain('Missing required argument "<name>"');
 
 			const admin = await runBoundedProcess(bin(consumer, "bun-admin"), [], {

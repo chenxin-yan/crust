@@ -312,7 +312,7 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			}
 			const help = await run([launcher, "--help"], project);
 			expect(help.stdout).toContain("installed-cli");
-			const invalid = await run([launcher, "--not-a-real-flag"], project, 1);
+			const invalid = await run([launcher, "--not-a-real-flag"], project, 2);
 			expect(invalid.stderr).toContain("--not-a-real-flag");
 
 			// Without bun on PATH the installed crust compiles with its embedded Bun,
