@@ -9,11 +9,9 @@ export type CaptureIO = Partial<InvocationIO>;
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
 export interface ExecutableApp {
-	execute(options?: {
-		argv?: string[];
-		io?: CaptureIO;
-		env?: ExecuteOptions["env"];
-	}): Promise<number>;
+	// Core's own options type: a copy of its members drifts, and stops matching under
+	// `exactOptionalPropertyTypes`.
+	execute(options?: ExecuteOptions): Promise<number>;
 }
 
 export interface CapturedExecute {
@@ -44,8 +42,8 @@ export async function captureExecute(
 	activeExecuteCaptures++;
 	try {
 		const exitCode = await app.execute({
-			argv: [...argv],
-			env: options?.env,
+			argv,
+			...(options?.env !== undefined && { env: options.env }),
 			io: {
 				stdout: (text) => {
 					stdoutLines.push(text);
