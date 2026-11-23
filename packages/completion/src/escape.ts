@@ -150,6 +150,16 @@ export function bashSingleQuote(value: string): string {
 }
 
 /**
+ * Escape one word of a `compgen -W` wordlist. `compgen` expands each word
+ * (parameters, command substitution, quote removal) after splitting the list,
+ * so a backslash before every other character keeps a spelling such as `-$`
+ * or `-'` literal.
+ */
+export function bashCompgenWord(value: string): string {
+	return value.replace(/[^A-Za-z0-9_.-]/gu, "\\$&");
+}
+
+/**
  * Escape a single value for inclusion as a literal-matched key in a bash
  * `case` pattern, when the entire pattern is wrapped in double quotes.
  *
@@ -186,6 +196,18 @@ export function zshArgsDescription(value: string): string {
 }
 
 /**
+ * Escape a flag spelling for the option-name part of an `_arguments` spec.
+ * `_arguments` matches the name against the word as it stands on the command
+ * line, so a character zsh quotes there (as `${(q)…}` does: `-$` reads `-\$`)
+ * keeps its backslash; `:`, `+` and `=` are `_arguments` syntax and get one
+ * too. A short `-+` or `-=` therefore completes its value only when typed
+ * `-\+` or `-\=`.
+ */
+export function zshOptionName(spelling: string): string {
+	return spelling.replace(/["#$&'()*;<>?[\\\]^`{|}:+=]/gu, "\\$&");
+}
+
+/**
  * Escape a value for inclusion as the **name** field of a `_describe`
  * item (the part before the `:` description separator). `_describe`
  * splits each item on the first un-escaped `:`, so embedded colons
@@ -211,4 +233,15 @@ export function zshDescribeField(value: string): string {
  */
 export function fishSingleQuote(value: string): string {
 	return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+// ── PowerShell ────────────────────────────────────────────────────────────
+
+/**
+ * Wrap `value` as a PowerShell single-quoted string. PowerShell also reads
+ * the typographic single quotes (U+2018–U+201B) as quote characters, so
+ * every quote character is doubled.
+ */
+export function powershellSingleQuote(value: string): string {
+	return `'${value.replace(/['\u2018-\u201B]/g, "$&$&")}'`;
 }

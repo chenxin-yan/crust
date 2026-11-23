@@ -1,5 +1,16 @@
-import { toShellIdent, zshArgsDescription, zshDescribeField, bashSingleQuote } from "../escape.ts";
-import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.ts";
+import {
+	bashSingleQuote,
+	toShellIdent,
+	zshArgsDescription,
+	zshDescribeField,
+	zshOptionName,
+} from "../escape.ts";
+import {
+	type CompletionArg,
+	type CompletionCommand,
+	type CompletionFlag,
+	hasComplete,
+} from "../spec.ts";
 
 /**
  * Pure-static zsh completion script renderer.
@@ -26,11 +37,14 @@ import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.t
 
 /**
  * `_arguments` action for a value-taking flag or positional:
+ *   - a `complete` function           → `{_<ident>_complete "<address>"}`
  *   - choices                         → `(a b c)`
  *   - path or free-form string        → `_files`
  *   - url/json, number, boolean       → ` ` (no completion)
  */
-function valueAction(value: CompletionFlag | CompletionArg): string {
+function valueAction(ident: string, value: CompletionFlag | CompletionArg): string {
+	// The address holds validated names joined with spaces: no `:` to end the spec field.
+	if (value.complete !== undefined) return `{_${ident}_complete "${value.complete}"}`;
 	// Choice values are validated by `assertSafeChoiceValue` to contain only
 	// `[A-Za-z0-9_.+:@/-]`, so they can be emitted bare inside the `(…)`
 	// action list without further escaping.
@@ -40,12 +54,17 @@ function valueAction(value: CompletionFlag | CompletionArg): string {
 	return " ";
 }
 
-function flagSpecs(flag: CompletionFlag): string[] {
+/** A brace-alternation member: quoted when it holds characters the shell would read. */
+function braceMember(name: string): string {
+	return /^[A-Za-z0-9_.=-]+$/.test(name) ? name : bashSingleQuote(name);
+}
+
+function flagSpecs(ident: string, flag: CompletionFlag): string[] {
 	const desc = flag.description ?? "";
 	const descPart = `[${zshArgsDescription(desc)}]`;
 	// Empty for booleans; `:NAME:ACTION` for value-takers, with the flag name
 	// as the prompt placeholder.
-	const valueSuffix = flag.takesValue ? `:${flag.name}:${valueAction(flag)}` : "";
+	const valueSuffix = flag.takesValue ? `:${flag.name}:${valueAction(ident, flag)}` : "";
 
 	// Repeatable flags: prefix with `*` per zshcompsys so the spec can
 	// match more than once (otherwise zsh hides used options after the
@@ -56,7 +75,9 @@ function flagSpecs(flag: CompletionFlag): string[] {
 	const spellings = flag.spellings.filter((spelling) => !spelling.startsWith("--no-"));
 	const negNames = flag.spellings.filter((spelling) => spelling.startsWith("--no-"));
 	const optionName = (spelling: string) =>
-		flag.takesValue && spelling.startsWith("--") ? `${spelling}=` : spelling;
+		flag.takesValue && spelling.startsWith("--")
+			? `${zshOptionName(spelling)}=`
+			: zshOptionName(spelling);
 
 	const specs: string[] = [];
 
@@ -71,8 +92,8 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// alternation expanding to one option per spelling. We
 		// single-quote-wrap each piece so flag names with `-` survive
 		// shell tokenisation cleanly.
-		const mutex = spellings.join(" ");
-		const altGroup = spellings.map(optionName).join(",");
+		const mutex = spellings.map(zshOptionName).join(" ");
+		const altGroup = spellings.map((spelling) => braceMember(optionName(spelling))).join(",");
 		// Repeat marker in the brace alternation: `*{-h,--help}` ensures
 		// each member of the alternation can repeat. The mutex prefix
 		// `(...)` is only meaningful for non-repeatable specs.
@@ -120,12 +141,12 @@ function flagSpecs(flag: CompletionFlag): string[] {
  * helpers. Variadic args expand the `<idx>` to `*` and run the action
  * for every remaining word.
  */
-function renderArgSpecs(node: CompletionCommand): string[] {
+function renderArgSpecs(ident: string, node: CompletionCommand): string[] {
 	return node.args.flatMap((arg, idx) => {
 		// Rendered on its own, after `--`; see renderHelper.
 		if (arg.variadic === "afterDoubleDash") return [];
 		const idxToken = arg.variadic ? "*" : String(idx + 1);
-		return [bashSingleQuote(`${idxToken}:${arg.name}:${valueAction(arg)}`)];
+		return [bashSingleQuote(`${idxToken}:${arg.name}:${valueAction(ident, arg)}`)];
 	});
 }
 
@@ -176,8 +197,8 @@ function renderHelper(
 	out: string[],
 ): void {
 	const fnName = helperName(rootIdent, path);
-	const flagSpecLines = node.flags.flatMap(flagSpecs);
-	const argSpecLines = renderArgSpecs(node);
+	const flagSpecLines = node.flags.flatMap((flag) => flagSpecs(rootIdent, flag));
+	const argSpecLines = renderArgSpecs(rootIdent, node);
 	const hasChildren = node.subCommands.length > 0;
 
 	out.push(`${fnName}() {`);
@@ -234,7 +255,9 @@ function renderHelper(
 			out.push("\tif (( dd < CURRENT )); then");
 			out.push('\t\twords=("$words[1]" -- "${(@)words[dd+1,-1]}")');
 			out.push("\t\t(( CURRENT -= dd - 2 ))");
-			out.push(`\t\t_arguments -S ${bashSingleQuote(`*:${dd.name}:${valueAction(dd)}`)}`);
+			out.push(
+				`\t\t_arguments -S ${bashSingleQuote(`*:${dd.name}:${valueAction(rootIdent, dd)}`)}`,
+			);
 			out.push("\t\treturn");
 			out.push("\tfi");
 		}
@@ -299,6 +322,18 @@ export function renderZsh(
 
 	const helpers: string[] = [];
 	renderHelper(ident, [], spec, helpers);
+	// Offers what `<bin> __complete` prints for the address `$1` and the word being
+	// completed; its errors stay off the terminal.
+	if (hasComplete(spec)) {
+		lines.push(`_${ident}_complete() {`);
+		lines.push("\tlocal -a values");
+		lines.push(
+			`\tvalues=(\${(f)"$(${bashSingleQuote(binName)} __complete -- "$1" "$PREFIX" 2>/dev/null)"})`,
+		);
+		lines.push("\tcompadd -a values");
+		lines.push("}");
+		lines.push("");
+	}
 	lines.push(...helpers);
 
 	// Bootstrap line. When zsh's autoload machinery sources the file via

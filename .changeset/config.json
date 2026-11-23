@@ -8,6 +8,7 @@
 		[
 			"@crustjs/core",
 			"@crustjs/extensions",
+			"@crustjs/completion",
 			"@crustjs/crust",
 			"create-crust",
 			"@crustjs/man",

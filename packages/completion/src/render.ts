@@ -1,10 +1,10 @@
 import { CrustError, type BuildArtifacts, type CommandSnapshot } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import type { CompletionOptions, CompletionShell } from "./index.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
+import { renderPowerShell } from "./templates/powershell.ts";
 import { renderZsh } from "./templates/zsh.ts";
 import { walkCommand } from "./walker.ts";
 
@@ -22,6 +22,9 @@ function filenameForShell(shell: CompletionShell, binName: string): string {
 		case "fish":
 			// fish auto-loads `~/.config/fish/completions/<command>.fish`.
 			return `${binName}.fish`;
+		case "powershell":
+			// PowerShell autoloads no completion files; `$PROFILE` dot-sources the script.
+			return `${binName}.ps1`;
 	}
 }
 
@@ -29,6 +32,7 @@ const SHELL_RENDERERS = {
 	bash: renderBash,
 	zsh: renderZsh,
 	fish: renderFish,
+	powershell: renderPowerShell,
 } satisfies Record<CompletionShell, typeof renderBash>;
 
 function prepareRender(root: CommandSnapshot, options: CompletionOptions) {
@@ -45,7 +49,7 @@ function prepareRender(root: CommandSnapshot, options: CompletionOptions) {
 	// `version` flows into header comments only; strip control characters so it
 	// cannot break out of the comment line in the emitted script.
 	return {
-		spec: walkCommand(buildCommandDocumentation(root)),
+		spec: walkCommand(root),
 		binName,
 		version: sanitizeFreeText(version),
 		command: options.command ?? "completion",

@@ -47,6 +47,7 @@
 		"@modelcontextprotocol/server": "^2.4.0"
 	},
 	"devDependencies": {
+		"@crustjs/completion": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/internal-config": "workspace:*",

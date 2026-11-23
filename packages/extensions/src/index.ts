@@ -1,15 +1,3 @@
-export {
-	completion,
-	renderBashCompletion,
-	renderFishCompletion,
-	renderZshCompletion,
-} from "./completion/index.ts";
-export type {
-	CompletionExtension,
-	CompletionOptions,
-	CompletionRenderOptions,
-	CompletionShell,
-} from "./completion/index.ts";
 export { ConfirmationRequiredError, confirmation } from "./confirmation.ts";
 export { didYouMean } from "./did-you-mean.ts";
 export type { DidYouMeanOptions } from "./did-you-mean.ts";

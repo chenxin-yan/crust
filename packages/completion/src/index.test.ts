@@ -3,19 +3,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
+import { json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { runBuildHooks } from "../../../crust/tests/build-hooks.ts";
+import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import {
 	completion,
 	type CompletionOptions,
 	type CompletionRenderOptions,
 	renderBashCompletion,
 	renderFishCompletion,
+	renderPowerShellCompletion,
 	renderZshCompletion,
-} from "../index.ts";
-import { json } from "../json.ts";
+} from "./index.ts";
 
 function buildCli(options?: CompletionOptions) {
 	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
@@ -106,10 +107,11 @@ describe("completion build hook", () => {
 			new Crust("mycli", { version: "1.0.0" }).extend(completion({ command: "completions" })),
 		);
 
-		const [bash, zsh, fish] = files.values();
+		const [bash, zsh, fish, powershell] = files.values();
 		expect(bash).toContain("regenerate with: mycli completions bash\n");
 		expect(zsh).toContain("regenerate with: mycli completions zsh\n");
 		expect(fish).toContain("regenerate with: mycli completions fish\n");
+		expect(powershell).toContain("regenerate with: mycli completions powershell\n");
 	});
 
 	it("pure renderers match build and runtime files byte-for-byte", async () => {
@@ -125,6 +127,7 @@ describe("completion build hook", () => {
 				["mycli", renderBashCompletion],
 				["_mycli", renderZshCompletion],
 				["mycli.fish", renderFishCompletion],
+				["mycli.ps1", renderPowerShellCompletion],
 			] as const) {
 				const script = await render(snapshot, options);
 				expect(files.get(`completions/${filename}`)).toBe(script);
@@ -149,10 +152,85 @@ describe("completion renderers", () => {
 	it("validates names, requires a version, and sanitizes header text", async () => {
 		const snapshot = await new Crust("mycli").snapshot();
 		const unsafe = await new Crust("../pwn").snapshot();
-		for (const render of [renderBashCompletion, renderZshCompletion, renderFishCompletion]) {
+		for (const render of [
+			renderBashCompletion,
+			renderZshCompletion,
+			renderFishCompletion,
+			renderPowerShellCompletion,
+		]) {
 			await expect(render(unsafe, { version: "1" })).rejects.toThrow(/invalid root command name/);
 			await expect(render(snapshot)).rejects.toThrow("completion extension requires a version");
 			expect(await render(snapshot, { version: "1\ninjected" })).not.toContain("\ninjected");
 		}
+	});
+});
+
+describe("complete", () => {
+	const regions = ["us-east", "us-west", "eu-central"];
+	const app = new Crust("mycli", { version: "1.0.0" }).extend(completion()).add(
+		defineCommand("deploy", (cmd) =>
+			cmd
+				.args({
+					name: "service",
+					type: "string",
+					complete: async (typed) => [`${typed}-api`, `${typed}-web`],
+				})
+				.flags({
+					region: {
+						type: "string",
+						complete: (typed) => regions.filter((region) => region.startsWith(typed)),
+					},
+					scope: {
+						type: "exclusive",
+						flags: { team: { type: "string", complete: () => ["core", "line\nbreak"] } },
+					},
+				})
+				.action(() => {}),
+		),
+	);
+
+	it("prints a flag's values for the word, one per line", async () => {
+		expect(await captureExecute(app, ["__complete", "--", "mycli deploy --region", "us"])).toEqual({
+			stdout: "us-east\nus-west\n",
+			stderr: "",
+			exitCode: 0,
+		});
+	});
+
+	it("reads a missing word as empty, as a shell that drops an empty argument sends it", async () => {
+		const { stdout } = await captureExecute(app, ["__complete", "--", "mycli deploy --region"]);
+		expect(stdout).toBe(`${regions.join("\n")}\n`);
+	});
+
+	it("awaits an argument's values and reaches an exclusive group's member", async () => {
+		expect(
+			(await captureExecute(app, ["__complete", "--", "mycli deploy service", "x"])).stdout,
+		).toBe("x-api\nx-web\n");
+		// A value with a line break cannot be read back as one line, so it is left out.
+		expect((await captureExecute(app, ["__complete", "--", "mycli deploy --team"])).stdout).toBe(
+			"core\n",
+		);
+	});
+
+	it("prints nothing for an address without a complete function", async () => {
+		for (const address of ["mycli deploy --scope", "mycli nope --region", "mycli service"]) {
+			expect(await captureExecute(app, ["__complete", "--", address, "x"])).toEqual({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			});
+		}
+	});
+
+	it("keeps __complete out of listings", async () => {
+		const root = await app.snapshot();
+		expect(root.subCommands.__complete?.meta.hidden).toBe(true);
+	});
+
+	it("owns the key: without completion(), a complete function is an unowned key", async () => {
+		const bare = new Crust("mycli").flags({ region: { type: "string", complete: () => [] } });
+		await expect(bare.snapshot()).rejects.toThrow(
+			/sets "complete", which no installed Extension owns/,
+		);
 	});
 });

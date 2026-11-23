@@ -4,11 +4,13 @@ import {
 	assertSafeBinName,
 	assertSafeChoiceValue,
 	assertSafeIdentifier,
+	bashCompgenWord,
 	bashSingleQuote,
 	fishSingleQuote,
 	sanitizeFreeText,
 	zshArgsDescription,
 	zshDescribeField,
+	zshOptionName,
 } from "./escape.ts";
 
 describe("assertSafeIdentifier", () => {
@@ -110,5 +112,24 @@ describe("fishSingleQuote", () => {
 		expect(fishSingleQuote("it's")).toBe("'it\\'s'");
 		expect(fishSingleQuote("a\\b")).toBe("'a\\\\b'");
 		expect(fishSingleQuote("a\\'b")).toBe("'a\\\\\\'b'");
+	});
+});
+
+describe("bashCompgenWord", () => {
+	it("backslash-escapes every character compgen would expand", () => {
+		expect(bashCompgenWord("--dry-run")).toBe("--dry-run");
+		expect(bashCompgenWord("-$")).toBe("-\\$");
+		expect(bashCompgenWord("-'")).toBe("-\\'");
+		expect(bashCompgenWord("-é")).toBe("-\\é");
+	});
+});
+
+describe("zshOptionName", () => {
+	it("escapes what zsh quotes on the command line and the _arguments separators", () => {
+		expect(zshOptionName("--dry-run")).toBe("--dry-run");
+		expect(zshOptionName("-.")).toBe("-.");
+		expect(zshOptionName("-$")).toBe("-\\$");
+		expect(zshOptionName("-:")).toBe("-\\:");
+		expect(zshOptionName("-+")).toBe("-\\+");
 	});
 });

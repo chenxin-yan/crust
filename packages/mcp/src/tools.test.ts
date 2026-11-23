@@ -1,5 +1,6 @@
+import { completion } from "@crustjs/completion";
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
-import { completion, confirmation, help, json, jsonInput, schema } from "@crustjs/extensions";
+import { confirmation, help, json, jsonInput, schema } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
 import { mcpExtension } from "./extension.ts";

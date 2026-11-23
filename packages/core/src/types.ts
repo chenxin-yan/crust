@@ -1162,7 +1162,7 @@ export interface CommandMeta extends CommandExtras {
 	 * - `@crustjs/man` generated man pages (`SUBCOMMANDS` section)
 	 * - `completion` candidate lists (recursively — hidden
 	 *   subcommands and their descendants never appear in generated
-	 *   bash/zsh/fish scripts)
+	 *   shell scripts)
 	 * - `didYouMean` typo suggestions and "Available commands"
 	 *   list (so internal names never surface in error UX)
 	 * - `skill` manifests

@@ -1,15 +1,11 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import {
-	reapBoundedProcesses,
-	runBoundedProcess,
-} from "../../../../crust/tests/bounded-process.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
 import { renderBash } from "./bash.ts";
@@ -29,11 +25,13 @@ async function runBashCompletion(
 	fnName: string,
 	words: string[],
 	cwd?: string,
+	pathDir?: string,
 ): Promise<string[]> {
 	const compWordsLines = words.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`).join("\n");
 	const compCword = words.length - 1;
 	const driver = `
 set -e
+${pathDir === undefined ? "" : `PATH=${shQuote(pathDir)}:"$PATH"`}
 source ${shQuote(scriptPath)}
 ${compWordsLines}
 COMP_CWORD=${compCword}
@@ -363,7 +361,7 @@ describe("renderBash · one-character alias spellings", () => {
 					serve.add(defineCommand("start", (start) => start.action(() => {}))),
 				),
 			);
-		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		const spec = walkCommand(await app.snapshot());
 		tmpDir = await mkdtemp(join(tmpdir(), "bash-one-char-"));
 		scriptPath = join(tmpDir, "mycli-completion.bash");
 		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
@@ -377,6 +375,139 @@ describe("renderBash · one-character alias spellings", () => {
 		expect(
 			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-P", "9090", "serve", ""]),
 		).toEqual(["start"]);
+	});
+});
+
+/** Core accepts any one-character short but whitespace and `-`; the script keeps each literal. */
+describe("renderBash · punctuation shorts", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+	const shorts = [".", "$", "*", "'", "\\", "`"];
+
+	beforeAll(async () => {
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [
+				...shorts.map((short, index) => ({
+					name: `flag${index}`,
+					spellings: [`-${short}`],
+					type: "boolean" as const,
+					takesValue: false as const,
+				})),
+				{
+					name: "money",
+					spellings: ["-+", "--money"],
+					type: "string",
+					takesValue: true,
+					choices: ["cash", "card"],
+				},
+			],
+			args: [],
+			subCommands: [{ name: "serve", flags: [], args: [], subCommands: [] }],
+		};
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-shorts-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
+		// An unquoted `-*` would glob-match this file.
+		await writeFile(join(tmpDir, "-zz"), "");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers every punctuation short as typed", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-"], tmpDir)).toEqual(
+			[...shorts.map((short) => `-${short}`), "-+", "--money"].sort(),
+		);
+	});
+
+	it("completes and routes past the value of a punctuation short", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-+", "c"], tmpDir)).toEqual([
+			"card",
+			"cash",
+		]);
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-*", "-+", "cash", ""], tmpDir),
+		).toEqual(["serve"]);
+	});
+});
+
+/** The script calls `<bin> __complete -- <address> <word>`; a stub on PATH answers here. */
+describe("renderBash · complete functions", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "deploy",
+				flags: [
+					{
+						name: "region",
+						spellings: ["-r", "--region"],
+						type: "string",
+						takesValue: true,
+						complete: "mycli deploy --region",
+					},
+				],
+				args: [
+					{
+						name: "service",
+						type: "string",
+						required: true,
+						variadic: false,
+						complete: "mycli deploy service",
+					},
+				],
+				subCommands: [],
+			},
+		],
+	};
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-complete-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
+		await mkdir(join(tmpDir, "bin"));
+		const stub = join(tmpDir, "bin", "mycli");
+		await writeFile(
+			stub,
+			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$4-one" "$4-two" "at $3"\n`,
+		);
+		await chmod(stub, 0o755);
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	const complete = (words: string[]) =>
+		runBashCompletion(scriptPath, "_mycli", words, tmpDir, join(tmpDir, "bin"));
+
+	it("offers a flag's values that start with the word, in both spellings", async () => {
+		expect(await complete(["mycli", "deploy", "--region", ""])).toEqual([
+			"-one",
+			"-two",
+			"at mycli deploy --region",
+		]);
+		expect(await complete(["mycli", "deploy", "-r", "us"])).toEqual(["us-one", "us-two"]);
+		expect(await complete(["mycli", "deploy", "--region=us"])).toEqual([
+			"--region=us-one",
+			"--region=us-two",
+		]);
+	});
+
+	it("offers an argument's values", async () => {
+		expect(await complete(["mycli", "deploy", "api"])).toEqual(["api-one", "api-two"]);
+	});
+
+	it("offers nothing, silently, when the CLI cannot answer", async () => {
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "deploy", "--region", ""], tmpDir),
+		).toEqual([]);
 	});
 });
 

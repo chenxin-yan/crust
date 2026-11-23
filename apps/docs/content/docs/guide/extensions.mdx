@@ -96,7 +96,7 @@ Contributed commands work like commands added with `.add()`, including typed `ru
 
 ## Own a definition key
 
-A package can add its own key to argument, flag, or command definitions and read it in its Extension. Add the key to `ArgExtras`, `FlagExtras`, or `CommandExtras` with a `declare module` block in the entry that exports the Extension, and declare it with `.owns()`:
+A package can add its own key to argument, flag, or command definitions and read it in its Extension. Add the key to `ArgExtras`, `FlagExtras`, or `CommandExtras` with a `declare module` block in the entry that exports the Extension, and declare it with `.owns()`. [`@crustjs/completion`](/docs/modules/completion#live-values) owns its `complete` key this way:
 
 ```ts title="acme-hints/index.ts"
 import { defineExtension, defineExtensionId } from "@crustjs/core";
@@ -318,7 +318,7 @@ If a factory argument can supply the value instead, build the factory without a 
   ../../../examples/guide/extensions-metadata-optional.ts
 </include>
 
-[`version()`](/docs/modules/extensions/version), [`updateNotifier()`](/docs/modules/extensions/update-notifier), and [`completion()`](/docs/modules/extensions/completion) use this pattern.
+[`version()`](/docs/modules/extensions/version), [`updateNotifier()`](/docs/modules/extensions/update-notifier), and [`completion()`](/docs/modules/completion) use this pattern.
 
 ## Command sections
 

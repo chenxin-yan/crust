@@ -61,6 +61,7 @@ const moduleEntry = (slug: PackageSlug): LandingModule => ({
 export const MODULES: readonly LandingModule[] = [
 	moduleEntry("core"),
 	moduleEntry("extensions"),
+	moduleEntry("completion"),
 	moduleEntry("crust"),
 	moduleEntry("create"),
 	moduleEntry("progress"),

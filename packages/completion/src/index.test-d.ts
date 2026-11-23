@@ -22,7 +22,7 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 	// @ts-expect-error -- unknown flags on host commands stay rejected
 	void app.run(["deploy"], { flags: { forse: true } });
 	// @ts-expect-error -- the contributed command keeps its shell choices
-	void app.run(["completion"], { args: { shell: "powershell" } });
+	void app.run(["completion"], { args: { shell: "nushell" } });
 }
 
 // a literal `command` option renames the contributed command without opening the tree

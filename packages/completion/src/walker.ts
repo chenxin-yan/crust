@@ -1,10 +1,12 @@
-import type { ValueType } from "@crustjs/core";
-import type {
-	CommandDocumentation,
-	DocumentationArg,
-	DocumentationFlag,
+import type { CommandSnapshot, ValueType } from "@crustjs/core";
+import {
+	buildCommandDocumentation,
+	type CommandDocumentation,
+	type DocumentationArg,
+	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
+import { completerOf } from "./complete.ts";
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag, StringCompletion } from "./spec.ts";
 
@@ -57,13 +59,28 @@ function valueShape(
 	}
 }
 
+/** The `complete` address of the definition at `target` when `command` has a completer for it. */
+function completeAddress(
+	command: CommandSnapshot,
+	node: CommandDocumentation,
+	target: string,
+): { complete?: string } {
+	return completerOf(command, target) === undefined
+		? {}
+		: { complete: [...node.path, target].join(" ") };
+}
+
 /**
- * Project a single documentation flag onto a `CompletionFlag`.
+ * Project a single documentation flag onto a `CompletionFlag`. A short may be any
+ * character Core accepts (ripgrep's `-.`): the templates quote spellings for their shell.
  */
-function walkFlag(def: DocumentationFlag): CompletionFlag {
+function walkFlag(
+	def: DocumentationFlag,
+	command: CommandSnapshot,
+	node: CommandDocumentation,
+): CompletionFlag {
 	assertSafeIdentifier(def.name, "flag name");
 	for (const alias of def.aliases) assertSafeIdentifier(alias, "flag alias");
-	if (def.short !== undefined) assertSafeIdentifier(def.short, "flag short alias");
 
 	const description = normaliseDescription(def.description);
 	const common = {
@@ -76,11 +93,15 @@ function walkFlag(def: DocumentationFlag): CompletionFlag {
 	const shape = valueShape(def.type, def.choices);
 	return shape.type === "boolean"
 		? { ...common, ...shape, takesValue: false }
-		: { ...common, ...shape, takesValue: true };
+		: { ...common, ...shape, ...completeAddress(command, node, `--${def.name}`), takesValue: true };
 }
 
 /** Project a single documentation argument onto a `CompletionArg`. */
-function walkArg(def: DocumentationArg): CompletionArg {
+function walkArg(
+	def: DocumentationArg,
+	command: CommandSnapshot,
+	node: CommandDocumentation,
+): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const description = normaliseDescription(def.description);
 	return {
@@ -89,20 +110,25 @@ function walkArg(def: DocumentationArg): CompletionArg {
 		variadic: def.variadic,
 		...(description === undefined ? {} : { description }),
 		...valueShape(def.type, def.choices),
+		...completeAddress(command, node, def.name),
 	};
 }
 
-/**
- * Build a completion command from the shared documentation model.
- */
-export function walkCommand(node: CommandDocumentation): CompletionCommand {
+/** Build the completion model of a root Command Snapshot's visible tree. */
+export function walkCommand(root: CommandSnapshot): CompletionCommand {
+	return walkNode(root, buildCommandDocumentation(root));
+}
+
+function walkNode(command: CommandSnapshot, node: CommandDocumentation): CompletionCommand {
 	assertSafeIdentifier(node.name, "command name");
 	for (const alias of node.aliases) {
 		assertSafeIdentifier(alias, "command alias");
 	}
-	const flags = node.flags.map(walkFlag);
-	const args = node.args.map(walkArg);
-	const subCommands = node.children.map(walkCommand);
+	const flags = node.flags.map((flag) => walkFlag(flag, command, node));
+	const args = node.args.map((arg) => walkArg(arg, command, node));
+	const subCommands = node.children.map((child) =>
+		walkNode(command.subCommands[child.path.at(-1)!]!, child),
+	);
 
 	const result: CompletionCommand = {
 		name: node.name,

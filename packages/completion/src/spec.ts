@@ -16,12 +16,14 @@
  *   listing contract the help renderer follows).
  * - Boolean flags surface with `takesValue: false` so templates know not to
  *   offer value candidates after them.
+ * - A `complete` function becomes the address that calls it back (`complete`);
+ *   the function itself stays in the snapshot, where `__complete` reads it.
  * - Description strings have ANSI escape sequences stripped — completion
  *   scripts run in a wide variety of terminals (and inside `bash -n` /
  *   `zsh -n` / `fish -n` parsers) where embedded SGR codes are noise at
  *   best and a syntax hazard at worst.
  *
- * The shape is **internal to `@crustjs/extensions`**: it is not exported from
+ * The shape is **internal to `@crustjs/completion`**: it is not exported from
  * the package entrypoint and may change across patch releases.
  */
 
@@ -49,6 +51,12 @@ interface CompletionFlagBase {
 	 * each shell supports it.
 	 */
 	multiple?: true;
+	/**
+	 * Set when the definition has a `complete` function: the address the generated script
+	 * passes to `__complete`, the canonical command path from the root then `--<name>` or
+	 * the argument's name, joined with spaces. Its values replace `choices` and file completion.
+	 */
+	complete?: string;
 }
 
 export type StringCompletion =
@@ -89,6 +97,12 @@ interface CompletionArgBase {
 	 * before; with a `"passthrough"` one, no flags after the first positional.
 	 */
 	variadic: VariadicMode | false;
+	/**
+	 * Set when the definition has a `complete` function: the address the generated script
+	 * passes to `__complete`, the canonical command path from the root then `--<name>` or
+	 * the argument's name, joined with spaces. Its values replace `choices` and file completion.
+	 */
+	complete?: string;
 }
 
 /** Description of a single positional argument attached to a command. */
@@ -134,4 +148,12 @@ export interface CompletionCommand {
 	 * shell completion never offers them as candidates.
 	 */
 	subCommands: readonly CompletionCommand[];
+}
+
+/** `true` when an argument or flag in the tree has a `complete` function. */
+export function hasComplete(node: CompletionCommand): boolean {
+	return (
+		[...node.flags, ...node.args].some((def) => def.complete !== undefined) ||
+		node.subCommands.some(hasComplete)
+	);
 }
