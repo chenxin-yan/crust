@@ -475,7 +475,7 @@ describe("renderBash · complete functions", () => {
 		const stub = join(tmpDir, "bin", "mycli");
 		await writeFile(
 			stub,
-			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$4-one" "$4-two" "at $3"\n`,
+			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$4-one" "$4-two" "at $3" '$(x)'\n`,
 		);
 		await chmod(stub, 0o755);
 	});
@@ -487,11 +487,12 @@ describe("renderBash · complete functions", () => {
 	const complete = (words: string[]) =>
 		runBashCompletion(scriptPath, "_mycli", words, tmpDir, join(tmpDir, "bin"));
 
-	it("offers a flag's values that start with the word, in both spellings", async () => {
+	it("offers a flag's values that start with the word, quoted, in both spellings", async () => {
 		expect(await complete(["mycli", "deploy", "--region", ""])).toEqual([
 			"-one",
 			"-two",
-			"at mycli deploy --region",
+			"\\$\\(x\\)",
+			"at\\ mycli\\ deploy\\ --region",
 		]);
 		expect(await complete(["mycli", "deploy", "-r", "us"])).toEqual(["us-one", "us-two"]);
 		expect(await complete(["mycli", "deploy", "--region=us"])).toEqual([

@@ -2,13 +2,14 @@ import { fishSingleQuote, toShellIdent } from "../escape.ts";
 import type { CompletionCommand } from "../spec.ts";
 
 /**
- * Pure-static fish completion script renderer.
+ * Static fish completion script renderer.
  *
  * Strategy: emit declarative `complete -c <bin>` rules — one per
  * subcommand candidate, one per flag of every reachable command. Fish
  * accumulates rules into an in-memory table at `source` time and consults
- * them on every TAB; there's no entry-point function, no subprocess, and
- * no shell state to manage.
+ * them on every TAB; there's no entry-point function and no shell state to
+ * manage, and the only subprocess is `<bin> __complete` for a `complete`
+ * function's values.
  *
  * **Subcommand routing.** We emit a single routing helper per script —
  * `__<ident>_path_at_arg` — that walks `commandline -opc` left-to-right,

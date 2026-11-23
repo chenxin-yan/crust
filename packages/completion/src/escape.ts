@@ -18,8 +18,9 @@
  *    programmer-controlled identifiers in the source CLI definition.
  *    They have no business containing whitespace, quotes, semicolons, or
  *    control characters. We reject those at spec/render time with a
- *    clear error rather than try to escape them through three different
- *    shell grammars.
+ *    clear error rather than try to escape them through four different
+ *    shell grammars. Flag shorts are the exception: Core accepts any one
+ *    character, so the templates escape them per shell.
  * 2. **Escape free-form text** — descriptions, choice values, version
  *    strings, and the embedded comment headers are user-facing prose.
  *    Those go through per-shell escape helpers so the templates can
@@ -60,12 +61,12 @@ export function assertSafeChoiceValue(value: string): string {
 
 /**
  * Identifier shape accepted for command names, flag names, flag aliases,
- * short flags, and arg names.
+ * and arg names.
  *
  * - First char must be alphanumeric (avoids leading `-` which `complete`
  *   would interpret as an option in bash/fish).
  * - Subsequent chars: alphanumeric, `_`, `.`, or `-`.
- * - Single-character names are allowed (covers single-char short flags).
+ * - Single-character names are allowed (covers one-character aliases).
  *
  * This is deliberately conservative. CLI authors who want a command
  * named `foo:bar` or `it's` are out of scope for v1 — every shell would

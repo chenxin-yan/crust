@@ -13,7 +13,8 @@ import {
 } from "../spec.ts";
 
 /**
- * Pure-static zsh completion script renderer.
+ * Static zsh completion script renderer; a `complete` function's values
+ * come from `<bin> __complete`.
  *
  * Strategy: emit one `_<bin>__<path>` helper per command in the tree
  * (path segments joined by `__`, see {@link helperName}).
@@ -323,12 +324,12 @@ export function renderZsh(
 	const helpers: string[] = [];
 	renderHelper(ident, [], spec, helpers);
 	// Offers what `<bin> __complete` prints for the address `$1` and the word being
-	// completed; its errors stay off the terminal.
+	// completed, unquoted as the action will receive it; its errors stay off the terminal.
 	if (hasComplete(spec)) {
 		lines.push(`_${ident}_complete() {`);
 		lines.push("\tlocal -a values");
 		lines.push(
-			`\tvalues=(\${(f)"$(${bashSingleQuote(binName)} __complete -- "$1" "$PREFIX" 2>/dev/null)"})`,
+			`\tvalues=(\${(f)"$(${bashSingleQuote(binName)} __complete -- "$1" "\${(Q)PREFIX}" 2>/dev/null)"})`,
 		);
 		lines.push("\tcompadd -a values");
 		lines.push("}");

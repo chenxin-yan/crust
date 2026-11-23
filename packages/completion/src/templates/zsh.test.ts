@@ -488,6 +488,13 @@ describeIfZsh("renderZsh · complete functions", () => {
 			"api-two",
 		]);
 	});
+
+	it("passes the word unquoted", async () => {
+		expect(await zshComplete(scriptPath, "mycli deploy a\\ b", join(tmpDir, "bin"))).toEqual([
+			"a b-one",
+			"a b-two",
+		]);
+	});
 });
 
 /** Core never reads flags after `--`; later words fill argument slots, or only an `afterDoubleDash` argument. */

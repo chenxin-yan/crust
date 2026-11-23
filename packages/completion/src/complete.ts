@@ -20,7 +20,10 @@ export function completerAt(root: CommandSnapshot, address: string): Completer |
 	const [, ...path] = address.split(" ");
 	const target = path.pop() ?? "";
 	let command: CommandSnapshot | undefined = root;
-	for (const name of path) command = command?.subCommands[name];
+	for (const name of path) {
+		command =
+			command && Object.hasOwn(command.subCommands, name) ? command.subCommands[name] : undefined;
+	}
 	return command && completerOf(command, target);
 }
 

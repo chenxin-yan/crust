@@ -2,11 +2,12 @@ import { bashCompgenWord, bashDoubleQuoteInner, bashSingleQuote, toShellIdent } 
 import { type CompletionCommand, hasComplete } from "../spec.ts";
 
 /**
- * Pure-static bash completion script renderer.
+ * Static bash completion script renderer.
  *
  * Strategy: at generation time we walk the command tree and emit a
  * self-contained bash function that performs the full completion logic
- * locally — no `__complete` subprocess shell-out, no runtime callbacks.
+ * locally, except that a `complete` function's values come from
+ * `<bin> __complete`.
  *
  * The generated script:
  *
@@ -487,15 +488,16 @@ export function renderBash(
 	}
 
 	// Helper: append the values `<bin> __complete` prints for the address
-	// `$3` and the word `$2` that start with `$2`, each prefixed with `$1`,
-	// and keep file names out. Its errors stay off the terminal.
+	// `$3` and the word `$2` that start with `$2`, each prefixed with `$1`
+	// and quoted with `%q` (a value is data, not shell code), and keep file
+	// names out. Its errors stay off the terminal.
 	if (hasComplete(spec)) {
 		lines.push(`__${ident}_complete() {`);
 		lines.push("\tlocal c");
 		lines.push("\tcompopt +o default 2>/dev/null || :");
 		lines.push("\twhile IFS= read -r c; do");
 		lines.push(
-			'\t\tif [[ -n "$c" && "$c" == "$2"* ]]; then COMPREPLY[${#COMPREPLY[@]}]="$1$c"; fi',
+			'\t\tif [[ -n "$c" && "$c" == "$2"* ]]; then printf -v c %q "$c"; COMPREPLY[${#COMPREPLY[@]}]="$1$c"; fi',
 		);
 		lines.push(`\tdone <<< "$(${bashSingleQuote(binName)} __complete -- "$3" "$2" 2>/dev/null)"`);
 		lines.push("}");

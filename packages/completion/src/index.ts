@@ -256,9 +256,10 @@ const completionFactory: ExtensionFactory<
 					)
 					.action(async ({ args, rootCommand, stdout }) => {
 						const completer = completerAt(rootCommand, args.address);
-						// The scripts read one value per line, so a value with a line break is left out.
+						// The scripts read one value per line and fish reads a tab as the start of a
+						// description, so a value with either is left out.
 						for (const value of (await completer?.(args.word ?? "")) ?? []) {
-							if (!/[\r\n]/.test(value)) stdout(value);
+							if (!/[\r\n\t]/.test(value)) stdout(value);
 						}
 					}),
 		);

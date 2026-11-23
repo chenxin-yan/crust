@@ -182,7 +182,9 @@ describe("complete", () => {
 					},
 					scope: {
 						type: "exclusive",
-						flags: { team: { type: "string", complete: () => ["core", "line\nbreak"] } },
+						flags: {
+							team: { type: "string", complete: () => ["core", "line\nbreak", "tab\there"] },
+						},
 					},
 				})
 				.action(() => {}),
@@ -206,14 +208,20 @@ describe("complete", () => {
 		expect(
 			(await captureExecute(app, ["__complete", "--", "mycli deploy service", "x"])).stdout,
 		).toBe("x-api\nx-web\n");
-		// A value with a line break cannot be read back as one line, so it is left out.
+		// A value with a line break or a tab cannot be read back as one value, so it is left out.
 		expect((await captureExecute(app, ["__complete", "--", "mycli deploy --team"])).stdout).toBe(
 			"core\n",
 		);
 	});
 
 	it("prints nothing for an address without a complete function", async () => {
-		for (const address of ["mycli deploy --scope", "mycli nope --region", "mycli service"]) {
+		for (const address of [
+			"mycli deploy --scope",
+			"mycli nope --region",
+			"mycli service",
+			"mycli __proto__ service",
+			"mycli constructor service",
+		]) {
 			expect(await captureExecute(app, ["__complete", "--", address, "x"])).toEqual({
 				stdout: "",
 				stderr: "",
