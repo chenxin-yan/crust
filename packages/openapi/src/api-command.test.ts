@@ -129,6 +129,25 @@ describe("api --list and --spec", () => {
 		expect(calls).toEqual([]);
 	});
 
+	it.each([
+		["--list", "/users"],
+		["--list", "-X", "DELETE"],
+		["--list", "-F", "a=1"],
+		["--list", "--paginate"],
+		["--spec", "getUser", "-H", "X-Trace: 1"],
+		["--spec", "getUser", "--body", "{}"],
+	])("rejects api %s with a path or request flags as a usage error", async (...argv) => {
+		const calls = stubFetch();
+		const browse = argv[0].slice(2);
+		const { stdout, stderr, exitCode } = await captureExecute(buildApp(), ["api", ...argv]);
+
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+		expect(stderr).toContain(
+			`--${browse} sends no request: leave out the path, -X, -H, -F, --body and --paginate.`,
+		);
+		expect(calls).toEqual([]);
+	});
+
 	it("prints an operation by operationId with $refs used once inlined (URI-encoded too), recursive ones under $refs, and non-pointer fragments kept", async () => {
 		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "createUser"]);
 
@@ -460,12 +479,39 @@ describe("api <path>", () => {
 		});
 	});
 
-	it("sends fields as query parameters for -X GET", async () => {
+	it("rejects a -F key given twice in a JSON body, pointing to --body", async () => {
 		const calls = stubFetch();
-		await captureExecute(buildApp(), ["api", "/users?sort=name", "-X", "get", "-F", "page=2"]);
+		const { stderr, exitCode } = await captureExecute(buildApp(), [
+			"api",
+			"/users",
+			"-F",
+			"tag=a",
+			"-F",
+			"tag=b",
+		]);
+
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain(
+			'Invalid -F value for "tag": the key is given more than once. Send a list or a nested value as JSON with --body.',
+		);
+		expect(calls).toEqual([]);
+	});
+
+	it("sends fields as query parameters for -X GET, a repeated key as often as given", async () => {
+		const calls = stubFetch();
+		await captureExecute(buildApp(), [
+			"api",
+			"/users?sort=name",
+			"-X",
+			"get",
+			"-F",
+			"page=2",
+			"-F",
+			"page=3",
+		]);
 
 		expect(calls[0]).toMatchObject({
-			url: "https://api.example.com/v1/users?sort=name&page=2",
+			url: "https://api.example.com/v1/users?sort=name&page=2&page=3",
 			method: "GET",
 			body: undefined,
 		});

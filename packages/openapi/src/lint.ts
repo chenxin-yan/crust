@@ -212,7 +212,7 @@ export function planCommands(input: LintInput): {
 		}
 
 		// Inputs, as generated commands map them: positional parameters become arguments, other
-		// parameters and the scalar fields of a JSON body flags, the whole JSON body `--body`.
+		// parameters and the scalar fields of a JSON body flags, the whole JSON body `--request-body`.
 		// An `undefined` entry is no entry: the default applies.
 		const bound = boundNames(fields);
 		const rename = (name: string) => {
@@ -273,7 +273,7 @@ export function planCommands(input: LintInput): {
 			if (isJsonMediaType(body.contentType)) {
 				inputs.push({
 					kind: "flag",
-					name: "body",
+					name: "request-body",
 					source: "the request body",
 					target: { in: "body" },
 				});
@@ -344,14 +344,18 @@ export function planCommands(input: LintInput): {
 		for (const [name, same] of Map.groupBy(inputs, (item) => item.name)) {
 			if (same.length < 2) continue;
 			const sources = same.map(({ source }) => source);
+			// A built-in input (`--request-body`, `--paginate`) has no spec name: only the other can be renamed.
+			const fromSpec = same.filter(({ target }) => target.in === "param" || target.in === "field");
 			// `flagName` is keyed by the spec's name, so it renames every input of one name alike.
-			const specNames = new Set(same.map(({ target }) => specName(target)));
+			const specNames = new Set(fromSpec.map(({ target }) => specName(target)));
 			report(
 				"flag-collision",
 				`${label}: ${sources.slice(0, -1).join(", ")} and ${sources.at(-1)} share the input name "${name}"`,
-				specNames.size === 1
-					? "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`"
-					: "Set `flagName` for one of them in the operation's override",
+				fromSpec.length < same.length
+					? `Set \`flagName\` for the ${fromSpec.map(({ source }) => source).join(" and ")} in the operation's override`
+					: specNames.size === 1
+						? "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`"
+						: "Set `flagName` for one of them in the operation's override",
 			);
 		}
 

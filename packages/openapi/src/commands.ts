@@ -319,7 +319,7 @@ async function responseText(response: Response): Promise<string> {
 }
 
 /**
- * The request body: `--body` with the body field inputs merged over it. Fails with a `VALIDATION`
+ * The request body: `--request-body` with the body field inputs merged over it. Fails with a `VALIDATION`
  * error for a required body or body field that is missing, or a field value its schema refuses.
  */
 function effectiveBody(
@@ -333,9 +333,9 @@ function effectiveBody(
 		if (body !== undefined && !isPlainObject(body)) {
 			throw new CrustError(
 				"VALIDATION",
-				`${op.id}: --body must be a JSON object to add fields to it`,
+				`${op.id}: --request-body must be a JSON object to add fields to it`,
 				{
-					issues: [{ path: "flags.body", message: "must be a JSON object" }],
+					issues: [{ path: "flags.request-body", message: "must be a JSON object" }],
 				},
 			);
 		}
@@ -375,10 +375,10 @@ function effectiveBody(
 		}
 	}
 	if (body === undefined && problems.length === 0)
-		problems.push("missing the request body (--body)");
+		problems.push("missing the request body (--request-body)");
 	if (problems.length > 0) {
 		throw new CrustError("VALIDATION", `${op.id}: ${problems.join("; ")}`, {
-			issues: problems.map((message) => ({ path: "flags.body", message })),
+			issues: problems.map((message) => ({ path: "flags.request-body", message })),
 		});
 	}
 	return body;
@@ -432,7 +432,7 @@ function flagDef(spec: OpenApiSpec, { target }: PlannedInput, plan: CommandPlan)
 }
 
 /**
- * The `--body` flag's schema: it accepts no value (body field flags may fill the body) and, for an
+ * The `--request-body` flag's schema: it accepts no value (body field flags may fill the body) and, for an
  * object body, only a JSON object; the action checks the merged body. It publishes the body's JSON
  * Schema standing alone ({@link standaloneSchema}) without the required fields a flag can fill;
  * one that cannot stand alone is published as its top-level fields, each standing alone or `{}`.

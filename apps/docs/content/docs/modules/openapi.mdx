@@ -10,7 +10,7 @@ title: "OpenAPI"
 npm install @crustjs/openapi
 ```
 
-The package has a peer dependency on `@crustjs/core` and uses the runtime's global `fetch`.
+The package has a peer dependency on `@crustjs/core` and sends requests with the runtime's global `fetch`, or [your own](#bring-your-own-request-logic).
 
 ## `defineApi(options)`
 
@@ -70,7 +70,7 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 
 A plain object, such as a small inline spec or one in a test, works too: it is kept in memory, bundled with the CLI, and the build writes nothing.
 
-Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs from source or in `crust build`.
+Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs from source or in `crust build`. So is a `baseUrl` that is not an `http:` or `https:` URL, such as one without its scheme, and the message names the option and the value: ``defineApi: `baseUrl` must be an http: or https: URL, such as "https://api.example.com/v1"; got "api.acme.example/v1"``.
 
 ## Which to use
 
@@ -114,6 +114,8 @@ $ my-cli api --spec listUsers
 - For a path such as `/users/{id}`, the path item, including its shared `parameters`.
 - For an `operationId`, the operation with its `method` and `path` added, and with the path item's shared `parameters` merged into its own: an operation parameter with the same `name` and `in` replaces the shared one.
 - An unknown target fails with exit code 1, and so does an `operationId` several operations share, naming their `METHOD path`s; pass the path instead.
+
+`--list` and `--spec` send no request, so with a path or a request flag (`-X`, `-H`, `-F`, `--body`, `--paginate`) they fail with a `PARSE` error instead of ignoring it: `--list sends no request: leave out the path, -X, -H, -F, --body and --paginate.`
 
 Both read the spec this way:
 
@@ -167,6 +169,7 @@ my-cli api /users --paginate                       # every page, one JSON line e
 | `--paginate`                | Fetches every page through the `paginate` option, printing each body as one JSON line                                                                                                                          |
 
 - Fields form a JSON object body. For `GET` and `HEAD`, or when `--body` is given, they become query parameters instead.
+- A JSON object holds one value per key, so a key given twice in a field body, such as `-F tag=a -F tag=b`, fails with a `PARSE` error before any request; send a list or a nested value as JSON with `--body '{"tag":["a","b"]}'`. In the query, each one is sent: `?tag=a&tag=b`.
 - A body is sent with `Content-Type: application/json` unless a header sets it.
 
 #### Methods
@@ -226,10 +229,10 @@ The response body goes to stdout:
 - When stdout is not a terminal, such as a pipe, a file, or an `execute({ io })` sink, the body is written as its exact bytes, whatever its `Content-Type`, so `my-cli api /export.zip > export.zip` works and a text body keeps its line endings. Output captured by [`run()`](/docs/api/crust#runpath-input-options) or `captureExecute()`, and so an [MCP](/docs/modules/mcp) tool result, is text: those bytes decoded as UTF-8, so a binary body arrives with replacement characters.
 - To a terminal, the body is printed as text, ending with exactly one newline; an empty body prints nothing. A body that is not valid UTF-8 can't be printed as text and fails the command with exit code 1 after the request, as `gh api` and `curl` refuse to print binary to a terminal; a non-2xx one is left out, and the command fails with the `ApiResponseError`.
 
-| Failure                                                                                                                              | Result                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Non-2xx response                                                                                                                     | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` holds the code; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
-| `-F` without `=` or out of number range, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                               |
+| Failure                                                                                                                                                                   | Result                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-2xx response                                                                                                                                                          | The body still prints to stdout, then an `ApiResponseError` (exit 1) whose `status` and `headers` are the response's; its message, such as `GET /users/9: HTTP 404 Not Found`, goes to stderr |
+| `-F` without `=`, out of number range or with a key repeated in a field body, `-H` without `:` or with a name or value HTTP rejects, an invalid `-X`, unreadable `--body` | A `PARSE` [`CrustError`](/docs/api/errors) before any request                                                                                                                                 |
 
 The `-F` and `-H` errors name the flag and the expected shape, such as `Invalid -H value: expected "Name: value".`, never the text given, since a header can hold a token. For the same reason, an `ApiResponseError` leaves out the request's query and fragment, including query parameters `-F` added: its message shows the path as given up to its `?`.
 
@@ -264,7 +267,7 @@ $ my-cli api /users/9 --json
 $ acme users --help                        # the group of the operations tagged "Users"
 $ acme users get 42                        # GET /users/42
 $ acme users list-users --role admin --limit 5 --tag a --tag b
-$ acme users create-user --name Ada --body '{"profile":{"bio":"hi"}}'
+$ acme users create-user --name Ada --request-body '{"profile":{"bio":"hi"}}'
 ```
 
 | From the operation                                            | The command                                                                                                                                                                                                                                                               |
@@ -275,18 +278,18 @@ $ acme users create-user --name Ada --body '{"profile":{"bio":"hi"}}'
 | Path parameters                                               | Required positional arguments, in template order                                                                                                                                                                                                                          |
 | Query and header parameters                                   | Typed flags: a number for `number` and `integer`, a boolean (`--no-<name>` sends `false`), else a string, with a string enum as its choices (a numeric enum is a plain number: the API checks it); an array of those is a repeatable flag; required when the parameter is |
 | Top-level scalar, enum, or scalar-array fields of a JSON body | Typed flags in the same way, never required                                                                                                                                                                                                                               |
-| A JSON request body                                           | `--body`, a JSON flag; files and stdin go through `--input @file` or `--input -` of the [`input()`](/docs/modules/extensions/input) Extension                                                                                                                             |
+| A JSON request body                                           | `--request-body`, a JSON flag, so a body field named `body` keeps its `--body`; files and stdin go through `--input @file` or `--input -` of the [`input()`](/docs/modules/extensions/input) Extension                                                                    |
 | `security: []`                                                | A public request: `auth` is never called, also for the next pages                                                                                                                                                                                                         |
 | The 2xx JSON response schema                                  | The output schema; see [Output](#output)                                                                                                                                                                                                                                  |
 
-Names are [kebab-cased](#how-the-spec-is-read), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag: the parameter keeps its input, and the body field is sent only from `--body`. Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
+Names are [kebab-cased](#how-the-spec-is-read), and the inputs an operation cannot offer are left out as described there. A body field that repeats a parameter's name gets no flag: the parameter keeps its input, and the body field is sent only from `--request-body`. Cookie parameters are never sent. Deprecated operations are left out unless an override sets `exclude: false`.
 
 ### The request
 
 The command sends the request through the client, so it gets the base URL, auth, redirects, the 401 retry and the request rules of [`call()`](#calloperationid-input), and fails with a `VALIDATION` [`CrustError`](/docs/api/errors) before any request for a value `call()` rejects.
 
-- The body is `--body` with the body field flags merged over it. Before the request, the command checks it: a required body or required field that is missing, or a flagged field's value of another type or outside its enum, such as one from `--body`, is a `VALIDATION` error naming it (`missing the body field "name" (--name)`). An optional body with nothing given is not sent.
-- `--body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [schemas of the spec's operations](#how-the-spec-is-read)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema, or one with a `$ref` that cannot be followed or a `$dynamicRef` / `$recursiveRef`, is published as its top-level fields, each standing alone or `{}`.
+- The body is `--request-body` with the body field flags merged over it. Before the request, the command checks it: a required body or required field that is missing, or a flagged field's value of another type or outside its enum, such as one from `--request-body`, is a `VALIDATION` error naming it (`missing the body field "name" (--name)`). An optional body with nothing given is not sent.
+- `--request-body` takes a JSON object for an object body. Its published JSON Schema stands alone: every local `$ref` is replaced by its target (in a 3.0 document, translated like the [schemas of the spec's operations](#how-the-spec-is-read)), and the required fields a flag can fill are left out of its `required`. A recursive or very large schema, or one with a `$ref` that cannot be followed or a `$dynamicRef` / `$recursiveRef`, is published as its top-level fields, each standing alone or `{}`.
 - A [`bind`](#overrides) runs once before the request and fills every parameter and the body field of its name, and those inputs are not offered. It runs only for an operation that has such an input, so an `.each()` binding is never called for the others.
 - A [`confirm`](#confirmation) message is confirmed after the whole request is built and checked, so a rejected one never asks, and before it is sent.
 
@@ -322,6 +325,7 @@ A generated command that would clash is left out of `acme.commands`, so the CLI 
 
 - Two operations that become the same command: the later one, in `api --list` order, is left out with `command-collision`, naming both.
 - An operation and a command you `.add()` to its group with the same name: the operation is left out and yours stays. The same goes for the `api` command: an operation that would be the root command `api`, or in a group `api` (such as one tagged `API`), is left out; set `group` or `name` in its override. To replace a generated command on purpose, set `exclude: true` in its override and add yours.
+- A parameter or body field whose flag would be a built-in one, `--request-body` or `--paginate`, is a `flag-collision`: set `flagName` for it in the operation's override, which keeps its input under another name.
 - An alias of an added command, or a flag that clashes with an Extension's or a Context's (such as `--yes`), is a core `DEFINITION` error when the command is added or first used; `await app.snapshot()` in a test checks the whole tree.
 
 ## Overrides
@@ -455,6 +459,8 @@ It resolves to:
 | Any other 2xx with another media type, even one whose empty body is only known after reading it                                 | The `Response` itself, unread. For a download or a stream, `fetch()` is usually more direct                                                                                            |
 | Non-2xx                                                                                                                         | Rejects with an `ApiResponseError` whose `status` holds the code, such as `GET /users/9: HTTP 404 Not Found`; its message leaves out the query                                         |
 
+Every `ApiResponseError` also holds the response's `headers`, such as `Retry-After`.
+
 Before any request, `call()` fails with a `VALIDATION` [`CrustError`](/docs/api/errors) for a missing required parameter or body, a parameter the operation does not have, or a body it does not take; for a path value that would make an empty, `.` or `..` segment, a header value HTTP does not allow, or a body `JSON.stringify()` cannot send (a function, a symbol, a cycle, a `BigInt`), whose messages never repeat the value; and for an input it cannot send: a body that is not JSON, a parameter in another style or described by `content`, a required cookie. Use `fetch()` for those. An `operationId` the spec does not have, or that several operations share, fails with an error naming it, and so does a spec that cannot be read ([The spec](#the-spec)). Errors of the request itself, such as a network error, a refused redirect or an error `auth` throws, reject `call()` as they reject [`fetch()`](#fetchpath-init); the table above lists the rest. `call()` does not paginate; use `fetch()` with your own loop, or `api <path> --paginate`.
 
 ### `fetch(path, init?)`
@@ -542,6 +548,7 @@ user.nickname;
 - `input` has `path`, `query`, `header` and `body` exactly as the operation takes them, each required when the operation requires one of its values. The argument is optional when nothing is required.
 - The result is the JSON body of the operation's 2xx responses (a union when there are several; the JSON one where a status also declares another media type), `undefined` for one without content, and `unknown` for another media type or an operation with no 2xx response.
 - The [overrides](#overrides) are checked too: `.override()` keys must be operationIds of the spec, and an entry's `flagName` and `bind` keys the operation's parameter or top-level JSON body property names, and its `positional` entries parameter names. `op.id` in `.each()` is the union of the operationIds. (`expect` is checked by `crust build`.)
+- The result is typed, not validated: nothing checks a response against the spec at run time, so an API that answers otherwise than its spec says gives a value whose type does not match. Where that matters, check the result with a schema.
 - With one spec registered, every handle uses it. With several, pass `id` set to the spec's name (`id: "acme"` for `acme.openapi.jsonc`); `id` also names the directory `crust build` writes the document to.
 
 Editors run the mapper only when allowed to: VS Code asks for workspace trust and the content mapper permission. An editor that starts TypeScript's language server (`tsc --lsp --stdio`) itself must pass `runExternalCode: true` in its initialization options (in Neovim, `init_options = { runExternalCode = true }`).
@@ -564,6 +571,16 @@ When a request gets a 401, it is sent again once with the attempt `retry(respons
 - It is not already a retry, and the invocation was not cancelled.
 
 The 401 response's body is cancelled (even if `retry` read it), and only the request that got the 401 is sent again: after a redirect, that is the redirected request, with the method and body it was sent with, never the request before it. Redirects after it are followed as usual. The new attempt replaces the old one for the rest of the invocation, so later requests and `--paginate` pages use it. A 403 or a 5xx is never retried. `retry` returning `undefined` keeps the 401; an error it throws, such as `RefreshOutcomeUnknownError`, rejects the request.
+
+## Bring your own request logic
+
+Requests go through the global `fetch`, and the only retry is the [401 refresh](#authentication). For anything else, such as waiting out a `429`, logging or a proxy, pass `fetch` to `defineApi()`: it sends every request of the client, `api` and the generated commands, as openapi-fetch's `fetch` option does.
+
+<include lang="ts">../../../examples/modules/openapi.ts#own-fetch</include>
+
+- It is called once per hop: the first request, each redirect and each `--paginate` page, with `redirect: "manual"`, since the client follows redirects itself. The 401 refresh still runs around it.
+- Each request arrives with the [`.auth()`](#authfn) headers already set where they may go. Keep credentials in `.auth()`: a header your `fetch` adds itself is sent on every hop, also to the other origins a redirect or a next page leads to.
+- A command that calls `call()` can read the wait from the error instead: `error.headers.get("retry-after")` of an `ApiResponseError`.
 
 ## Out of scope
 

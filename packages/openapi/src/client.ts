@@ -6,6 +6,7 @@ import {
 	defineContext,
 } from "@crustjs/core";
 
+import type { DefineApiOptions } from "./define-api.ts";
 import type { Operation } from "./operations.ts";
 import { callOperation } from "./request.ts";
 import type { TypedCall, UntypedCall } from "./typed-client.ts";
@@ -190,7 +191,7 @@ export function fetchNextPage(
  * and `auth` reads the Contexts of `use`, which become the Context's dependencies.
  */
 export function apiClientContext(
-	options: { readonly baseUrl: string; readonly auth?: ApiAuth },
+	options: Pick<DefineApiOptions, "baseUrl" | "fetch"> & { readonly auth?: ApiAuth },
 	findOperation: (operationId: string) => Promise<Operation>,
 	use: readonly AnyContextFactory[] = [],
 ): ContextFactory<"api", void, ApiClient> {
@@ -290,7 +291,7 @@ export function apiClientContext(
 					}
 					if (sent && !overridden) attached = state;
 				}
-				const response = await fetch(hop.url, {
+				const response = await (options.fetch ?? fetch)(hop.url, {
 					...hop.init,
 					headers,
 					redirect: redirect === "follow" ? "manual" : redirect,

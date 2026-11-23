@@ -26,11 +26,14 @@ export class ApiResponseError extends Error {
 
 	/** The HTTP status code. */
 	readonly status: number;
+	/** The response headers, such as `Retry-After`. */
+	readonly headers: Headers;
 
-	constructor(status: number, message: string) {
+	constructor(response: Response, message: string) {
 		super(message);
-		this.status = status;
-		Object.defineProperty(this, jsonErrorDetails, { value: { status } });
+		this.status = response.status;
+		this.headers = response.headers;
+		Object.defineProperty(this, jsonErrorDetails, { value: { status: response.status } });
 	}
 }
 
@@ -280,7 +283,7 @@ export async function readOperationResponse(
 	if (!response.ok) {
 		await response.body?.cancel();
 		throw new ApiResponseError(
-			response.status,
+			response,
 			`${shown}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
 		);
 	}
@@ -293,7 +296,7 @@ export async function readOperationResponse(
 		} catch {
 			// Without the parser's error as cause: it quotes the body.
 			throw new ApiResponseError(
-				response.status,
+				response,
 				`${shown}: HTTP ${response.status} answered ${type} that is not valid JSON`,
 			);
 		}
@@ -314,7 +317,7 @@ export async function readOperationResponse(
 	if (expectsJson) {
 		await response.body?.cancel();
 		throw new ApiResponseError(
-			response.status,
+			response,
 			`${shown}: HTTP ${response.status} answered ${type ?? "no Content-Type"}, not JSON`,
 		);
 	}
