@@ -57,17 +57,16 @@ function writeStream(stream: NodeJS.WriteStream, text: string | Uint8Array): voi
 }
 
 let retryPause: Int32Array | undefined;
-const closedFds = new Set<number>();
 
 /**
  * Returning only once every byte is written keeps output intact through an immediate
  * `process.exit()`. `EAGAIN` means a non-blocking pipe is full (Bun makes fd 1 non-blocking
  * once anything touches `process.stdout`): sleep 1 ms and retry rather than drop or reorder.
- * A closed reader or descriptor (`EPIPE` from `cli | head`, `EBADF`) closes the fd for later
- * writes silently, like `console.log`; other errors (`ENOSPC`) drop only the current write.
+ * A failed write to stderr is dropped: there is nowhere left to report it. A failed write to
+ * stdout throws: a closed reader (`EPIPE` from `cli | head`) as a cancellation, an `AbortError`
+ * whose `cause` is `"SIGPIPE"`; any other error (`ENOSPC`, `EBADF`, `EIO`) as it is.
  */
 function writeFd(fd: 1 | 2, text: string | Uint8Array): void {
-	if (closedFds.has(fd)) return;
 	const { writeSync } = process.getBuiltinModule("node:fs");
 	const buffer = typeof text === "string" ? Buffer.from(text) : text;
 	let offset = 0;
@@ -77,8 +76,14 @@ function writeFd(fd: 1 | 2, text: string | Uint8Array): void {
 		} catch (error) {
 			const code = isErrnoException(error) ? error.code : undefined;
 			if (code !== "EAGAIN") {
-				if (code === "EPIPE" || code === "EBADF") closedFds.add(fd);
-				return;
+				if (fd === 2) return;
+				if (code === "EPIPE") {
+					// bun-types lacks the `{ name, cause }` constructor overload Node and Bun both support.
+					throw Object.assign(new DOMException("Standard output was closed.", "AbortError"), {
+						cause: "SIGPIPE",
+					});
+				}
+				throw error;
 			}
 			Atomics.wait((retryPause ??= new Int32Array(new SharedArrayBuffer(4))), 0, 0, 1);
 		}
@@ -94,6 +99,8 @@ function writeFd(fd: 1 | 2, text: string | Uint8Array): void {
  * writer: its console handling transcodes text, while raw bytes to a legacy console can garble
  * non-ASCII output. Bytes are written unchanged, such as a binary response body. A write to a
  * terminal erases the live frame ({@link registerLiveFrame}) first and redraws it after a complete line.
+ * Outside Windows a failed write to stdout throws: an `AbortError` whose `cause` is `"SIGPIPE"`
+ * once the reader is gone, else the system error. A failed write to stderr is dropped.
  */
 export function writeProcessOutput(fd: 1 | 2, text: string | Uint8Array): void {
 	const frame = globals[LIVE_FRAME_KEY];

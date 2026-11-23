@@ -216,8 +216,10 @@ export interface ExtensionContext<
 	};
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
-	 * `run(path, input, { signal })`, or the first `SIGINT` or `SIGTERM` under `execute()`);
-	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.
+	 * `run(path, input, { signal })`, the first `SIGINT` or `SIGTERM` under `execute()`, or a
+	 * write to stdout after its reader went away); under `execute()`, `signal.reason.cause` is
+	 * then `"SIGINT"`, `"SIGTERM"`, or `"SIGPIPE"`. See `ExecuteOptions` for how the abort maps
+	 * to the exit code.
 	 */
 	readonly signal: AbortSignal;
 	/** Declared Contexts, constructed lazily on first property access. */

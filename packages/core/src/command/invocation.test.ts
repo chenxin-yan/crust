@@ -749,6 +749,81 @@ describe("Invocation pipeline — exit status", () => {
 	});
 });
 
+describe("Invocation pipeline — output failures", () => {
+	let originalExitCode: typeof process.exitCode;
+	beforeEach(() => {
+		originalExitCode = process.exitCode;
+	});
+	afterEach(() => {
+		process.exitCode = originalExitCode ?? 0;
+	});
+
+	/** What the process stdout writer throws once the reader is gone. */
+	const stdoutClosed = () =>
+		Object.assign(new DOMException("Standard output was closed.", "AbortError"), {
+			cause: "SIGPIPE",
+		});
+
+	async function execute(app: AnyCrust, failure: () => unknown) {
+		const stderr: string[] = [];
+		const exitCode = await app.execute({
+			argv: [],
+			io: {
+				stdout: () => {
+					throw failure();
+				},
+				stderr: (text) => void stderr.push(text),
+			},
+		});
+		return { exitCode, stderr };
+	}
+
+	it("cancels the invocation silently with 141 when stdout's reader is gone", async () => {
+		const seen: unknown[] = [];
+		const throwing = new Crust("app").action(({ stdout, signal }) => {
+			try {
+				stdout("line");
+			} finally {
+				seen.push(signal.reason);
+			}
+		});
+		expect(await execute(throwing, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
+		expect(seen).toEqual([expect.objectContaining({ name: "AbortError", cause: "SIGPIPE" })]);
+
+		// Whatever the action did after the throw.
+		const ignoring = new Crust("app").action(({ stdout }) => {
+			try {
+				stdout("line");
+			} catch {}
+		});
+		expect(await execute(ignoring, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
+
+		// A writer that bypasses stdout(), such as raw bytes to the process's stdout.
+		const direct = new Crust("app").action(() => {
+			throw stdoutClosed();
+		});
+		expect(await execute(direct, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
+	});
+
+	it("fails the invocation with 1 on any other stdout write error", async () => {
+		let aborted: boolean | undefined;
+		const app = new Crust("app").action(({ stdout, signal }) => {
+			try {
+				stdout("line");
+			} finally {
+				aborted = signal.aborted;
+			}
+		});
+		const full = () =>
+			Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+		expect(await execute(app, full)).toEqual({
+			exitCode: 1,
+			stderr: ["Error: ENOSPC: no space left on device, write"],
+		});
+		expect(aborted).toBe(false);
+	});
+});
+
 describe("Invocation pipeline — inherited signal ignores", () => {
 	// Bun keeps an inherited SIG_IGN (Node resets it at startup). The real executable, not a
 	// version-manager shim that may reset signals before exec.

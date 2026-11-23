@@ -14,12 +14,12 @@ beforeAll(ensureDist);
 
 // The action sends SIGNAL to itself, and again SECOND_AFTER ms after the abort when set; a
 // comma-separated SIGNAL runs execute() once per signal. IGNORE completes the action despite the
-// abort, after an exitCode(5) the signal's code replaces; GUARD adds another listener that owns
-// the signal; BUSY receives the signal during synchronous work and returns before the event loop
-// can handle it. After execute(), async work runs before the report line, then AFTER=exit calls
+// abort, after an exitCode(5) the signal's code replaces; CAUSE prints the abort reason's cause;
+// GUARD adds another listener that owns the signal; BUSY receives the signal during synchronous
+// work and returns before the event loop can handle it. After execute(), async work runs before the report line, then AFTER=exit calls
 // process.exit(code) and AFTER=zero sets process.exitCode = 0.
 const PROBE = `import { Crust } from ${JSON.stringify(join(corePkg, "dist/index.js"))};
-const { SIGNAL: SIGNALS, SECOND_AFTER, IGNORE, GUARD, BUSY, AFTER } = process.env;
+const { SIGNAL: SIGNALS, SECOND_AFTER, IGNORE, CAUSE, GUARD, BUSY, AFTER } = process.env;
 if (GUARD) process.on(SIGNALS, () => {});
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let exitCode;
@@ -38,6 +38,7 @@ for (const SIGNAL of SIGNALS.split(",")) exitCode = await new Crust("app")
 				signal.addEventListener("abort", resolve, { once: true });
 				process.kill(process.pid, SIGNAL);
 			});
+			if (CAUSE) console.log(\`cause \${signal.reason.cause}\`);
 			if (SECOND_AFTER) {
 				await sleep(Number(SECOND_AFTER));
 				process.kill(process.pid, SIGNAL);
@@ -64,6 +65,7 @@ function probe(
 		SIGNAL: string;
 		SECOND_AFTER?: string;
 		IGNORE?: string;
+		CAUSE?: string;
 		GUARD?: string;
 		BUSY?: string;
 		AFTER?: string;
@@ -94,6 +96,10 @@ describe.each(runtimes)("execute() termination signals (%s)", (runtime) => {
 			});
 		},
 	);
+
+	it.each(["SIGINT", "SIGTERM"])("names %s as the abort reason's cause", (SIGNAL) => {
+		expect(probe(runtime, { SIGNAL, CAUSE: "1" }).stdout).toMatch(new RegExp(`^cause ${SIGNAL}\n`));
+	});
 
 	it("treats a SIGTERM within 50 ms of the first as the same one", () => {
 		expect(probe(runtime, { SIGNAL: "SIGTERM", SECOND_AFTER: "0" })).toMatchObject({

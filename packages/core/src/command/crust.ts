@@ -141,8 +141,10 @@ export interface CrustCommandContext<
 	rawArgs: string[];
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
-	 * `run(path, input, { signal })`, or the first `SIGINT` or `SIGTERM` under `execute()`);
-	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.
+	 * `run(path, input, { signal })`, the first `SIGINT` or `SIGTERM` under `execute()`, or a
+	 * write to stdout after its reader went away); under `execute()`, `signal.reason.cause` is
+	 * then `"SIGINT"`, `"SIGTERM"`, or `"SIGPIPE"`. See `ExecuteOptions` for how the abort maps
+	 * to the exit code.
 	 */
 	signal: AbortSignal;
 	/** Readonly, serializable snapshot of the resolved command */
@@ -1984,10 +1986,11 @@ export class Crust<
 	 * it also assigns to `process.exitCode` once at the end: `0`, or the action's `exitCode(n)`;
 	 * `1`, or a thrown value's non-zero integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or
 	 * `COMMAND_NOT_FOUND` error; `130` for an `AbortError` cancellation, `143` when `SIGTERM`
-	 * cancelled it. After a `SIGINT` or `SIGTERM` cancelled the run, the exit code is
-	 * `130` / `143` whatever the action did, and without injected `io` the process dies by
-	 * that signal once its event loop drains (on `beforeExit`): code after `execute()` still
-	 * runs, and calling `process.exit()` or changing `process.exitCode` keeps that exit instead.
+	 * cancelled it, `141` when stdout's reader went away (see {@link ExecuteOptions}). After a
+	 * `SIGINT` or `SIGTERM` cancelled the run, the exit code is `130` / `143` whatever the action
+	 * did, and without injected `io` the process dies by that signal once its event loop drains
+	 * (on `beforeExit`): code after `execute()` still runs, and calling `process.exit()` or
+	 * changing `process.exitCode` keeps that exit instead.
 	 *
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,

@@ -39,15 +39,21 @@ export interface InvocationOptions<Event = unknown> extends Partial<InvocationIO
 /**
  * Caller options for the terminal `execute()` boundary. While an invocation
  * runs, the first `SIGINT` (Ctrl-C) or `SIGTERM` aborts its `ctx.signal` with an
- * `AbortError`. Once the action, `postRun` hooks and Context cleanup finish, whatever the
- * action did, `execute()` resolves to `130` after `SIGINT` or `143` after `SIGTERM`, and
- * the process dies by that signal once its event loop drains, after the caller's code
- * (shells see `130` / `143`). Calling `process.exit()` or changing `process.exitCode`
+ * `AbortError` whose `cause` names the signal (`"SIGINT"` or `"SIGTERM"`). Once the action,
+ * `postRun` hooks and Context cleanup finish, whatever the action did, `execute()` resolves
+ * to `130` after `SIGINT` or `143` after `SIGTERM`, and the process dies by that signal once
+ * its event loop drains, after the caller's code (shells see `130` / `143`). Calling `process.exit()` or changing `process.exitCode`
  * first keeps that exit instead; `process.exitCode` holds `130` / `143` when another
  * listener owns the signal, on Windows, or with injected `io`, which never re-raises. A second signal terminates
  * unless another listener owns it. A signal within 50 ms of the first is treated as the
  * same one, relayed by a parent process such as `npm run` or `npx`, or sent again by a
  * process-group kill.
+ *
+ * On macOS and Linux, a failed write to the default stdout throws from `stdout()`. Once the
+ * reader is gone (`cli | head`), it throws an `AbortError` whose `cause` is `"SIGPIPE"` and
+ * aborts `ctx.signal` with it: the run ends silently with `141` (128 + SIGPIPE), whatever the
+ * action did, without a re-raise. Any other error (`ENOSPC` from `cli > /dev/full`) is thrown
+ * as it is and fails the run like any error. A failed write to the default stderr is ignored.
  */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
