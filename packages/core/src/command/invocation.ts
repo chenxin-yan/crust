@@ -1360,9 +1360,8 @@ export async function runInvocation(
 	let failed: { error: CaughtError; exitCode: number } | undefined;
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
-		const { signal = new AbortController().signal, ...live } = options ?? {};
+		const { signal = new AbortController().signal, stdin: given, ...live } = options ?? {};
 		// Captured output is no terminal; input is only what the caller passed, never the process's.
-		const given = options?.stdin;
 		const resolvedIO: InvocationIO = {
 			stdin: inputStream(
 				(async function* () {

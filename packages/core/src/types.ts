@@ -63,9 +63,9 @@ export interface OutputSink {
 }
 
 /**
- * Caller options for one programmatic `run()` invocation: output callbacks, action events, and cancellation.
+ * Caller options for one programmatic `run()` invocation: input, output callbacks, action events, and cancellation.
  * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
- * Its output streams are no terminal, and its `stdin` holds `stdin`, else nothing.
+ * Its output streams are no terminal, and its `stdin` holds the `stdin` option, else nothing.
  */
 export interface InvocationOptions<Event = unknown, Replacement = AnyContextInstance> {
 	/**
