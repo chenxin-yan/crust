@@ -86,7 +86,8 @@ const pwshAvailable = await isPwshAvailable();
 // The `__complete` stub is a POSIX shell script.
 const describeIfPwsh = pwshAvailable && process.platform !== "win32" ? describe : describe.skip;
 
-describeIfPwsh("renderPowerShell · TabExpansion2", () => {
+// Each completion starts pwsh, about a second apiece on a CI runner.
+describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 	let tmpDir: string;
 	let scriptPath: string;
 	let completeScriptPath: string;
