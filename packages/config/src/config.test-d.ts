@@ -17,7 +17,7 @@ const config = defineConfig({
 	project: { entry: { type: "string" } },
 	both: {
 		region: { type: "string", choices: ["us", "eu"], default: "us" },
-		port: { type: "number", min: 1 },
+		port: { type: "integer", min: 1 },
 	},
 	command: true,
 });

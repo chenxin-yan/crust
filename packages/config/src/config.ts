@@ -30,12 +30,12 @@ declare module "@crustjs/core" {
 }
 
 /**
- * One setting: the definition of a string, number or boolean flag. Every command that takes the
- * setting as a flag (`config.flag(key)`) uses it as is.
+ * One setting: the definition of a string, number, integer or boolean flag. Every command that
+ * takes the setting as a flag (`config.flag(key)`) uses it as is.
  */
 export type ConfigSetting = Extract<
 	FlagDef,
-	{ type: "string" | "number" | "boolean"; schema?: never }
+	{ type: "string" | "number" | "integer" | "boolean"; schema?: never }
 > & {
 	/** A setting is shared by every command that takes it, so it requires no flag of one. */
 	readonly requires?: never;
@@ -72,7 +72,7 @@ type FileItem<D> = D extends { parse: (text: string) => unknown }
 	? string
 	: D extends { choices: readonly (infer C)[] }
 		? C
-		: D extends { type: "number" }
+		: D extends { type: "number" | "integer" }
 			? number
 			: D extends { type: "boolean" }
 				? boolean
@@ -127,7 +127,8 @@ export interface ConfigOptions<
 	readonly name: string;
 	/**
 	 * Settings only the user's own file may hold: anything a repository must not choose, such as
-	 * what the app runs as a command. Each is the definition of a string, number or boolean flag.
+	 * what the app runs as a command. Each is the definition of a string, number, integer or
+	 * boolean flag.
 	 */
 	readonly user?: U;
 	/** Settings only the project file may hold, such as what describes the project itself. */
