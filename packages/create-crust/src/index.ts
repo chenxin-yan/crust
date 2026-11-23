@@ -1,9 +1,15 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative } from "node:path";
 
 import { Crust, artifactPath } from "@crustjs/core";
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
-import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
+import {
+	detectPackageManager,
+	isInGitRepo,
+	type PackageManager,
+	runSteps,
+	scaffold,
+} from "@crustjs/create";
 import type { BuildOptions } from "@crustjs/crust";
 import { help, version } from "@crustjs/extensions";
 import { spinner } from "@crustjs/progress";
@@ -15,23 +21,112 @@ import { Eta } from "eta/core";
 import corePkg from "../../core/package.json" with { type: "json" };
 import crustPkg from "../../crust/package.json" with { type: "json" };
 import extensionsPkg from "../../extensions/package.json" with { type: "json" };
+import testingPkg from "../../testing/package.json" with { type: "json" };
 import pkg from "../package.json" with { type: "json" };
 
 type Runtime = "bun" | "node";
-
-// `tsTypes` is spliced into a tsconfig array, so it carries its own JSON quoting.
-// `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
-// command must start the project's runtime itself. The runtime's package.json
-// differences live in templates/base/package.json.
-const RUNTIMES = {
-	bun: { shebang: "#!/usr/bin/env bun", tsTypes: '"bun"' },
-	node: { shebang: "#!/usr/bin/env node", tsTypes: '"node"' },
-} satisfies Record<Runtime, { shebang: string; tsTypes: string }>;
+type Artifact = NonNullable<BuildOptions["artifact"]>;
 
 // `eta/core` renders template strings only: no file loading or includes. Templates
 // are trusted package code, not sandboxed. Generated files are never HTML, so output
 // is raw, and whitespace is trimmed only where a tag asks for it (`-%>`).
 const eta = new Eta({ autoEscape: false, autoTrim: false });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Generated files
+// ────────────────────────────────────────────────────────────────────────────
+
+/** `templates` is a crust.include directory staged next to this bundle. */
+function readTemplate(path: string): string {
+	return readFileSync(artifactPath(`templates/${path}`), "utf8");
+}
+
+function json(value: unknown): string {
+	return `${JSON.stringify(value, null, "\t")}\n`;
+}
+
+/**
+ * The files `templates/base` cannot hold as they are. The bundle inlines the sibling
+ * package.json imports, so scaffolded projects pin the Crust versions from the build
+ * that produced create-crust.
+ */
+function projectFiles(
+	name: string,
+	runtime: Runtime,
+	artifact: Artifact,
+	packageManager: PackageManager,
+): Record<string, string> {
+	const manifest = {
+		$schema: "./node_modules/@crustjs/crust/schema/package.json",
+		name,
+		version: "0.0.0",
+		// `crust publish` publishes `.crust/`; refuse a stray `npm publish` of the build input.
+		private: true,
+		type: "module",
+		description: "A CLI built with Crust",
+		crust: { runtime, artifact },
+		bin: { [name]: "src/cli.ts" },
+		scripts: {
+			dev: { bun: "bun run src/cli.ts", node: "node src/cli.ts" }[runtime],
+			build: "crust build",
+			release: "crust publish",
+			// A binary's launcher is a Node script that runs the binary built for this machine.
+			start: `${artifact === "binary" ? "node" : runtime} .crust/root/bin/${name}.js`,
+			// Early Node 24 releases' default pattern skips .ts files.
+			test: { bun: "bun test", node: 'node --test "src/**/*.test.ts"' }[runtime],
+			"check:types": "tsc --noEmit",
+		},
+		...(runtime === "node" ? { engines: { node: ">=24" } } : {}),
+		dependencies: {
+			"@crustjs/core": `^${corePkg.version}`,
+			"@crustjs/extensions": `^${extensionsPkg.version}`,
+		},
+		devDependencies: {
+			"@crustjs/crust": `^${crustPkg.version}`,
+			"@crustjs/testing": `^${testingPkg.version}`,
+			...(runtime === "bun" ? { "@types/bun": "latest" } : { "@types/node": "^24" }),
+			typescript: "^7.0.2",
+		},
+	};
+	const tsconfig = {
+		compilerOptions: {
+			lib: ["ESNext"],
+			types: [runtime],
+			target: "ESNext",
+			module: "Preserve",
+			moduleDetection: "force",
+			moduleResolution: "bundler",
+			allowImportingTsExtensions: true,
+			verbatimModuleSyntax: true,
+			noEmit: true,
+			strict: true,
+			skipLibCheck: true,
+			noFallthroughCasesInSwitch: true,
+			noUncheckedIndexedAccess: true,
+		},
+		include: ["src"],
+	};
+	return {
+		"package.json": json(manifest),
+		"tsconfig.json": json(tsconfig),
+		"README.md": eta.renderString(readTemplate("README.md"), {
+			name,
+			runtime,
+			artifact,
+			run: `${packageManager} run`,
+			install: `${packageManager} install`,
+		}),
+		"src/app.ts": readTemplate("base/src/app.ts").replace(
+			'new Crust("my-cli"',
+			`new Crust(${JSON.stringify(name)}`,
+		),
+		// package.json `bin` points at the source, so a linked command starts the runtime itself.
+		"src/cli.ts": readTemplate("base/src/cli.ts").replace(
+			"#!/usr/bin/env node",
+			`#!/usr/bin/env ${runtime}`,
+		),
+	};
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -131,8 +226,9 @@ export const app = new Crust("create-crust", {
 				initial: flags.overwrite,
 			});
 			if (!overwrite) {
-				stdout("Aborted.");
-				return;
+				throw new Error(
+					`${isCwd ? "The current directory is not empty" : `Directory "${name}" already exists`}. Pass --overwrite to write into it.`,
+				);
 			}
 		}
 
@@ -153,7 +249,7 @@ export const app = new Crust("create-crust", {
 			default: "bun",
 			initial: flags.runtime,
 		});
-		const artifact = await select<NonNullable<BuildOptions["artifact"]>>({
+		const artifact = await select<Artifact>({
 			message: "Build output",
 			choices: [
 				{
@@ -194,36 +290,22 @@ export const app = new Crust("create-crust", {
 
 		// ── Execute all file operations after prompts are done ──────────
 
-		const packageManager = detectPackageManager(resolvedDir);
-		// The bundle inlines the sibling package.json imports, so scaffolded projects
-		// pin the Crust versions from the build that produced create-crust.
-		const context = {
-			name,
-			runtime,
-			artifact,
-			run: `${packageManager} run`,
-			install: `${packageManager} install`,
-			...RUNTIMES[runtime],
-			coreVersion: corePkg.version,
-			extensionsVersion: extensionsPkg.version,
-			crustVersion: crustPkg.version,
-		};
+		// Run by path, no package manager is named: use the one that comes with the runtime.
+		const packageManager = detectPackageManager(resolvedDir) ?? (runtime === "bun" ? "bun" : "npm");
 		// Scaffolding produces no console output, so it is safe inside a spinner.
 		await spinner({
 			message: "Scaffolding project...",
 			task: () =>
 				scaffold({
-					// `templates` is a crust.include directory staged next to this bundle.
 					template: artifactPath("templates/base"),
 					dest: resolvedDir,
-					context,
-					render: (source, data) => eta.renderString(source, data),
+					files: projectFiles(name, runtime, artifact, packageManager),
 					conflict: overwrite ? "overwrite" : "abort",
 				}),
 		});
 
 		if (installDeps) {
-			await runSteps([{ type: "install" }], resolvedDir, { stderr });
+			await runSteps([{ type: "install", packageManager }], resolvedDir, { stderr });
 		}
 
 		if (initGit) {
@@ -246,7 +328,7 @@ export const app = new Crust("create-crust", {
 			const word = process.platform === "win32" ? `"${target}"` : shellQuote(target);
 			stdout(`  cd ${word}`);
 		}
-		if (!installDeps) stdout(`  ${context.install}`);
-		stdout(`  ${context.run} dev`);
-		stdout(`  ${context.run} build`);
+		if (!installDeps) stdout(`  ${packageManager} install`);
+		stdout(`  ${packageManager} run dev`);
+		stdout(`  ${packageManager} run build`);
 	});

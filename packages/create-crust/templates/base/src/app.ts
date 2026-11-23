@@ -1,0 +1,27 @@
+import { Crust } from "@crustjs/core";
+import { help, version } from "@crustjs/extensions";
+
+import pkg from "../package.json" with { type: "json" };
+
+export const app = new Crust("my-cli", {
+	description: "A CLI built with Crust",
+	version: pkg.version,
+})
+	.extend(version(), help())
+	.args({
+		name: "name",
+		type: "string",
+		description: "Your name",
+		default: "world",
+	})
+	.flags({
+		greet: {
+			type: "string",
+			description: "Greeting to use",
+			default: "Hello",
+			short: "g",
+		},
+	})
+	.action(({ args, flags, stdout }) => {
+		stdout(`${flags.greet}, ${args.name}!`);
+	});

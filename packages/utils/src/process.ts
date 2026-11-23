@@ -6,7 +6,8 @@ import { isSignalIgnored } from "./signals.ts";
 export type RunProcessOptions = {
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
-	stdio?: "collect" | "inherit";
+	/** `"stderr"`: inherit stdin and stderr, and send the child's stdout to this process's stderr. */
+	stdio?: "collect" | "inherit" | "stderr";
 	/** Ignore stdout while collecting stderr. */
 	stdout?: "collect" | "ignore";
 	/** Run the command through the platform shell. */
@@ -190,7 +191,11 @@ export async function runProcess(
 		cwd: options.cwd,
 		env: options.env,
 		shell: options.shell,
-		stdio: collect ? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"] : "inherit",
+		stdio: collect
+			? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"]
+			: options.stdio === "stderr"
+				? ["inherit", 2, "inherit"]
+				: "inherit",
 		detached,
 		windowsVerbatimArguments: windowsShimCommand?.windowsVerbatimArguments,
 	});

@@ -18,6 +18,7 @@ import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import extensionsPackage from "../../extensions/package.json";
+import testingPackage from "../../testing/package.json";
 import type { RunProcessResult } from "../../utils/src/process.ts";
 import packageJson from "../package.json";
 
@@ -33,14 +34,14 @@ function makeTempRoot(label: string): string {
 
 async function runCreateCrust(
 	args: string[],
-	options?: { cwd?: string; entrypoint?: string },
+	options?: { cwd?: string; entrypoint?: string; userAgent?: string },
 ): Promise<RunProcessResult> {
+	const env = { ...process.env };
+	delete env.npm_config_user_agent;
+	if (options?.userAgent !== "") env.npm_config_user_agent = options?.userAgent ?? "npm/11.0.0";
 	return runBoundedProcess("node", [options?.entrypoint ?? builtCliPath, ...args], {
 		cwd: options?.cwd ?? packageRoot,
-		env: {
-			...process.env,
-			npm_config_user_agent: "npm/11.0.0",
-		},
+		env,
 		// Below the 30s test timeout, so a hung CLI fails with its output.
 		timeout: 20_000,
 	});
@@ -89,12 +90,13 @@ describe("create-crust CLI", () => {
 			const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
 			// `bin` points at the source, so the linked command needs the runtime's shebang.
 			expect(cli.startsWith(`#!/usr/bin/env ${runtime}\n`)).toBe(true);
-			expect(cli).toContain('new Crust("my-cli"');
-			expect(cli).toContain(".execute()");
-			expect(cli).toContain("help()");
-			expect(cli).toContain("version: pkg.version");
-			expect(cli).toContain("version()");
-			expect(cli).toContain('import pkg from "../package.json" with { type: "json" };');
+			expect(cli).toContain("await app.execute();");
+			const app = readFileSync(join(projectDir, "src", "app.ts"), "utf-8");
+			expect(app).toContain('export const app = new Crust("my-cli"');
+			expect(app).toContain("version: pkg.version");
+			expect(app).toContain('import pkg from "../package.json" with { type: "json" };');
+			const test = readFileSync(join(projectDir, "src", "app.test.ts"), "utf-8");
+			expect(test).toContain("captureExecute(app,");
 			const gitignore = readFileSync(join(projectDir, ".gitignore"), "utf-8");
 			expect(gitignore).toContain("node_modules");
 			expect(gitignore).toContain(".crust");
@@ -127,6 +129,30 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).toContain("  pnpm install\n  pnpm run dev");
 		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("pnpm run dev");
 	});
+
+	// Run by path, as in `node create-crust.js`: no package manager sets a user agent.
+	it.each([
+		["bun", "bun"],
+		["node", "npm"],
+	])(
+		"uses the %s runtime's package manager when none is detected",
+		async (runtime, pm) => {
+			const projectDir = join(makeTempRoot("create-crust-runtime-pm"), "other-cli");
+
+			const result = await runCreateCrust(
+				[projectDir, "--runtime", runtime, "--no-install", "--no-git"],
+				{ userAgent: "" },
+			);
+
+			expect(result.exitCode, result.stderr).toBe(0);
+			expect(result.stdout).toContain(`  ${pm} install\n  ${pm} run dev`);
+			expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain(`${pm} run test`);
+			expect(readFileSync(join(projectDir, "src", "app.ts"), "utf-8")).toContain(
+				'new Crust("other-cli"',
+			);
+		},
+		30_000,
+	);
 
 	it.each(["bundle", "source"])(
 		"finds %s templates through a .bin entry in another package root",
@@ -164,7 +190,6 @@ describe("create-crust CLI", () => {
 	const expectManifest = (text: string, runtime: string, artifact: string) => {
 		const name = "my-cli";
 		const pkg = JSON.parse(text);
-		// The template is hand-written JSON; it must render as canonical tab-indented JSON.
 		expect(text).toBe(`${JSON.stringify(pkg, null, "\t")}\n`);
 		expect(pkg).toMatchObject({
 			name,
@@ -174,7 +199,9 @@ describe("create-crust CLI", () => {
 			bin: { [name]: "src/cli.ts" },
 			scripts: {
 				dev: { bun: "bun run src/cli.ts", node: "node src/cli.ts" }[runtime],
-				start: `${runtime} .crust/root/bin/${name}.js`,
+				// A binary's Node launcher runs the binary built for this machine.
+				start: `${artifact === "binary" ? "node" : runtime} .crust/root/bin/${name}.js`,
+				test: { bun: "bun test", node: 'node --test "src/**/*.test.ts"' }[runtime],
 			},
 			dependencies: {
 				"@crustjs/core": `^${corePackage.version}`,
@@ -182,6 +209,7 @@ describe("create-crust CLI", () => {
 			},
 			devDependencies: {
 				"@crustjs/crust": `^${crustPackage.version}`,
+				"@crustjs/testing": `^${testingPackage.version}`,
 				[`@types/${runtime}`]: expect.any(String),
 			},
 		});
@@ -273,38 +301,47 @@ describe("create-crust CLI", () => {
 		expect(existsSync(projectDir)).toBe(false);
 	}, 30_000);
 
-	it("aborts cleanly when the destination exists and --no-overwrite is passed", async () => {
-		const tempRoot = makeTempRoot("create-crust-no-overwrite");
-		const projectDir = join(tempRoot, "existing-cli");
-		mkdirSync(projectDir, { recursive: true });
-		writeFileSync(join(projectDir, "sentinel.txt"), "keep me", "utf-8");
+	// Without a terminal the overwrite prompt takes its default, no.
+	it.each([[["--no-overwrite"]], [[]]])(
+		"fails without writing when the destination exists, given %j",
+		async (flags) => {
+			const tempRoot = makeTempRoot("create-crust-no-overwrite");
+			const projectDir = join(tempRoot, "existing-cli");
+			mkdirSync(projectDir, { recursive: true });
+			writeFileSync(join(projectDir, "sentinel.txt"), "keep me", "utf-8");
 
-		const result = await runCreateCrust([
-			projectDir,
-			"--runtime",
-			"bun",
-			"--no-install",
-			"--no-git",
-			"--no-overwrite",
-		]);
+			const result = await runCreateCrust([
+				projectDir,
+				"--runtime",
+				"bun",
+				"--no-install",
+				"--no-git",
+				...flags,
+			]);
 
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("Aborted.");
-		expect(readFileSync(join(projectDir, "sentinel.txt"), "utf-8")).toBe("keep me");
-		expect(existsSync(join(projectDir, "package.json"))).toBe(false);
-	}, 30_000);
+			expect(result.exitCode).toBe(1);
+			expect(result.stdout).toBe("");
+			expect(result.stderr).toContain(
+				'Directory "existing-cli" already exists. Pass --overwrite to write into it.',
+			);
+			expect(readFileSync(join(projectDir, "sentinel.txt"), "utf-8")).toBe("keep me");
+			expect(existsSync(join(projectDir, "package.json"))).toBe(false);
+		},
+		30_000,
+	);
 
-	it("aborts scaffolding into a non-empty current directory without --overwrite", async () => {
+	it("fails when the current directory is not empty and --overwrite is not passed", async () => {
 		const tempRoot = makeTempRoot("create-crust-dot-non-empty");
 		writeFileSync(join(tempRoot, "sentinel.txt"), "keep me", "utf-8");
 
-		const result = await runCreateCrust(
-			[".", "--runtime", "bun", "--no-install", "--no-git", "--no-overwrite"],
-			{ cwd: tempRoot },
-		);
+		const result = await runCreateCrust([".", "--runtime", "bun", "--no-install", "--no-git"], {
+			cwd: tempRoot,
+		});
 
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("Aborted.");
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			"The current directory is not empty. Pass --overwrite to write into it.",
+		);
 		expect(readFileSync(join(tempRoot, "sentinel.txt"), "utf-8")).toBe("keep me");
 		expect(existsSync(join(tempRoot, "package.json"))).toBe(false);
 	}, 30_000);

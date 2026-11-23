@@ -29,9 +29,9 @@ The initializer prompts for every option you don't pass. Without an interactive 
 | `--artifact`                    | `binary` for Bun, `package` for Node.js | `binary`: a standalone executable with the runtime embedded. `package`: a JavaScript bundle that needs the runtime installed. Saved as `crust.artifact`               |
 | `--install`, `--no-install`     | install                                 | Install dependencies with the detected package manager                                                                                                                |
 | `--git`, `--no-git`             | initialize                              | Initialize a Git repository; skipped inside an existing one                                                                                                           |
-| `--overwrite`, `--no-overwrite` | prompt, don't overwrite                 | When the destination exists (or the current directory is not empty), overwrite conflicting files or abort                                                             |
+| `--overwrite`, `--no-overwrite` | prompt, don't overwrite                 | When the destination exists (or the current directory is not empty), overwrite conflicting files instead of failing                                                   |
 
-Scripts in the next steps and generated README use the package manager detected from the destination's lockfiles, then the one running `create-crust`, defaulting to npm. Node.js binaries have extra build requirements; see [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution#nodejs-binaries).
+Installation, the next steps, and the generated README use the package manager detected from the destination's lockfiles, then the one running `create-crust`; run by path, they use the selected runtime's: bun for Bun, npm for Node.js. Node.js binaries have extra build requirements; see [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution#nodejs-binaries).
 
 ## Documentation
 

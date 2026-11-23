@@ -43,7 +43,7 @@ describe("detectPackageManager", () => {
 		expect(detectPackageManager(tempDir)).toBe("bun");
 	});
 
-	it("defaults to npm when no signals are present", () => {
-		expect(detectPackageManager(tempDir)).toBe("npm");
+	it("returns undefined when no signals are present", () => {
+		expect(detectPackageManager(tempDir)).toBeUndefined();
 	});
 });

@@ -3,7 +3,10 @@ import { help, version } from "@crustjs/extensions";
 
 import pkg from "../package.json" with { type: "json" };
 
-const app = new Crust("my-cli", { description: "A CLI built with Crust", version: pkg.version })
+export const app = new Crust("my-cli", {
+	description: "A CLI built with Crust",
+	version: pkg.version,
+})
 	.extend(version(), help())
 	.args({
 		name: "name",
@@ -28,5 +31,3 @@ const app = new Crust("my-cli", { description: "A CLI built with Crust", version
 			.flags({ minify: { type: "boolean", description: "Minify output" } })
 			.action(({ flags, stdout }) => stdout(`minify: ${flags.minify ?? false}`)),
 	);
-
-await app.execute();

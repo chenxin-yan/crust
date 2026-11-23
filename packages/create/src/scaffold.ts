@@ -1,13 +1,15 @@
 import {
+	chmodSync,
 	lstatSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
 	realpathSync,
+	rmSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
 import { isWithin, resolvePathLike } from "@crustjs/utils/path";
@@ -17,27 +19,6 @@ import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Replace `{{variable}}` placeholders in a string with values from the context.
- * Unknown placeholders are left unchanged.
- *
- * @param content - The template string containing `{{var}}` placeholders.
- * @param context - A flat map of variable names to replacement values.
- * @returns The interpolated string.
- *
- * @example
- * ```ts
- * interpolate("Hello, {{name}}!", { name: "world" });
- * // => "Hello, world!"
- * ```
- */
-export function interpolate(content: string, context: Record<string, string>): string {
-	return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) =>
-		// Own properties only: `{{toString}}` must not read Object.prototype.
-		Object.hasOwn(context, key) ? (context[key] ?? match) : match,
-	);
-}
 
 /**
  * Rename dotfile convention: a single leading `_` in the filename becomes `.`.
@@ -62,14 +43,17 @@ function renameDotfile(relativePath: string): string {
 	return relativePath;
 }
 
-/**
- * Check whether a directory exists and is non-empty.
- */
-function isNonEmptyDir(dirPath: string): boolean {
-	return (
-		statSync(dirPath, { throwIfNoEntry: false })?.isDirectory() === true &&
-		readdirSync(dirPath).length > 0
-	);
+/** A `files` key as a path relative to the destination, refused outside it or inside `.git`. */
+function filesKeyPath(destDir: string, key: string): string {
+	const target = resolve(destDir, key);
+	const relPath = relative(destDir, target);
+	if (isAbsolute(key) || relPath === "" || !isWithin(destDir, target)) {
+		throw new Error(`files: ${JSON.stringify(key)} is not a path inside the new project.`);
+	}
+	if (relPath.split(sep)[0]!.toLowerCase() === ".git") {
+		throw new Error(`files: ${JSON.stringify(key)} is inside .git.`);
+	}
+	return relPath;
 }
 
 /**
@@ -119,22 +103,24 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Copy a template directory to a destination, applying variable interpolation
- * (or the custom `render` callback) and dotfile renaming.
+ * Write a new project: copy the `template` directory exactly (bytes and file modes), then write
+ * `files` from code. A `files` entry wins over the template file at the same path.
  *
  * Template resolution:
  * - `string` paths resolve from the current working directory, exactly like `dest`
  * - `URL` templates must be `file:` URLs; use `new URL("../templates/base", import.meta.url)`
  *   for templates shipped inside the generator package
  *
- * Call `scaffold()` multiple times to layer/compose templates — for example,
- * a base template followed by a TypeScript-specific overlay.
+ * Every check runs before anything is deleted or written, and in a dry run.
  *
  * @param options - Scaffold configuration.
- * @returns The list of all written file paths, relative to the destination directory.
+ * @returns Every written file path (or, with `dryRun`, every path that would be written),
+ *   relative to the destination directory, sorted.
  * @throws When the template source cannot be resolved, does not exist, or is not a directory.
- * @throws When `conflict` is `"abort"` and the destination is a non-empty directory.
- * @throws Whatever a custom `render` throws or rejects with, after earlier files are written.
+ * @throws When there is nothing to write: the template is empty and `files` has no entries.
+ * @throws When a `files` key is absolute, leaves the destination, or is inside `.git`.
+ * @throws When `dest` exists and is not a directory.
+ * @throws When `conflict` is `"abort"` and the destination holds anything besides `.git`.
  * @throws When an existing destination file or ancestor directory is a symlink that
  *   resolves outside the destination (or to a missing target), regardless of `conflict`.
  *   A `dest` that is itself a symlink is followed once: its target is the destination.
@@ -146,78 +132,81 @@ function assertDestinationContained(realDestDir: string, relPath: string): void 
  * const result = await scaffold({
  *   template: new URL("../templates/base", import.meta.url),
  *   dest: "./my-project",
- *   context: { name: "my-app", description: "A cool CLI" },
+ *   files: { "README.md": "# my-app\n" },
  * });
  *
  * console.log("Created files:", result.files);
  * ```
  */
 export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> {
-	const { template, dest, context, conflict = "abort", render = interpolate } = options;
-
-	const templateDir = resolvePathLike(template);
+	const { template, dest, files = {}, conflict = "abort", dryRun = false } = options;
 	const destDir = resolve(dest);
 
-	const templateStat = statSync(templateDir, { throwIfNoEntry: false });
-	if (!templateStat) {
+	// Each destination path maps to the template file it copies, the text written from code, or
+	// both: then the text wins and the template file's mode is kept.
+	const plan = new Map<string, { source?: string; text?: string }>();
+	if (template !== undefined) {
+		const templateDir = resolvePathLike(template);
+		const templateStat = statSync(templateDir, { throwIfNoEntry: false });
+		if (!templateStat) {
+			throw new Error(
+				`Template directory "${templateDir}" does not exist (from template: "${String(template)}").`,
+			);
+		}
+		if (!templateStat.isDirectory()) {
+			throw new Error(
+				`Template path "${templateDir}" is not a directory (from template: "${String(template)}").`,
+			);
+		}
+		// Relative string listing, not Dirents: Yarn PnP's zip filesystem reports Dirent.parentPath
+		// as ".", which would make every template file resolve outside the destination.
+		// lstat keeps symlinks excluded.
+		for (const relFromTemplate of readdirSync(templateDir, { recursive: true, encoding: "utf8" })) {
+			const source = join(templateDir, relFromTemplate);
+			if (lstatSync(source).isFile()) plan.set(renameDotfile(relFromTemplate), { source });
+		}
+	}
+	for (const [key, text] of Object.entries(files)) {
+		const relPath = filesKeyPath(destDir, key);
+		plan.set(relPath, { ...plan.get(relPath), text });
+	}
+	if (plan.size === 0) {
+		throw new Error("Nothing to scaffold: the template has no files and `files` has no entries.");
+	}
+
+	const destStat = statSync(destDir, { throwIfNoEntry: false });
+	if (destStat && !destStat.isDirectory()) {
+		throw new Error(`Destination "${destDir}" exists and is not a directory.`);
+	}
+	const existing = destStat ? readdirSync(destDir).filter((name) => name !== ".git") : [];
+	if (conflict === "abort" && existing.length > 0) {
 		throw new Error(
-			`Template directory "${templateDir}" does not exist (from template: "${String(template)}").`,
+			`Destination directory "${destDir}" already exists and is non-empty. Use conflict: "overwrite" or "replace" to proceed.`,
 		);
 	}
 
-	if (!templateStat.isDirectory()) {
-		throw new Error(
-			`Template path "${templateDir}" is not a directory (from template: "${String(template)}").`,
-		);
+	// The chosen root is canonicalized once (an intentionally symlinked `dest` is followed);
+	// everything below it must stay inside that canonical directory. A destination that does
+	// not exist yet has no links to check.
+	const relPaths = [...plan.keys()].sort();
+	if (destStat) {
+		const realDestDir = realpathSync(destDir);
+		for (const relPath of relPaths) assertDestinationContained(realDestDir, relPath);
 	}
+	if (dryRun) return { files: relPaths };
 
-	// Conflict resolution
-	if (conflict === "abort" && isNonEmptyDir(destDir)) {
-		throw new Error(
-			`Destination directory "${destDir}" already exists and is non-empty. Use conflict: "overwrite" to proceed.`,
-		);
+	if (conflict === "replace") {
+		for (const name of existing) rmSync(join(destDir, name), { recursive: true, force: true });
 	}
-
-	// Relative string listing, not Dirents: Yarn PnP's zip filesystem reports Dirent.parentPath
-	// as ".", which would make every template file resolve outside the destination.
-	// lstat keeps symlinks excluded, matching the former Dirent.isFile() filter.
-	const templateFiles = readdirSync(templateDir, { recursive: true, encoding: "utf8" }).filter(
-		(relFromTemplate) => lstatSync(join(templateDir, relFromTemplate)).isFile(),
-	);
-
-	// The chosen root is canonicalized once (an intentionally symlinked `dest` is
-	// followed); everything below it must stay inside that canonical directory.
-	// Check every destination path before the first write so an escaping link
-	// fails the whole scaffold instead of a partially written tree.
 	mkdirSync(destDir, { recursive: true });
 	const realDestDir = realpathSync(destDir);
-	const plannedFiles = templateFiles.map((relFromTemplate) => ({
-		relFromTemplate,
-		destRelPath: renameDotfile(relFromTemplate),
-	}));
-	for (const { destRelPath } of plannedFiles) {
-		assertDestinationContained(realDestDir, destRelPath);
-	}
-
-	const writtenFiles: string[] = [];
-
-	for (const { relFromTemplate, destRelPath } of plannedFiles) {
-		const absolutePath = join(templateDir, relFromTemplate);
-		const destFilePath = join(realDestDir, destRelPath);
-
-		const buffer = readFileSync(absolutePath);
-		const content = buffer.subarray(0, 8192).includes(0)
-			? buffer
-			: await render(buffer.toString("utf-8"), context);
-
-		// Rendering can yield after preflight; recheck before creating directories or writing,
-		// including binary files following a renderer. This is not an atomic filesystem guard.
-		assertDestinationContained(realDestDir, destRelPath);
+	for (const relPath of relPaths) {
+		const { source, text } = plan.get(relPath)!;
+		const destFilePath = join(realDestDir, relPath);
 		mkdirSync(dirname(destFilePath), { recursive: true });
-		writeFileSync(destFilePath, content, "utf-8");
-
-		writtenFiles.push(destRelPath);
+		writeFileSync(destFilePath, text ?? readFileSync(source!));
+		if (source !== undefined) chmodSync(destFilePath, statSync(source).mode & 0o777);
 	}
 
-	return { files: writtenFiles };
+	return { files: relPaths };
 }

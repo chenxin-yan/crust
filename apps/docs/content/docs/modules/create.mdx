@@ -2,7 +2,7 @@
 title: "Create"
 ---
 
-`@crustjs/create` copies template directories, interpolates variables, renames dotfiles, resolves conflicts, and runs post-scaffold steps. It does not provide prompts or terminal UI.
+`@crustjs/create` writes a new project from a template directory, copied as it is, and from files your code writes, then runs post-scaffold steps. It does not provide prompts or terminal UI.
 
 ## Install
 
@@ -36,59 +36,56 @@ Ship templates with [`crust.include`](/docs/guide/build-and-distribution#ship-ex
 
 ## Template conventions
 
-```json title="templates/base/package.json"
-{
-  "name": "{{name}}",
-  "description": "{{description}}"
-}
-```
-
-- Text files replace `{{identifier}}` placeholders from `context`; placeholders without a value stay unchanged.
-- Files with a null byte in their first 8 KiB are binary and copied without interpolation.
+The template directory is copied exactly: every file's bytes and mode. Nothing in it is read or replaced, so it can hold binaries, executable scripts, and files in any syntax.
 
 ```text
 templates/base/_gitignore   -> my-project/.gitignore
 templates/base/__tests__/   -> my-project/__tests__/
 ```
 
-- A single leading `_` on a file name becomes `.`; `__` stays unchanged. Directory names are never renamed.
+- A single leading `_` on a copied file's name becomes `.`; `__` stays unchanged. Directory names are never renamed.
+- Symlinks in the template are skipped.
 - To layer templates, call `scaffold()` more than once with `conflict: "overwrite"`.
 
-### Custom renderer
+## Files written from code
 
-Pass `render` to use a template engine instead of `{{identifier}}` interpolation. It receives each text file's contents and `context`, may return a string or a promise, and its output is written as-is without a second interpolation pass. Binary files never reach it.
+A file that depends on the user's answers is written from code: `files` maps a path in the new project to its text. TypeScript checks the code that produces each file.
 
-```ts
-await scaffold({
-  template: new URL("../templates/base", import.meta.url),
-  dest: "./my-project",
-  context: { name: "my-app" },
-  render: (source, context) => source.replaceAll("<%= name %>", context.name ?? ""),
-});
-```
+<include lang="ts" meta='title="src/index.ts"'>
+  ../../../examples/modules/create-files.ts
+</include>
 
-- Templates run through `render` as trusted code.
-- Destination conflict and symlink checks still happen before any file is rendered.
-- An error thrown or rejected by `render` fails `scaffold()`; files written earlier in the call remain.
+- A `files` entry wins over the template file at the same path and keeps that file's mode.
+- Keys are written as given, with no `_` rename. A key must stay inside the new project and outside `.git`.
+- Values are text. Binaries and executables belong in the template.
+- Import a JSON file from the template to start from its typed contents, as with `package.json` above.
+- To change one line of a template file, read it, replace the line, and pass the result.
+- For a prose file with many substitutions, such as a README, keep it as a real file outside the copied directory and render it into `files` with a template engine of your choice. `create-crust` renders its README with [Eta](https://eta.js.org).
+
+TypeScript checks the code that produces the text, not the text itself: a misspelled key writes a new file and leaves the template's file as it was. Keep one test that runs your scaffolder and checks its output.
 
 ## `scaffold(options)`
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldOptions" />
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldResult" />
 
-See [Locating templates](#locating-templates) for how `template` resolves.
+See [Locating templates](#locating-templates) for how `template` resolves. A call needs `template`, `files`, or both; one that names neither does not compile.
 
-| `conflict`          | Non-empty destination                                                   |
+| `conflict`          | Destination with files                                                  |
 | ------------------- | ----------------------------------------------------------------------- |
 | `"abort"` (default) | Throws before writing                                                   |
 | `"overwrite"`       | Replaces conflicting files and leaves unrelated destination files alone |
+| `"replace"`         | Deletes everything but `.git`, then writes                              |
+
+A destination holding only `.git` counts as empty, so `git init` before scaffolding needs no `conflict`.
+
+Every check runs before anything is deleted or written: the template exists, there is something to write, every `files` key stays inside the new project, the conflict rule, and the symlink rules below. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
 
 Symlinks in the destination:
 
 - `dest` itself may be a symlink; its target is the destination.
 - Symlinks that stay inside the destination are followed.
 - An existing file or directory that is a symlink resolving outside the destination, or to a missing target, throws before any file is written.
-- Containment is checked again before each write, including binary copies. A redirected destination root or an escaping link created during rendering aborts the call; earlier writes remain.
 
 <Callout type="warn">
   These path checks are not atomic with filesystem writes. Use a destination whose directories
@@ -104,7 +101,7 @@ await runSteps(
 );
 ```
 
-Steps run in order and stop at the first error. A relative `cwd` resolves against the working directory, and a `command` step's relative `cwd` against the `runSteps` directory. Inside a Crust command, pass the action's `stderr` as `options.stderr` so non-fatal warnings go through the invocation's output.
+Steps run in order and stop at the first error. A failed step throws an `Error` whose `exitCode` is the child's exit status (`null` when a signal ended it). The `install` and `command` children write their output to standard error, so it never mixes with your CLI's standard output, such as `--json` results. A relative `cwd` resolves against the working directory, and a `command` step's relative `cwd` against the `runSteps` directory. Inside a Crust command, pass the action's `stderr` as `options.stderr` so non-fatal warnings go through the invocation's output.
 
 `options.signal` cancels the steps: on abort, the running step's child gets `SIGTERM`. Once it exits, `runSteps()` rejects with `signal.reason` and skips the remaining steps. A child still running 5 seconds later gets `SIGKILL`, so a step that ignores `SIGTERM` cannot hang the command. On Windows, which has no graceful signal, the child's whole process tree ends at once. On macOS and Linux only that child is signalled, so a worker started by a compound `command` step such as `build && test` can outlive a signal sent only to the CLI's process (a terminal Ctrl-C still reaches the whole foreground process group). A second Ctrl-C ends the command right away without waiting. It defaults to the ambient terminal signal, which inside a Crust command is the invocation's `signal`, so Ctrl-C and `SIGTERM` end the command with exit 130 or 143.
 
@@ -114,7 +111,7 @@ Steps run in order and stop at the first error. A relative `cwd` resolves agains
 
 | Step          | Behavior                                                              |
 | ------------- | --------------------------------------------------------------------- |
-| `install`     | Detect the package manager and install dependencies                   |
+| `install`     | Install dependencies with `packageManager`, else the detected one     |
 | `git-init`    | Initialize Git and optionally create a commit                         |
 | `open-editor` | Open `$EDITOR` or VS Code; warn instead of failing when unavailable   |
 | `command`     | Run `cmd` through the platform shell, optionally in a different `cwd` |
@@ -123,12 +120,8 @@ If Git has no `user.name` or `user.email`, `git-init` uses `Crust` / `crust@scaf
 
 ## Utilities
 
-```ts
-interpolate("Hello, {{name}}!", { name: "world" }); // => "Hello, world!"
-```
-
-- `interpolate(content, context)` replaces placeholders in a string; it is the default `render`.
-- `detectPackageManager(cwd?)` returns a `PackageManager`: it checks lockfiles, then `npm_config_user_agent`, and defaults to npm.
+- `detectPackageManager(cwd?)` returns the `PackageManager` named by a lockfile in `cwd`, else by `npm_config_user_agent`, else `undefined`. The `install` step falls back to npm.
+- `packageManagerFromUserAgent(userAgent)` reads the package manager from an `npm_config_user_agent` value, which package managers set for the scripts and `create` commands they run; `null` when it names none.
 - `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
 
 The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/create/src/index.ts) is the complete export list.
