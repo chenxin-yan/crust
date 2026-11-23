@@ -26,6 +26,7 @@ export interface PackageManifest {
 	name: string;
 	description: string;
 	peerDependencies?: Record<string, string>;
+	peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 }
 
 /** Packages with a module page, keyed by its slug (`modules/<slug>`), which is also the `packages/<slug>` directory. */

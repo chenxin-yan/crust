@@ -184,6 +184,23 @@ $ echo $?
 
 `default` fills in an omitted value, like `registry` above. `required: true` fails before the action runs when the value is missing. Either way, the value is non-optional in the action.
 
+To ask for a missing value on a terminal instead, give it a `prompt` question and add the `prompts()` Extension from [`@crustjs/prompts/extension`](/docs/modules/prompts#ask-for-missing-values):
+
+<include lang="ts" meta='title="src/create.ts"'>
+  ../../../examples/guide/flags-prompt.ts
+</include>
+
+```sh
+$ create
+✓ Project name my-app
+✓ Template vue
+created my-app from vue
+$ create < /dev/null
+Error: Missing required argument "<name>"
+```
+
+A value given on the command line or through `env` is never asked for, and a default is preselected. Without a terminal, such as in CI or a pipe, nothing is asked and the command's own errors apply.
+
 ### Aliases and negation
 
 <include lang="ts" meta='title="src/serve.ts"'>

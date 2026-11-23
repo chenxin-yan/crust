@@ -746,6 +746,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
+      '@crustjs/core':
+        specifier: workspace:*
+        version: link:../core
       '@crustjs/internal-config':
         specifier: workspace:*
         version: link:../internal-config

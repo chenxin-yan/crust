@@ -31,6 +31,10 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
+		"./extension": {
+			"types": "./dist/extension.d.ts",
+			"import": "./dist/extension.js"
+		},
 		"./testing": {
 			"types": "./dist/testing.d.ts",
 			"import": "./dist/testing.js"
@@ -52,14 +56,19 @@
 		"@crustjs/utils": "workspace:^"
 	},
 	"peerDependencies": {
+		"@crustjs/core": "workspace:^",
 		"typescript": ">=5.9.0"
 	},
 	"peerDependenciesMeta": {
+		"@crustjs/core": {
+			"optional": true
+		},
 		"typescript": {
 			"optional": true
 		}
 	},
 	"devDependencies": {
+		"@crustjs/core": "workspace:*",
 		"@crustjs/internal-config": "workspace:*",
 		"zod": "^4.6.7",
 		"vite-plus": "catalog:"

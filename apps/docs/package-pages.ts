@@ -13,10 +13,19 @@ export const PACKAGE_GROUPS = ["spine", "add-on", "standalone"] as const;
 type PackageGroup = (typeof PACKAGE_GROUPS)[number];
 
 // content/docs/modules/index.mdx states these rules above its tables: the spine is the fixed
-// changeset release group, add-ons peer-depend on Core, and standalone libraries are the rest.
-function packageGroup({ name, peerDependencies }: PackageManifest): PackageGroup {
+// changeset release group, add-ons require Core as a peer, and standalone libraries are the rest.
+function packageGroup({
+	name,
+	peerDependencies,
+	peerDependenciesMeta,
+}: PackageManifest): PackageGroup {
 	if (changesetConfig.fixed.some((group) => group.includes(name))) return "spine";
-	if (peerDependencies?.["@crustjs/core"] !== undefined) return "add-on";
+	if (
+		peerDependencies?.["@crustjs/core"] !== undefined &&
+		peerDependenciesMeta?.["@crustjs/core"]?.optional !== true
+	) {
+		return "add-on";
+	}
 	return "standalone";
 }
 
