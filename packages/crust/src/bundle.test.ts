@@ -435,8 +435,7 @@ describe("execScriptBuild with crust.external", () => {
 					settings(directory, { bunPlugins, external: ["fake-esm"] }),
 				);
 				const bin = await readdir(join(installed, "bin"));
-				expect(bin).toHaveLength(2);
-				expect(bin).toContain("cli.js");
+				expect(bin.sort()).toEqual([expect.stringMatching(/^_chunk-\w+\.js$/), "cli.js"]);
 				const run = (command?: string) =>
 					spawnSync(which("node")!, [outfile, ...(command ? [command] : [])], {
 						env: { PATH: process.env.PATH },

@@ -48,6 +48,7 @@ import {
 } from "./node-exe.ts";
 import { buildEntrypoint } from "./snapshot.ts";
 import {
+	type ALL_TARGETS,
 	BUILD_RUNTIMES,
 	type BuildRuntime,
 	BUN_TARGETS,
@@ -419,12 +420,19 @@ export type BuildOptions = {
 	 */
 	artifact?: ArtifactKind;
 	/**
-	 * Canonical compiler targets, or `"host"` for this machine. Overrides
-	 * package.json `crust.targets`; omit both to stage this machine's target only.
+	 * Canonical compiler targets, `"host"` for this machine, or `"all"` for every
+	 * target of the compiler. Overrides package.json `crust.targets`; omit both to
+	 * stage this machine's target only.
 	 * Rejected for runtime packages. Known names are completion hints only; any
 	 * string is checked at build time.
 	 */
-	targets?: readonly (BunTarget | NodeTarget | typeof HOST_TARGET | (string & {}))[];
+	targets?: readonly (
+		| BunTarget
+		| NodeTarget
+		| typeof HOST_TARGET
+		| typeof ALL_TARGETS
+		| (string & {})
+	)[];
 	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. */
 	envFiles?: readonly string[];
 	/** Minify the output. Default: true. */
@@ -546,7 +554,7 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	};
 
 	if (artifact === "package") return { ...common, runtime, artifact };
-	// This machine by default; a release stages crust.targets or every target (`crust publish` checks).
+	// This machine by default; a release stages crust.targets or `all` (`crust publish` checks).
 	const targetInputs = options.targets?.length
 		? options.targets
 		: (config.targets ?? [HOST_TARGET]);
@@ -726,13 +734,16 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 			{ cause: error },
 		);
 	}
+	// Set when the lock holds the only copy of the previous build.
+	let keepLock = false;
 	try {
 		const staging = join(lockDir, "stage");
 		const planned = planBuild(options, cwd);
 		const stageDir = planned.stageDir;
 		const plan: BuildPlan = { ...planned, stageDir: staging, outDir: join(staging, "artifacts") };
-		// Paths are reported where they end up once `staging` replaces .crust/.
-		const staged = (text: string) => text.replaceAll(staging, stageDir);
+		// Paths are reported where they end up once `staging` replaces .crust/. A function
+		// replacement keeps `$&` and other `$` patterns in the project path literal.
+		const staged = (text: string) => text.replaceAll(staging, () => stageDir);
 		const onLog = options.onLog ?? (() => {});
 		const io: LineIO = {
 			stdout: (line) => onLog(staged(line), "stdout"),
@@ -755,14 +766,32 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 			? await prepareEntries(plan, io, compilers.snapshotRunner)
 			: undefined;
 		const artifacts = await compilers.stage(reports);
-		rmSync(stageDir, { recursive: true, force: true });
-		renameSync(staging, stageDir);
+		// The previous stage is moved aside, not deleted, so a failed swap can put it back.
+		const previous = join(lockDir, "previous");
+		const hadStage = existsSync(stageDir);
+		if (hadStage) renameSync(stageDir, previous);
+		try {
+			renameSync(staging, stageDir);
+		} catch (error) {
+			if (!hadStage) throw error;
+			try {
+				renameSync(previous, stageDir);
+			} catch {
+				keepLock = true;
+				throw new Error(
+					`Could not replace ${stageDir}, nor restore the previous build, which is kept in ${previous}.\n` +
+						`  Move it back to ${stageDir}, then remove ${lockDir}.`,
+					{ cause: error },
+				);
+			}
+			throw error;
+		}
 		return {
 			stageDir,
 			artifacts: artifacts.map((artifact) => ({ ...artifact, path: staged(artifact.path) })),
 			...(reports ? { reports } : {}),
 		};
 	} finally {
-		rmSync(lockDir, { recursive: true, force: true });
+		if (!keepLock) rmSync(lockDir, { recursive: true, force: true });
 	}
 }

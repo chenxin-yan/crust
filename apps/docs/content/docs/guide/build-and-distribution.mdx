@@ -77,7 +77,13 @@ Runtime packages have no platform directories; `root/bin/my-cli.js` is the bundl
 
 ### Choose release targets
 
-A release ships every platform you support. List them in [`crust.targets`](/docs/modules/crust#packagejson-configuration), and `npm run build` stages them all:
+A release ships every platform you support. Build every target of the compiler with `--target all`:
+
+```sh
+npm run build -- --target all
+```
+
+Or list the platforms you support in [`crust.targets`](/docs/modules/crust#packagejson-configuration), and `npm run build` stages them all:
 
 ```json title="package.json (partial)"
 {
@@ -185,10 +191,10 @@ node .crust/root/bin/my-cli.js --help
 
 ## Publish with `crust publish`
 
-Use a package name you own and a new version, then build your release targets:
+Use a package name you own and a new version, then build your [release targets](#choose-release-targets):
 
 ```sh
-npm run build
+npm run build -- --target all   # binaries without crust.targets; otherwise npm run build
 npm run release -- --dry-run
 # Publish order: ... -> root
 
@@ -197,7 +203,7 @@ npm run release
 ```
 
 - `--dry-run` validates staged metadata and prints the plan **without contacting the registry**.
-- Binaries must include every [release target](#choose-release-targets), or it fails with `Stage is incomplete` and names the missing ones.
+- Binaries must include every [release target](#choose-release-targets), or it fails with `Stage is incomplete`, names the missing ones, and suggests `crust build --target all`.
 - A real publish uses npm, uploads platform packages before the root, and stops on failure.
 - Rerun to resume: existing `name@version` pairs are skipped, never overwritten or re-tagged.
 
@@ -312,7 +318,7 @@ Rules:
 - Each entry must be a `dependencies` key with a publishable range. `@crustjs/*` packages must stay bundled; see [`package.json` configuration](/docs/modules/crust#packagejson-configuration).
 - Validation runs each entry under Bun with your project's dependencies, so externals must be installed when you build. An entry that does not run a Crust app needs `--no-validate`.
 
-A module your CLI loads with `await import()` imports its externals itself: the bundle is split at each `import()`, with the pieces written next to it in `bin/` as `chunk-*.js`. A command that never loads the module starts even when the external is missing. Files an import emits beside the bundle, such as `with { type: "file" }`, are rejected; ship them with [`crust.include`](#ship-extra-directories-with-crustinclude) instead.
+A module your CLI loads with `await import()` imports its externals itself: the bundle is split at each `import()`, with the pieces written next to it in `bin/` as `_chunk-*.js`. A command that never loads the module starts even when the external is missing. Files an import emits beside the bundle, such as `with { type: "file" }`, are rejected; ship them with [`crust.include`](#ship-extra-directories-with-crustinclude) instead.
 
 Limits:
 
@@ -321,13 +327,13 @@ Limits:
 
 ### Read `name` and `version` from `package.json`
 
-Import the fields you use by name. The bundler then embeds only those values; a default import (`import pkg from "../package.json"`) embeds the whole file, including scripts, dependencies, and local paths.
+When your source runs on Bun, import the fields you use by name. The bundler then embeds only those values; a default import (`import pkg from "../package.json"`) embeds the whole file, including scripts, dependencies, and local paths.
 
 ```ts title="src/cli.ts (partial)"
 import { name, version } from "../package.json" with { type: "json" };
 ```
 
-TypeScript rejects named JSON imports under `"module": "NodeNext"` and the other `Node*` settings; `create-crust` projects use `"Preserve"`, which allows them.
+Node.js gives a JSON module only a default export, so source run with `node` fails at this import with `does not provide an export named 'name'`. There, keep the default import, and the bundle embeds the whole `package.json`. TypeScript does not catch this: it rejects named JSON imports only under `"module": "NodeNext"` and the other `Node*` settings, and `create-crust` projects use `"Preserve"`.
 
 ### Environment variables
 

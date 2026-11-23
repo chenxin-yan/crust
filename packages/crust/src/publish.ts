@@ -156,7 +156,7 @@ export function readPublishManifest(stageDir: string): PublishManifest {
  * Rejects a stage built before the project's name or version changed, which
  * would publish the old release, and binaries missing a release target:
  * `crust build` stages only this machine by default, while a release ships
- * package.json `crust.targets`, or every target of the compiler without it.
+ * package.json `crust.targets`, or every target of the compiler (`--target all`) without it.
  */
 export function assertStageMatchesProject(projectDir: string, manifest: PublishManifest): void {
 	const packageJsonPath = join(projectDir, "package.json");
@@ -186,7 +186,7 @@ export function assertStageMatchesProject(projectDir: string, manifest: PublishM
 	if (missing.length > 0) {
 		throw new Error(
 			`Stage is incomplete: .crust/ holds ${[...staged].join(", ")}, but a release ships ${configured ? "every target in package.json crust.targets" : `every ${table.runtime} target`}; missing ${missing.join(", ")}.\n` +
-				"  crust build stages only this machine's target by default. List your release targets in package.json crust.targets (or pass each with --target), then run `crust build` again.",
+				`  crust build stages only this machine's target by default. Run \`crust build --target all\`, or list your release targets in package.json crust.targets and run \`crust build\`.`,
 		);
 	}
 }

@@ -47,7 +47,7 @@ crust build --artifact binary --target bun-linux-x64
 | Option                        | Type                | Default             | Description                                                                                                                                                                                                   |
 | ----------------------------- | ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--artifact`                  | `package`, `binary` | none                | Artifact kind: a runtime package or standalone binaries. Overrides `crust.artifact`, ignoring `crust.targets` for a package and `crust.external` for binaries; one of them is required                        |
-| `-t, --target`                | string, repeatable  | none                | Canonical compiler target(s) for binaries, or `host` for this machine. Omit to stage `crust.targets`, or this machine's target. Rejected for runtime packages                                                 |
+| `-t, --target`                | string, repeatable  | none                | Canonical compiler target(s) for binaries, `host` for this machine, or `all` for every target. Omit to stage `crust.targets`, or this machine's target. Rejected for runtime packages                         |
 | `--env-file`                  | path, repeatable    | none                | Env file(s) whose [`PUBLIC_*` values](/docs/guide/build-and-distribution#environment-variables) are inlined; relative to the working directory                                                                |
 | `--validate`, `--no-validate` | boolean             | `true`              | Materialize command definitions and run the [definition checks](/docs/api/crust#definition-checks) before compiling; built artifacts leave those checks out. `--no-validate` also skips Extension build hooks |
 | `--minify`, `--no-minify`     | boolean             | `true`              | Minify the output                                                                                                                                                                                             |
@@ -69,7 +69,7 @@ crust publish --dry-run
 | `--dry-run`  | boolean | `false` | Print publish order and commands without publishing |
 | `--registry` | string  | none    | Override the registry passed to npm publish         |
 
-`crust publish` reads `.crust/manifest.json`. It fails with `Staged manifest not found` if there is none, with `Stage is stale` if your `package.json` name or version no longer matches it, and with `Stage is incomplete` if binaries miss a release target: one in `crust.targets`, or any target of the compiler without it. Each tells you to run `crust build` first. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
+`crust publish` reads `.crust/manifest.json`. It fails with `Staged manifest not found` if there is none, with `Stage is stale` if your `package.json` name or version no longer matches it, and with `Stage is incomplete` if binaries miss a release target: one in `crust.targets`, or any target of the compiler without it. Each tells you to run `crust build` first, with `--target all` for missing targets without `crust.targets`. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
 
 - For each staged package, it checks `name@version` with `npm view` and runs `npm publish` only if that version is missing. Existing versions are skipped and never re-tagged, so rerunning after a failure resumes. `--dry-run` stays offline.
 - Before anything publishes, it verifies the manifest, that package names are unique, and that every package directory resolves inside the staging root.
@@ -98,7 +98,7 @@ crust publish --dry-run
 | `executable`         | `<platform>/bin/<command>-<target>`                | `command`, canonical `target`  |
 | `bundle`             | `root/bin/<command>.js` for runtime packages¹      | `command`                      |
 
-¹ With `crust.external`, modules loaded with `import()` are split into `root/bin/chunk-*.js` beside the bundles; they are not listed. See [Keep dependencies external](/docs/guide/build-and-distribution#keep-dependencies-external).
+¹ With `crust.external`, modules loaded with `import()` are split into `root/bin/_chunk-*.js` beside the bundles; they are not listed. See [Keep dependencies external](/docs/guide/build-and-distribution#keep-dependencies-external).
 
 `build()` runs in this order:
 
@@ -113,8 +113,9 @@ crust publish --dry-run
   Overlapping builds of the same project directory reject before staging, across processes and
   symlink aliases. The lock is a `.crust.lock` directory beside `.crust/`, which also holds the
   build in progress, removed on success or failure; after an interrupted build, remove it only once
-  no build is running. The lock does not protect publishing or other readers, so consume staged
-  artifacts before rebuilding.
+  no build is running. If a finished build cannot replace `.crust/` nor put the previous one back,
+  the lock is kept, holding the previous build in `.crust.lock/previous`, and the error says so. The
+  lock does not protect publishing or other readers, so consume staged artifacts before rebuilding.
 </Callout>
 
 ## Build output
@@ -159,7 +160,7 @@ To ship a library alongside the CLI:
 
 ## Supported targets
 
-Targets apply to binaries. `--target` overrides `crust.targets`; without either, only this machine's target is built, and `crust publish` requires every target of the compiler. `host` selects this machine's OS, architecture, and Linux C library and can be mixed with explicit targets. Runtime packages reject both `--target` and `crust.targets`.
+Targets apply to binaries. `--target` overrides `crust.targets`; without either, only this machine's target is built, and `crust publish` requires every target of the compiler. `host` selects this machine's OS, architecture, and Linux C library, and `all` every target of the compiler; both can be mixed with explicit targets. Runtime packages reject both `--target` and `crust.targets`.
 
 | Bun target                                   | Node.js target               | Platform alias                       |
 | -------------------------------------------- | ---------------------------- | ------------------------------------ |
@@ -221,14 +222,14 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 
 `crust.artifact` is required unless every build passes `--artifact`; the other keys are optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
 
-| Key                | Description                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `crust.runtime`    | `bun` or `node`. Without it, `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                                                                                                                                                                                                 |
-| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun` or `node`). `--artifact` overrides it.                                                                                                                                                                                                             |
-| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` included, and the targets `crust publish` requires. Without it a build stages this machine's target, and a publish requires every target of the compiler. Rejected with `"artifact": "package"`; ignored when `--artifact package` overrides `crust.artifact`.         |
-| `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Node binaries.                                                                                       |
-| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                                                                                                          |
-| `crust.external`   | Packages a Node or Bun runtime package leaves out of its bundles and ships as `dependencies` of the staged root package, with their `dependencies` ranges, in this order. See [Keep dependencies external](/docs/guide/build-and-distribution#keep-dependencies-external). Rejected with `"artifact": "binary"`; ignored when `--artifact binary` is passed. |
+| Key                | Description                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crust.runtime`    | `bun` or `node`. Without it, `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                                                                                                                                                                                                   |
+| `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun` or `node`). `--artifact` overrides it.                                                                                                                                                                                                               |
+| `crust.targets`    | Canonical compiler targets staged when a binary build runs without `--target`, `host` and `all` included, and the targets `crust publish` requires. Without it a build stages this machine's target, and a publish requires every target of the compiler. Rejected with `"artifact": "package"`; ignored when `--artifact package` overrides `crust.artifact`. |
+| `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Node binaries.                                                                                         |
+| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                                                                                                            |
+| `crust.external`   | Packages a Node or Bun runtime package leaves out of its bundles and ships as `dependencies` of the staged root package, with their `dependencies` ranges, in this order. See [Keep dependencies external](/docs/guide/build-and-distribution#keep-dependencies-external). Rejected with `"artifact": "binary"`; ignored when `--artifact binary` is passed.   |
 
 `crust.include` rules:
 

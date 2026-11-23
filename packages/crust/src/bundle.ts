@@ -257,9 +257,12 @@ export function createBunCompileArgs(
 	];
 }
 
-/** Chunks of a split runtime package bundle, flat beside it in `bin/` so `artifactPath` still finds the package root. */
-const CHUNK_NAMING = "chunk-[hash].[ext]";
-const CHUNK_PATTERN = /^chunk-\w+\.js$/;
+/**
+ * Chunks of a split runtime package bundle, flat beside it in `bin/` so `artifactPath` still
+ * finds the package root. No command name starts with `_`, so a chunk cannot replace a bundle.
+ */
+const CHUNK_NAMING = "_chunk-[hash].[ext]";
+const CHUNK_PATTERN = /^_chunk-\w+\.js$/;
 
 /** Runs one compiler step; returns its output, which a successful step may still print (warnings). */
 export async function runBuildProcess(

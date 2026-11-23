@@ -3,6 +3,18 @@ import { describe, expect, it } from "vite-plus/test";
 import { BUN_TARGETS, NODE_TARGETS, resolveTargets, type TargetTable } from "./targets.ts";
 
 describe("resolveTargets", () => {
+	it("expands all to every target of the table, deduplicated in input order", () => {
+		expect(resolveTargets(NODE_TARGETS, ["darwin-arm64", "all"])).toEqual([
+			"darwin-arm64",
+			"linux-x64",
+			"linux-arm64",
+			"darwin-x64",
+			"win-x64",
+			"win-arm64",
+		]);
+		expect(resolveTargets(BUN_TARGETS, ["all"])).toEqual(BUN_TARGETS.targets);
+	});
+
 	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
 		for (const target of BUN_TARGETS.targets) {
 			const alias = BUN_TARGETS.info[target].alias;

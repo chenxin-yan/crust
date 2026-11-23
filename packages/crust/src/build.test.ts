@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
+	type PathLike,
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
@@ -44,6 +45,26 @@ import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
 import { BUILD_RUNTIMES, BUN_TARGETS, hostTarget, NODE_TARGETS } from "./targets.ts";
 
 const host = hostTarget(BUN_TARGETS);
+
+// Sources whose renameSync fails, to exercise how build() swaps in the new .crust/.
+const failRenameFrom = vi.hoisted(() => new Set<string>());
+vi.mock("node:fs", async (importOriginal) => {
+	const fs = await importOriginal<typeof import("node:fs")>();
+	return {
+		...fs,
+		renameSync: (from: PathLike, to: PathLike) => {
+			if (failRenameFrom.has(String(from))) {
+				throw Object.assign(
+					new Error(`EXDEV: cross-device link not permitted, rename '${String(from)}'`),
+					{
+						code: "EXDEV",
+					},
+				);
+			}
+			fs.renameSync(from, to);
+		},
+	};
+});
 
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -167,6 +188,9 @@ describe("planBuild", () => {
 		"stages only this machine's target without --target or crust.targets",
 		() => {
 			expect(planBuild(binary, tmpDir)).toMatchObject({ runtime: "bun", targets: [host] });
+			expect(planBuild({ ...binary, targets: ["all"] }, tmpDir)).toMatchObject({
+				targets: BUN_TARGETS.targets,
+			});
 			writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
 			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 				runtime: "node",
@@ -608,7 +632,8 @@ describe("readCrustConfig", () => {
 });
 
 describe("build", () => {
-	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-"));
+	// `$&` in the project path checks that reported paths keep it literally.
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-$&-"));
 	const stageDir = join(tmpDir, ".crust");
 	const writeProject = (pkg: Record<string, JsonValue>, entry: string) => {
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -736,6 +761,36 @@ describe("build", () => {
 		expect(readFileSync(bundlePath, "utf8")).toContain("first");
 		expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
 		expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
+	}, 30_000);
+
+	it("restores the previous stage when the new one cannot replace it", async () => {
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("first");\n',
+		);
+		await build({ cwd: tmpDir, validate: false });
+		writeFileSync(join(tmpDir, "src", "cli.ts"), 'console.log("second");\n');
+		const lockDir = join(realpathSync(tmpDir), ".crust.lock");
+		const bundlePath = join(stageDir, "root", "bin", "node-cli.js");
+
+		failRenameFrom.add(join(lockDir, "stage"));
+		try {
+			await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow("EXDEV");
+			expect(readFileSync(bundlePath, "utf8")).toContain("first");
+			expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
+			expect(existsSync(lockDir)).toBe(false);
+
+			// When the previous stage cannot be put back either, the lock keeps it.
+			failRenameFrom.add(join(lockDir, "previous"));
+			await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
+				`nor restore the previous build, which is kept in ${join(lockDir, "previous")}.`,
+			);
+			expect(
+				readFileSync(join(lockDir, "previous", "root", "bin", "node-cli.js"), "utf8"),
+			).toContain("first");
+		} finally {
+			failRenameFrom.clear();
+		}
 	}, 30_000);
 
 	it("warns when an entry's shebang names another runtime than crust.runtime", async () => {

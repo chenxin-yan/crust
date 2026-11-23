@@ -13,6 +13,7 @@ import {
 	readPublishManifest,
 	validatePublishManifest,
 } from "./publish.ts";
+import { BUN_TARGETS } from "./targets.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -217,6 +218,20 @@ describe("publish manifest validation", () => {
 		expect(() =>
 			assertStageMatchesProject(projectDir, { ...nodeManifest, packages: [] }),
 		).not.toThrow();
+		// What `crust build --target all` stages is a complete release, with or without crust.targets.
+		const everyTarget: DistributionManifest = {
+			...manifest,
+			packages: BUN_TARGETS.targets.map((target) => ({
+				...manifest.packages[0]!,
+				target: BUN_TARGETS.info[target].alias,
+			})),
+		};
+		expect(() => assertStageMatchesProject(projectDir, everyTarget)).not.toThrow();
+		writeProject({ targets: ["all"] });
+		expect(() => assertStageMatchesProject(projectDir, everyTarget)).not.toThrow();
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"Run `crust build --target all`, or list your release targets",
+		);
 	});
 
 	it("validates a root-only Node manifest and publishes just the root", async () => {
