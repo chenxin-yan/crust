@@ -130,10 +130,10 @@ Multifilter combines fuzzy matching with multi-selection and returns values in o
 const body = await editor({ initial: "## Summary\n", filename: "issue.md" });
 ```
 
-Editor opens the user's editor on a temporary file holding `initial` and returns the file's text once the editor exits. The editor is `$VISUAL`, else `$EDITOR`, run by the shell as Git runs it, so a value such as `code --wait` works; it runs on the process's own terminal. The temporary file is named `filename` (editors pick syntax highlighting from its extension) and removed afterwards.
+Editor opens the user's editor on a temporary file holding `initial` and returns the file's text once the editor exits. The editor is `$VISUAL`, else `$EDITOR`, run by the shell as Git runs it, so a value such as `code --wait` works; on POSIX the shell `exec`s it, so it must be one command. It runs on the process's own terminal. The temporary file is named `filename`, a file name and not a path (editors pick syntax highlighting from its extension), and removed afterwards.
 
 - Where `canPrompt()` is false it rejects with `NonInteractiveError` without starting the editor.
-- It rejects when neither variable is set, or when the editor exits with a non-zero status.
+- It rejects when `filename` is a path, when neither variable is set, or when the editor exits with a non-zero status.
 - When the resolved `signal` aborts, it stops the editor and rejects with `signal.reason`.
 
 <auto-type-table
@@ -182,7 +182,7 @@ ci-user
 NonInteractiveError: Prompts require an interactive terminal (TTY).
 ```
 
-- With `initial`, every prompt returns it without rendering.
+- With `initial`, every terminal prompt returns it without rendering; `editor()` instead seeds its file with it.
 - A prompt renders only where `canPrompt(io?)` is true: its input and its output are both TTYs, and `CI` is unset (empty, `0`, or `false` in any letter case counts as unset) unless the input was injected through `io` or [`withTerminalIO()`](#injecting-io), as [`runInteractive()`](/docs/modules/testing#runinteractiveapp-argv) does. `CI` guards against a pseudo-terminal nobody answers.
 - Otherwise, such as when stdin is piped or stderr is redirected, a prompt returns an explicitly supplied `default` (`password()` has none) or rejects with `NonInteractiveError`. `confirm()` defaults to yes interactively, but without a TTY only an explicit `default` counts.
 - Ctrl+C or Ctrl+D rejects with a `DOMException` whose name is `AbortError`, and the prompt replaces its frame with a cancelled line, such as `✗ Project name?`.

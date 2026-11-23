@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -12,12 +12,12 @@ import { nonTTYIO } from "./test-helpers.ts";
 
 const fixture = mkdtempSync(join(tmpdir(), "crust-editor-test-"));
 const script = join(fixture, "fake-editor.mjs");
-// Records the file it was given, then appends to it, fails, or waits to be stopped.
+// Records its PID and the file it was given, then appends to it, fails, or waits to be stopped.
 writeFileSync(
 	script,
 	`import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 const file = process.argv[2];
-writeFileSync(process.env.EDITOR_SEEN, file + "\\n" + readFileSync(file, "utf8"));
+writeFileSync(process.env.EDITOR_SEEN, process.pid + "\\n" + file + "\\n" + readFileSync(file, "utf8"));
 if (process.env.EDITOR_MODE === "fail") process.exit(3);
 if (process.env.EDITOR_MODE === "hang") setInterval(() => {}, 1000);
 else appendFileSync(file, " edited");
@@ -26,10 +26,19 @@ else appendFileSync(file, " edited");
 const fakeEditor = `"${process.execPath}" "${script}"`;
 const seenFile = join(fixture, "seen.txt");
 
-/** The file the fake editor was given, and the text it held when the editor started. */
-function seen(): { file: string; text: string } {
-	const [file = "", ...text] = readFileSync(seenFile, "utf8").split("\n");
-	return { file, text: text.join("\n") };
+/** The fake editor's PID, the file it was given, and the text it held when the editor started. */
+function seen(): { pid: number; file: string; text: string } {
+	const [pid = "", file = "", ...text] = readFileSync(seenFile, "utf8").split("\n");
+	return { pid: Number(pid), file, text: text.join("\n") };
+}
+
+function isRunning(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 beforeEach(() => {
@@ -55,6 +64,22 @@ describe("editor", () => {
 		expect(seen().text).toBe("hello");
 		expect(basename(seen().file)).toBe("notes.md");
 		expect(existsSync(dirname(seen().file))).toBe(false);
+	});
+
+	it("passes a filename the shell would expand to the editor unchanged", async () => {
+		const filename = "%PATH% $HOME 'q'.md";
+		await editor({ filename }, createPromptIO().io);
+		expect(basename(seen().file)).toBe(filename);
+	});
+
+	it("rejects a filename that is a path before writing anything", async () => {
+		const sentinel = join(fixture, "sentinel.txt");
+		writeFileSync(sentinel, "keep");
+		const filename = relative(join(tmpdir(), "crust-editor-x"), sentinel);
+
+		await expect(editor({ filename }, createPromptIO().io)).rejects.toThrow("not a path");
+		expect(readFileSync(sentinel, "utf8")).toBe("keep");
+		expect(existsSync(seenFile)).toBe(false);
 	});
 
 	it("prefers $VISUAL, then $EDITOR", async () => {
@@ -91,6 +116,7 @@ describe("editor", () => {
 		controller.abort(reason);
 
 		await expect(edited).rejects.toBe(reason);
+		expect(isRunning(seen().pid)).toBe(false);
 		expect(existsSync(dirname(seen().file))).toBe(false);
 	});
 });
