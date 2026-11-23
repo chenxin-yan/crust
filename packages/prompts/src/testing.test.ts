@@ -27,6 +27,19 @@ describe("createPromptIO screen", () => {
 		expect(harness.screen()).toBe(`${"a".repeat(10)}\n${"a".repeat(5)}`);
 	});
 
+	it("rewraps the screen at the size resize() sets and keeps the cursor in its text", () => {
+		const harness = createPromptIO();
+		harness.io.output.write(`${"a".repeat(15)}\nb`);
+		harness.resize(10, 5);
+
+		expect(harness.screen()).toBe(`${"a".repeat(10)}\n${"a".repeat(5)}\nb`);
+
+		harness.io.output.write("c");
+		harness.resize(80, 5);
+
+		expect(harness.screen()).toBe(`${"a".repeat(15)}\nbc`);
+	});
+
 	it("delays the wrap at the last column until another character arrives", () => {
 		const harness = createPromptIO();
 		harness.io.output.write(`${"a".repeat(80)}\r\nnext`);

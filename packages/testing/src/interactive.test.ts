@@ -132,6 +132,30 @@ describe("runInteractive", () => {
 		expect(run.screen()).toContain(`${"x".repeat(20)}\n${"x".repeat(10)}`);
 	});
 
+	it("rewraps the screen on resize, so a prompt's redraw keeps the lines above it", async () => {
+		const message = "What is the name of the project you want?";
+		const app = new Crust("test-cli").action(async ({ stderr }) => {
+			stderr("HEADER LINE ABOVE THE PROMPT");
+			await input({ message });
+		});
+
+		const run = runInteractive(app, []);
+		await run.waitFor(/project you want/);
+		run.resize(20, 10);
+		run.type("x");
+		await run.waitFor(/x/);
+		expect(run.screen().startsWith("HEADER LINE ABOVE TH\nE PROMPT\n")).toBe(true);
+		run.resize(80, 10);
+		run.type("y");
+		await run.waitFor(/xy/);
+		run.keys("return");
+		await run.done;
+
+		const screen = run.screen();
+		expect(screen.startsWith("HEADER LINE ABOVE THE PROMPT\n")).toBe(true);
+		expect(screen.split(message)).toHaveLength(2);
+	});
+
 	it("cancels a waiting prompt with exit code 130, as Ctrl-C does", async () => {
 		let cause: unknown;
 		const app = new Crust("test-cli").action(async ({ signal }) => {

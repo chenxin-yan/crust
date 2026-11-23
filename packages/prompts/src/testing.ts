@@ -55,7 +55,9 @@ export function encodeKey(key: Key): string {
 
 class FakeTerminal {
 	// One cell per column; a wide character's second column holds "".
-	private readonly lines: string[][] = [[]];
+	private lines: string[][] = [[]];
+	// Whether each row continues the row above it: the text wrapped there rather than broke at a newline.
+	private continued: boolean[] = [false];
 	private row = 0;
 	// Equal to `columns` after the last column is written: the wrap waits for the next character.
 	private column = 0;
@@ -110,6 +112,47 @@ class FakeTerminal {
 		}
 	}
 
+	/** Rejoin wrapped rows and wrap them again at `columns`, as most terminal emulators do on a resize. */
+	resize(columns: number): void {
+		const logicalLines: { cells: string[]; cursor?: number }[] = [];
+		for (const [index, cells] of this.lines.entries()) {
+			let line = logicalLines.at(-1);
+			if (!line || !this.continued[index]) {
+				line = { cells: [] };
+				logicalLines.push(line);
+			}
+			if (index === this.row) line.cursor = line.cells.length + this.column;
+			line.cells.push(...cells);
+		}
+
+		this.columns = columns;
+		this.lines = [];
+		this.continued = [];
+		for (const { cells, cursor } of logicalLines) {
+			let row: string[] = [];
+			this.lines.push(row);
+			this.continued.push(false);
+			for (const [index, cell] of cells.entries()) {
+				// A wide character's second cell ("") never starts a row of its own.
+				const width = cell === "" ? 0 : cells[index + 1] === "" ? 2 : 1;
+				if (row.length + width > columns) {
+					row = [];
+					this.lines.push(row);
+					this.continued.push(true);
+				}
+				if (index === cursor) {
+					this.row = this.lines.length - 1;
+					this.column = row.length;
+				}
+				row.push(cell);
+			}
+			if (cursor !== undefined && cursor >= cells.length) {
+				this.row = this.lines.length - 1;
+				this.column = Math.min(columns, row.length + cursor - cells.length);
+			}
+		}
+	}
+
 	screen(): string {
 		let last = this.lines.length - 1;
 		while (last > 0 && this.lines[last]?.length === 0) last--;
@@ -131,6 +174,7 @@ class FakeTerminal {
 		} else if (command === "J") {
 			this.lines[this.row] = (this.lines[this.row] ?? []).slice(0, this.column);
 			this.lines.length = this.row + 1;
+			this.continued.length = this.row + 1;
 		} else if (command === "K") {
 			this.lines[this.row] = [];
 		}
@@ -150,6 +194,7 @@ class FakeTerminal {
 			this.row++;
 			this.column = 0;
 			this.ensureLine();
+			this.continued[this.row] = true;
 		}
 		const cells = this.lines[this.row] ?? [];
 		while (cells.length < this.column) cells.push(" ");
@@ -162,7 +207,10 @@ class FakeTerminal {
 	}
 
 	private ensureLine(): void {
-		while (this.lines.length <= this.row) this.lines.push([]);
+		while (this.lines.length <= this.row) {
+			this.lines.push([]);
+			this.continued.push(false);
+		}
 	}
 }
 
@@ -173,8 +221,8 @@ export interface PromptTestIO {
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	/**
-	 * Change the terminal's size, as a user resizing the window: later writes wrap at `columns`,
-	 * and the output emits `resize`, as a terminal's stream does on `SIGWINCH`.
+	 * Change the terminal's size, as a user resizing the window: the screen rewraps at `columns`, as
+	 * most terminal emulators do, and the output emits `resize`, as a terminal's stream does on `SIGWINCH`.
 	 */
 	resize(columns: number, rows: number): void;
 	screen(): string;
@@ -217,7 +265,8 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 			for (const key of keys) input.write(encodeKey(key));
 		},
 		resize: (columns, rows) => {
-			terminal.columns = output.columns = columns;
+			terminal.resize(columns);
+			output.columns = columns;
 			output.rows = rows;
 			output.emit("resize");
 		},

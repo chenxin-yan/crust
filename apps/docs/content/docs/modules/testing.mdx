@@ -54,7 +54,7 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 - Prompts, progress, and the action's `stderr` draw on the terminal; `screen()` returns it as plain text. The action's `stdout` is captured apart, as a pipe: read it with the handle's `stdout()` method or from `done`.
 - `waitFor()` polls the screen and defaults to a 5000 ms timeout; on a timeout it cancels the run. It fails as soon as the run ends without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
 - `type(text)` types text. `keys()` presses named keys (`"return"`, `"up"`, `"space"`, `"escape"`, …) and `ctrl+<letter>`; any other name is a compile error.
-- `resize(columns, rows)` resizes the terminal: later output wraps at the new width, `stderr.columns` reports it, and the terminal emits `resize`. It starts at 80 by 24.
+- `resize(columns, rows)` resizes the terminal: the screen rewraps at the new width, as most terminal emulators do, `stderr.columns` reports it, and the terminal emits `resize`. It starts at 80 by 24.
 - `cancel()` cancels the run as Ctrl-C does, with `signal.reason.cause` set to `"SIGINT"`: a waiting prompt, or any work that honors [`signal`](/docs/guide/error-handling#cancellation), ends it with exit code `130`.
 - `done` resolves after cleanup with `stdout`, `stderr` (what the run wrote to stderr, without prompt frames), and `exitCode`, as `captureExecute()` does. It never rejects: a failure is its rendered error and exit code.
 
