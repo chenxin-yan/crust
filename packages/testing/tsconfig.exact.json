@@ -1,0 +1,7 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"exactOptionalPropertyTypes": true
+	},
+	"include": ["tests/exact-optional.test-d.ts"]
+}

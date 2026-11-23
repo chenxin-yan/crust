@@ -8,12 +8,12 @@ export interface CaptureOptions {
 	 * Variables flags' `env` bindings read instead of `process.env`. Pass `{}` so results never
 	 * depend on the shell running the tests.
 	 */
-	env?: ExecuteOptions["env"];
+	env?: ExecuteOptions["env"] | undefined;
 	/**
 	 * Keep ANSI escape sequences in captured `stdout` and `stderr`. By default they are stripped,
 	 * so output is plain even when the runner sets `FORCE_COLOR` for its workers.
 	 */
-	raw?: boolean;
+	raw?: boolean | undefined;
 }
 
 /** Captured text as the helpers return it: plain unless `raw` keeps escape sequences. */
