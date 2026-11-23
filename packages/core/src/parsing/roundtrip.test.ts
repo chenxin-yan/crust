@@ -193,8 +193,10 @@ function scalar(random: Random, def: ArgDef | FlagDef): Encoded {
 	}
 	// Schema-backed args carry no `type`; their schema receives the raw string on both paths.
 	switch (def.type ?? "string") {
-		case "number": {
-			const value = pick(random, NUMBERS);
+		case "number":
+		case "integer": {
+			// The fixture's integers allow -10 to 10.
+			const value = pick(random, def.type === "integer" ? [0, 1, -3, 10] : NUMBERS);
 			return { value, token: String(value) };
 		}
 		case "boolean": {
@@ -254,7 +256,7 @@ function generateFlags(random: Random, defs: Readonly<Record<string, FlagDef>>) 
 	const tokens: string[] = [];
 	const encode = (name: string, def: FlagDef): Encoded => {
 		if (def.type === "boolean") {
-			// `--no-<name>` is the only argv spelling of false; opted-out flags only ever say true.
+			// `--no-<name>` is the only argv spelling of false; a flag that is not negatable only says true.
 			const value = isFlagNegatable(def) ? random() < 0.5 : true;
 			return { value, token: value ? `--${name}` : `--no-${name}` };
 		}
@@ -379,8 +381,9 @@ function fixture(): CommandNode {
 			{ name: "files", type: "path", variadic: true },
 		],
 		flags: {
-			fetch: { type: "boolean" },
-			quiet: { type: "boolean", noNegate: true, multiple: true },
+			fetch: { type: "boolean", negatable: true },
+			quiet: { type: "boolean", multiple: true },
+			jobs: { type: "integer", min: -10, max: 10 },
 			tag: { type: "string", multiple: true },
 			config: { type: "json" },
 			offset: { type: "number", default: 7 },

@@ -7,6 +7,7 @@ import type { ExtensionId } from "../identity.ts";
 import {
 	flagSpellings,
 	isFlagNegatable,
+	flagTakesValue,
 	normalizeFlag,
 	type FlagSpelling,
 } from "../parsing/spellings.ts";
@@ -251,7 +252,7 @@ export function checkReusedFlagShapes(
 ): FlagShapes {
 	const shapes = new Map(ancestors);
 	for (const [spelling, { canonicalName, def }] of node.flagSpellings) {
-		const takesValue = def.type !== "boolean";
+		const takesValue = flagTakesValue(def);
 		const ancestor = ancestors.get(spelling);
 		if (ancestor && ancestor.takesValue !== takesValue) {
 			const flag = Array.from(spelling).length === 1 ? `-${spelling}` : `--${spelling}`;

@@ -88,7 +88,7 @@ port 1 (given for this run)
 
 ## Settings
 
-A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env` (the same `{ name, delimiter? }` object), `multiple`, `delimiter`, `choices`, `noNegate` and `parse`, with the same types as on a flag. Values are inferred as the flag's would be: `required` and `default` remove `undefined`, `choices` give a union, and `parse` gives its return type.
+A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env` (a variable name or a list of names), `multiple`, `delimiter`, `choices`, `negatable`, `min`, `max` and `parse`, with the same types as on a flag. Values are inferred as the flag's would be: `required` and `default` remove `undefined`, `choices` give a union, and `parse` gives its return type.
 
 What differs from a flag:
 
@@ -98,8 +98,8 @@ What differs from a flag:
 | `required`    | Checked after the files, when a command reads the setting. The flag itself is optional, in typed `run()` input and MCP tools too                                                     |
 | `flag: false` | No flag: the setting comes from its environment variable, the files or its `default`. Typed `run()` input does not take it either                                                    |
 
-- Other types (`url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `.flags()` throws a `DEFINITION` `CrustError` for it.
-- In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a `noNegate` boolean only `true`.
+- Other types (`integer`, `count`, `url`, `path`, `json`) and `schema` are not supported: a config file holds what the user types, a string, a number or a boolean. An unknown property is a compile error, and `.flags()` throws a `DEFINITION` `CrustError` for it.
+- In a file, a setting holds what the user would type for the flag: a `multiple` setting is a JSON array, a `parse` setting a string that is parsed after reading, and a number within its `min` and `max`.
 
 ### One config per app
 
@@ -145,7 +145,7 @@ The store converts the text to the setting's type, checks it, keeps keys it does
 
 ## JSON Schema
 
-`config.jsonSchema()` returns the JSON Schema (draft 2020-12) of a config file: one property per setting, as the user writes it (a `choices` setting is an `enum`, a `multiple` one an array, a `parse` one a string, a `noNegate` boolean `{ "const": true }`), plus `"$schema"`, and no other property. Point a file's `"$schema"` at it for completion and checks in editors. To write it at `crust build`, add a small [build Extension](/docs/guide/extensions):
+`config.jsonSchema()` returns the JSON Schema (draft 2020-12) of a config file: one property per setting, as the user writes it (a `choices` setting is an `enum`, a `multiple` one an array, a `parse` one a string, `min` and `max` as `minimum` and `maximum`), plus `"$schema"`, and no other property. Point a file's `"$schema"` at it for completion and checks in editors. To write it at `crust build`, add a small [build Extension](/docs/guide/extensions):
 
 <include lang="ts">../../../examples/modules/config.ts#schema</include>
 

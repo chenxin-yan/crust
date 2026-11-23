@@ -12,7 +12,6 @@ const JSON_OUTPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:json")
 const jsonFlags = {
 	json: {
 		type: "boolean",
-		noNegate: true,
 		description: "Print machine-readable JSON output",
 	},
 } as const;

@@ -204,7 +204,7 @@ describe("renderFish", () => {
 		const app = new Crust("mycli")
 			.flags({
 				port: { type: "number", short: "p", aliases: ["P", "listen"] },
-				q: { type: "boolean", aliases: ["Q"] },
+				q: { type: "boolean", aliases: ["Q"], default: true },
 			})
 			.action(() => {});
 		const script = renderFish(

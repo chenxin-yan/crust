@@ -165,8 +165,9 @@ describe("nextSteps", () => {
 					count: { type: "number" },
 					tag: { type: "string", multiple: true },
 					force: { type: "boolean" },
-					cache: { type: "boolean" },
-					quiet: { type: "boolean", noNegate: true },
+					cache: { type: "boolean", negatable: true },
+					quiet: { type: "boolean" },
+					verbose: { type: "count" },
 					meta: { type: "json" },
 					offset: { type: "number" },
 					url: { type: "url" },
@@ -193,8 +194,9 @@ describe("nextSteps", () => {
 							tag: ["x", "y"],
 							force: true,
 							cache: false,
-							// @ts-expect-error -- `false` on a noNegate flag has no spelling and is left out.
+							// `false` on a flag that is not negatable has no spelling and is left out.
 							quiet: false,
+							verbose: 2,
 							meta: { a: 1 },
 							offset: -5,
 							url: new URL("https://example.com/a?b=1"),
@@ -210,7 +212,7 @@ describe("nextSteps", () => {
 		expect(stderr).toBe(
 			[
 				"Next steps:",
-				`  app copy --message 'hello world' --count 3 --tag x --tag y --force --no-cache --meta '{"a":1}' --offset=-5 --url 'https://example.com/a?b=1' 'a b.txt' 'it'\\''s' c`,
+				`  app copy --message 'hello world' --count 3 --tag x --tag y --force --no-cache --verbose --verbose --meta '{"a":1}' --offset=-5 --url 'https://example.com/a?b=1' 'a b.txt' 'it'\\''s' c`,
 				"  app exec -- --watch src",
 				"  app seek -- -5",
 				"",
@@ -447,7 +449,7 @@ describe("nextSteps", () => {
 		]);
 	});
 
-	it("replays infinite numbers and negative zero and skips NaN, which argv cannot spell", async () => {
+	it("replays negative zero and skips non-finite numbers, which argv cannot spell", async () => {
 		const seen: unknown[] = [];
 		const wait = defineCommand("wait", (cmd) =>
 			cmd
@@ -461,7 +463,7 @@ describe("nextSteps", () => {
 			.command("suggest", (cmd) =>
 				cmd.use(nextSteps).action(async ({ ctx }) => {
 					const next = await ctx.nextSteps;
-					next.add(wait, { args: { at: -Infinity }, flags: { timeout: Infinity } });
+					next.add(wait, { args: { at: -Infinity } });
 					next.add(wait, { flags: { timeout: Number.NaN } });
 					next.add(wait, { args: { at: -0 }, flags: { timeout: -0 } });
 				}),
@@ -470,16 +472,13 @@ describe("nextSteps", () => {
 		const { stderr } = await captureExecute(app, ["suggest"]);
 		const lines = stderr.split("\n").slice(0, -1);
 		expect(lines).toEqual([
+			'nextSteps(): skipped "app wait": argument "at" value -Infinity has no argv spelling',
 			'nextSteps(): skipped "app wait": "--timeout" value NaN has no argv spelling',
 			"Next steps:",
-			"  app wait --timeout Infinity -- -Infinity",
 			"  app wait --timeout=-0 -- -0",
 		]);
-		await replay(app, lines.slice(2));
-		expect(seen).toEqual([
-			[{ at: -Infinity }, { timeout: Infinity }],
-			[{ at: -0 }, { timeout: -0 }],
-		]);
+		await replay(app, lines.slice(3));
+		expect(seen).toEqual([[{ at: -0 }, { timeout: -0 }]]);
 	});
 
 	it("skips json values JSON would change and replays the rest", async () => {

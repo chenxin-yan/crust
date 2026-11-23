@@ -47,7 +47,6 @@ const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const paginateFlag = {
 	paginate: {
 		type: "boolean",
-		noNegate: true,
 		description: "Preview the first request of --paginate",
 	},
 } as const;

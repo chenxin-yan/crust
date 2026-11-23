@@ -401,7 +401,6 @@ function flagDef(spec: OpenApiSpec, { target }: PlannedInput, plan: CommandPlan)
 	if (target.in === "paginate") {
 		return {
 			type: "boolean",
-			noNegate: true,
 			description: "Fetch every page, and return their results as one list",
 		};
 	}
@@ -426,7 +425,10 @@ function flagDef(spec: OpenApiSpec, { target }: PlannedInput, plan: CommandPlan)
 	}
 	if (type === "number")
 		return multiple ? { type, multiple: true, ...fields } : { type, ...fields };
-	return multiple ? { type, multiple: true, ...fields } : { type, ...fields };
+	// `--no-<name>` is how a user sends `false`.
+	return multiple
+		? { type, multiple: true, negatable: true, ...fields }
+		: { type, negatable: true, ...fields };
 }
 
 /**

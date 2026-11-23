@@ -203,8 +203,9 @@ function commandInvocation(node: CommandDocumentation): string {
 	return node.path.map(normalizeName).join(" ");
 }
 
-/** Displayed value type; schema-backed and richer Core types document as `string`. */
+/** Displayed value type; integers and counts document as `number`, other richer Core types as `string`. */
 function displayType(type: DocumentationArg["type"] | DocumentationFlag["type"]): BaseValueType {
+	if (type === "integer" || type === "count") return "number";
 	return type === "number" || type === "boolean" ? type : "string";
 }
 
@@ -482,7 +483,7 @@ function formatFieldDescription(field: DocumentationArg | DocumentationFlag): st
 			field.default,
 			field.choices,
 			(annotation) => `\`${annotation}\``,
-			flag?.env?.name,
+			flag?.env,
 		) || "-"
 	);
 }

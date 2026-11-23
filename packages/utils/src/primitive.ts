@@ -37,16 +37,29 @@ export function tryCoerceNumber(raw: string): number | undefined {
 	return Number.isNaN(num) ? undefined : num;
 }
 
+const BOOLEAN_WORDS: Readonly<Record<string, boolean>> = Object.assign(Object.create(null), {
+	true: true,
+	"1": true,
+	yes: true,
+	on: true,
+	false: false,
+	"0": false,
+	no: false,
+	off: false,
+});
+
 /**
- * Coerces Crust boolean strings using the existing strict truthy spellings.
+ * Reads boolean text: `true`, `1`, `yes`, `on` or `false`, `0`, `no`, `off`, in
+ * any letter case. Returns `undefined` for any other text; callers decide
+ * whether that means throw or fallback.
  *
  * @example
  * ```ts
- * coerceBooleanString("true"); // true
- * coerceBooleanString("1"); // true
- * coerceBooleanString("false"); // false
+ * tryCoerceBoolean("YES"); // true
+ * tryCoerceBoolean("off"); // false
+ * tryCoerceBoolean("maybe"); // undefined
  * ```
  */
-export function coerceBooleanString(raw: string): boolean {
-	return raw === "true" || raw === "1";
+export function tryCoerceBoolean(raw: string): boolean | undefined {
+	return BOOLEAN_WORDS[raw.toLowerCase()];
 }

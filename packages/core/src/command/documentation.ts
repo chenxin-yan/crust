@@ -1,5 +1,5 @@
 import { isListed } from "../sections.ts";
-import type { CommandSection, DeclaredDefault, VariadicMode } from "../types.ts";
+import type { CommandSection, DeclaredDefault, FlagEnv, VariadicMode } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
 function isNonFiniteNumber(value: DeclaredDefault): value is number {
@@ -15,17 +15,17 @@ export function formatDefault(value: DeclaredDefault): string {
 
 /**
  * Format a definition's description and optional env/default/choice annotations.
- * `env` is the variable *name* only; renderers never see its value.
+ * `env` is the variable *names* only, joined with commas; renderers never see their values.
  */
 export function formatDescription(
 	description: string | undefined,
 	defaultValue: DeclaredDefault,
 	choices: readonly string[] | undefined,
 	formatAnnotation: (annotation: string) => string = (annotation) => annotation,
-	env?: string,
+	env?: FlagEnv,
 ): string {
 	const parts = description ? [description] : [];
-	if (env !== undefined) parts.push(formatAnnotation(`[env: ${env}]`));
+	if (env !== undefined) parts.push(formatAnnotation(`[env: ${[env].flat().join(", ")}]`));
 	if (defaultValue !== undefined) {
 		parts.push(formatAnnotation(`[default: ${formatDefault(defaultValue)}]`));
 	}
@@ -85,18 +85,20 @@ export interface DocumentationFlag {
 	/** Canonical flag name (the key in the flags definition), e.g. `"output"`. */
 	readonly name: string;
 	/**
-	 * All accepted CLI spellings with dashes, ordered short, one-dash forms of
+	 * The CLI spellings to document, with dashes, ordered short, one-dash forms of
 	 * one-character names and aliases, canonical, aliases, then negations —
-	 * e.g. `["-v", "-V", "--verbose", "--V", "--no-verbose", "--no-V"]`.
+	 * e.g. `["-v", "-V", "--verbose", "--V", "--no-verbose", "--no-V"]`. Negations
+	 * are listed only for a flag with `default: true`; `negatable: true` alone
+	 * accepts them without listing them.
 	 */
 	readonly spellings: readonly string[];
 	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
 	readonly short?: string;
 	/** Additional long aliases without dashes, e.g. `["out"]` for `--out`. */
 	readonly aliases: readonly string[];
-	/** `true` for boolean flags that also accept `--no-<name>` (i.e. `noNegate` unset). */
+	/** `true` for boolean flags that also accept `--no-<name>`: `default: true` or `negatable: true`. */
 	readonly negatable: boolean;
-	/** Value type, e.g. `"boolean"`, `"string"`, `"number"`. */
+	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`. */
 	readonly type: FlagSnapshot["type"];
 	/** Human-readable description from the flag definition. */
 	readonly description?: string;
@@ -108,9 +110,9 @@ export interface DocumentationFlag {
 	readonly choices?: readonly string[];
 	/** Default value used when the flag is omitted, e.g. `false`. */
 	readonly default?: unknown;
-	/** Declared environment binding; never contains the variable's value. */
+	/** Declared environment variable names; never their values. */
 	readonly env?: FlagSnapshot["env"];
-	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
+	/** Delimiter that splits a repeatable flag's string argv values and environment text into occurrences. */
 	readonly delimiter?: string;
 }
 
@@ -183,7 +185,9 @@ function documentationFlags(flags: CommandSnapshot["flags"]): readonly Documenta
 				...(def.short ? [`-${def.short}`] : []),
 				...long.flatMap((spelling) => (spelling.length === 1 ? [`-${spelling}`] : [])),
 				...long.map((spelling) => `--${spelling}`),
-				...(def.negatable ? long.map((spelling) => `--no-${spelling}`) : []),
+				...(def.negatable && def.default === true
+					? long.map((spelling) => `--no-${spelling}`)
+					: []),
 			]),
 			short: def.short,
 			aliases: Object.freeze([...(def.aliases ?? [])]),

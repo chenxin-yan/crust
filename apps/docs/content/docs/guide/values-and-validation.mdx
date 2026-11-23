@@ -76,16 +76,16 @@ Put a schema from any [Standard Schema](https://standardschema.dev) library (Zod
 
 A schema definition cannot also set `parse`, `choices`, `default`, or `required`. Express those rules in the schema instead:
 
-| Rule           | Instead of               | Write in the schema (Zod shown)   |
-| -------------- | ------------------------ | --------------------------------- |
-| Text to number | `type: "number"`         | `z.coerce.number()`               |
-| Default        | `default: 3000`          | `.default(3000)`                  |
-| Optional       | leaving `required` unset | `.optional()`                     |
-| Required       | `required: true`         | a schema that rejects `undefined` |
-| Allowed values | `choices: ["a", "b"]`    | `z.enum(["a", "b"])`              |
-| Range or shape | `parse` plus a throw     | `.int().min(1).max(65535)`        |
+| Rule           | Instead of                                | Write in the schema (Zod shown)   |
+| -------------- | ----------------------------------------- | --------------------------------- |
+| Text to number | `type: "number"`                          | `z.coerce.number()`               |
+| Default        | `default: 3000`                           | `.default(3000)`                  |
+| Optional       | leaving `required` unset                  | `.optional()`                     |
+| Required       | `required: true`                          | a schema that rejects `undefined` |
+| Allowed values | `choices: ["a", "b"]`                     | `z.enum(["a", "b"])`              |
+| Range or shape | `type: "integer"`, `min: 1`, `max: 65535` | `.int().min(1).max(65535)`        |
 
-`z.coerce.number()` reads a blank value (`--port ""`) as `0`, where `type: "number"` rejects it. To reject blanks, write `z.string().trim().min(1).pipe(z.coerce.number())`.
+`z.coerce.number()` reads a blank value (`--port ""`) as `0`, and `0x10` or `Infinity` as numbers, where `type: "number"` rejects them. To reject blanks, write `z.string().trim().min(1).pipe(z.coerce.number())`.
 
 For the scalar port argument above, omission passes `undefined` to the schema. `.default(3000)` substitutes the default; replacing it with `.optional()` preserves `undefined` and infers `number | undefined`. Without either, this number schema rejects omission. Other schemas may handle `undefined` differently; an omitted variadic argument receives `[]`.
 

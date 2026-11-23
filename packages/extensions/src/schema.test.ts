@@ -46,7 +46,7 @@ function buildCli() {
 					})
 					.flags({
 						force: { type: "boolean", short: "f", description: "Skip checks", default: false },
-						tag: { type: "string", multiple: true, env: { name: "DEPLOY_TAG" } },
+						tag: { type: "string", multiple: true, env: "DEPLOY_TAG" },
 					})
 					.output(outputSchema(deployResult))
 					.action(() => ({ id: "dep_1" })),
@@ -187,7 +187,7 @@ describe("schema", () => {
 				"",
 				"Flags:",
 				"",
-				"- `-f`, `--force`, `--no-force` (boolean): Skip checks [default: false]",
+				"- `-f`, `--force` (boolean): Skip checks [default: false]",
 				"- `--tag` (string, multiple): [env: DEPLOY_TAG]",
 				"- `-h`, `--help` (boolean): Show help",
 				"",

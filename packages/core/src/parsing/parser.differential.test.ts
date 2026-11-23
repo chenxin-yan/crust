@@ -13,9 +13,10 @@ import { parseArgs } from "./parser.ts";
 // argv from a fixed seed, plus hand-picked edge cases, must produce the same
 // canonical values, positionals, and errors in Crust's wording.
 //
-// The oracle adds what parseArgs cannot express: `noNegate` (a negated
-// `noNegate` flag is an error at its argv position) and canonical names for
-// aliases. Intentional differences, kept out of the generated inputs:
+// The oracle adds what parseArgs cannot express: opt-in negation (`--no-x`
+// for a boolean that is not negatable is an error at its argv position), the
+// hint after "does not take a value", and canonical names for aliases.
+// Intentional differences, kept out of the generated inputs:
 // - Shorts are one code point (`-😀`); parseArgs splits clusters by UTF-16 unit.
 // - Bun's parseArgs names an unknown short `z` instead of `-z`; Crust always
 //   uses Node's form, which is what this oracle (run on Node) reports.
@@ -58,6 +59,10 @@ function crustOutcome(flags: FlagsDef, argv: string[]): Outcome {
 	}
 }
 
+function negatable(def: FlagDef): boolean {
+	return def.type === "boolean" && (def.default === true || def.negatable === true);
+}
+
 function oracleOutcome(flags: FlagsDef, argv: string[]): Outcome {
 	const spellings = spellingTable(flags);
 	const options: Record<string, ParseArgsOptionDescriptor> = {};
@@ -76,7 +81,7 @@ function oracleOutcome(flags: FlagsDef, argv: string[]): Outcome {
 		for (const token of nodeParseArgs({ ...config, args: argv, strict: false }).tokens) {
 			if (token.kind !== "option" || !token.rawName.startsWith("--no-")) continue;
 			const base = spellings.get(token.rawName.slice("--no-".length));
-			if (!base || base.short || base.def.type !== "boolean" || !base.def.noNegate) continue;
+			if (!base || base.short || base.def.type !== "boolean" || negatable(base.def)) continue;
 			nodeParseArgs({ ...config, args: argv.slice(0, token.index), strict: true });
 			return {
 				error: `Flag "--${base.canonical}" does not support negation ("${token.rawName}")`,
@@ -119,8 +124,11 @@ function oracleOutcome(flags: FlagsDef, argv: string[]): Outcome {
 		const [, spelling = "", problem] = invalid;
 		const flag = spellings.get(spelling)!.canonical;
 		if (problem === "does not take an argument") {
+			const hint = negatable(spellings.get(spelling)!.def)
+				? `write --${flag} or --no-${flag}`
+				: `write --${flag}, or leave it out`;
 			return {
-				error: `Flag "--${flag}" does not take a value`,
+				error: `Flag "--${flag}" does not take a value; ${hint}`,
 				details: { flag, reason: "unexpected-value" },
 			};
 		}
@@ -173,7 +181,7 @@ function generateFlags(random: () => number): FlagsDef {
 						type: "boolean",
 						...shared,
 						...multiple,
-						...(random() < 0.3 ? { noNegate: true as const } : {}),
+						...(random() < 0.3 ? {} : { negatable: true as const }),
 					}
 				: { type: "string", ...shared, ...multiple };
 	}
@@ -209,11 +217,11 @@ function generateArgv(random: () => number, flags: FlagsDef): string[] {
 
 describe("argv tokenizer vs node:util.parseArgs", () => {
 	const flags: FlagsDef = {
-		verbose: { type: "boolean", short: "v", aliases: ["loud"] },
+		verbose: { type: "boolean", short: "v", aliases: ["loud"], negatable: true },
 		name: { type: "string", short: "n", aliases: ["label"], multiple: true },
 		count: { type: "string", short: "c" },
-		quiet: { type: "boolean", noNegate: true, aliases: ["silent"] },
-		q: { type: "boolean", multiple: true },
+		quiet: { type: "boolean", aliases: ["silent"] },
+		q: { type: "boolean", multiple: true, negatable: true },
 	};
 
 	it.each([

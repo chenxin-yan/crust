@@ -8,7 +8,7 @@ import { parseArgs } from "./parser.ts";
 const flags = {
 	quiet: { type: "boolean", short: "q", aliases: ["silent"] },
 	config: { type: "string", short: "c", aliases: ["config-file"] },
-	verbose: { type: "boolean", aliases: ["chatty"], noNegate: true },
+	verbose: { type: "boolean", aliases: ["chatty"] },
 } satisfies FlagsDef;
 
 describe("flag spelling table", () => {

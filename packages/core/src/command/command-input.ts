@@ -2,7 +2,7 @@ import { type JsonValue, parseJsonValue } from "@crustjs/utils/json";
 
 import { CrustError } from "../errors.ts";
 import { coerceUrl } from "../parsing/coercers.ts";
-import type { RunInputPayload, RunInputValue, ValueType } from "../types.ts";
+import type { RunInputPayload, RunInputValue } from "../types.ts";
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
 /** A JSON Schema `type` name. */
@@ -29,18 +29,22 @@ export interface CommandInputSchema {
 	readonly required?: readonly string[];
 }
 
-function valueSchema(
-	type: ValueType | undefined,
-	choices: readonly string[] | undefined,
-): CommandInputPropertySchema {
-	if (choices) return { type: "string", enum: [...choices] };
-	switch (type) {
+function valueSchema(def: ArgSnapshot | FlagSnapshot): CommandInputPropertySchema {
+	if (def.choices) return { type: "string", enum: [...def.choices] };
+	switch (def.type) {
 		case "json":
 			return {};
 		case "url":
 			return { type: "string", format: "uri" };
+		case "count":
+			return { type: "integer", minimum: 0 };
 		case "number":
-			return { type: "number" };
+		case "integer":
+			return {
+				type: def.type,
+				...(def.min === undefined ? {} : { minimum: def.min }),
+				...(def.max === undefined ? {} : { maximum: def.max }),
+			};
 		case "boolean":
 			return { type: "boolean" };
 		case "string":
@@ -102,7 +106,7 @@ function propertySchema(
 	def: ArgSnapshot | FlagSnapshot,
 	list: boolean,
 ): CommandInputPropertySchema {
-	const value = valueSchema(def.type, def.choices);
+	const value = valueSchema(def);
 	const schema: CommandInputPropertySchema =
 		schemaPropertySchema(def, list) ?? (list ? { type: "array", items: value } : value);
 	let defaultValue: unknown;
@@ -121,14 +125,14 @@ function propertySchema(
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
 	}
-	const env = "env" in def ? def.env?.name : undefined;
+	const env = "env" in def && def.env ? [def.env].flat().map((variable) => `$${variable}`) : [];
 	const declared = "description" in schema ? schema.description : def.description;
 	const description =
-		env === undefined
+		env.length === 0
 			? declared
 			: typeof declared === "string"
-				? `${declared} (falls back to $${env})`
-				: `Falls back to $${env}`;
+				? `${declared} (falls back to ${env.join(", ")})`
+				: `Falls back to ${env.join(", ")}`;
 	return {
 		...schema,
 		...(description === undefined ? {} : { description }),

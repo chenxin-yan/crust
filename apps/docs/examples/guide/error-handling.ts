@@ -113,10 +113,16 @@ const traced = new Crust("app").extend(debug).action(async () => {
 //#region quiet
 import { defineCommand } from "@crustjs/core";
 
-// [!code highlight:4]
+// [!code highlight:10]
 const quiet = defineContext("quiet")
 	.flags({
-		quiet: { type: "boolean", short: "q", description: "Print less", env: { name: "APP_QUIET" } },
+		quiet: {
+			type: "boolean",
+			short: "q",
+			negatable: true,
+			description: "Print less",
+			env: "APP_QUIET",
+		},
 	})
 	.setup(({ flags }) => flags.quiet === true);
 

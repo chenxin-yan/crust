@@ -78,15 +78,19 @@ export const app = new Crust("create-crust", {
 		},
 		install: {
 			type: "boolean",
-			description: "Install dependencies after scaffolding",
+			negatable: true,
+			description: "Install dependencies after scaffolding (--no-install to skip)",
 		},
 		git: {
 			type: "boolean",
-			description: "Initialize a git repository after scaffolding",
+			negatable: true,
+			description: "Initialize a git repository after scaffolding (--no-git to skip)",
 		},
 		overwrite: {
 			type: "boolean",
-			description: "Overwrite the destination directory if it already exists",
+			negatable: true,
+			description:
+				"Overwrite the destination directory if it already exists (--no-overwrite to abort)",
 		},
 	})
 	.args({

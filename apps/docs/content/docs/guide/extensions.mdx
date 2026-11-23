@@ -45,7 +45,7 @@ nothing changed
 `.handle(flag, run)` takes over the invocation when the user passes that flag:
 
 - `run` replaces `preRun`, validation, and the action; `run()` reports a `handled` outcome.
-- A negated boolean such as `--no-preview` doesn't trigger it.
+- A `false` value, such as `--no-preview` on a `negatable` flag, doesn't trigger it.
 - The flag must come from the Extension's own `.flags()`, so a typo is a compile error.
 - Invalid argv or environment values don't stop a handler. They read as `undefined` in `ctx.flags` and `ctx.args`, not as their default, and an invalid value of a handled flag doesn't trigger its handler.
 - When several handled flags are passed, the one given first on the command line wins, whatever the `.extend()` order. Pass `{ eager: true }` to rank a flag before every non-eager handler, as `help()` and `version()` do: `deploy --preview --help` shows help.

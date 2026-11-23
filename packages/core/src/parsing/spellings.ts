@@ -81,9 +81,14 @@ export interface FlagSpelling {
 	readonly negatable: boolean;
 }
 
-/** Whether a flag accepts generated `--no-` spellings. */
+/** Whether a flag accepts generated `--no-` spellings: a boolean with `default: true` or `negatable: true`. */
 export function isFlagNegatable(def: FlagDef): boolean {
-	return def.type === "boolean" && def.noNegate !== true;
+	return def.type === "boolean" && (def.default === true || def.negatable === true);
+}
+
+/** Whether a flag reads a value; a boolean or a count is complete by its spelling. */
+export function flagTakesValue(def: FlagDef): boolean {
+	return def.type !== "boolean" && def.type !== "count";
 }
 
 /**
@@ -143,9 +148,7 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
 		...def,
 		...("aliases" in def && def.aliases ? { aliases: Object.freeze([...def.aliases]) } : {}),
 		...(def.choices ? { choices: Object.freeze([...def.choices]) } : {}),
-		...("env" in def && def.env
-			? { env: Object.freeze({ name: def.env.name, delimiter: def.env.delimiter }) }
-			: {}),
+		...("env" in def && typeof def.env === "object" ? { env: Object.freeze([...def.env]) } : {}),
 		...("multiple" in def && def.multiple && Array.isArray(def.default)
 			? { default: Object.freeze([...def.default]) }
 			: {}),
@@ -180,24 +183,19 @@ function checkFlagStrings(name: string | undefined, def: FlagDef): void {
 			reason: "invalid-short",
 		});
 	}
-	if (def.env?.name === "") {
+	if ([def.env ?? []].flat().some((variable) => variable === "")) {
 		throw new CrustError("DEFINITION", `${label} env variable name must be non-empty`, {
 			subject: "flag",
 			...named,
 			reason: "empty-env",
 		});
 	}
-	for (const [field, delimiter] of [
-		["delimiter", def.delimiter],
-		["env.delimiter", def.env?.delimiter],
-	] as const) {
-		if (delimiter === "") {
-			throw new CrustError("DEFINITION", `${label} ${field} must be non-empty`, {
-				subject: "flag",
-				...named,
-				reason: "empty-delimiter",
-			});
-		}
+	if (def.delimiter === "") {
+		throw new CrustError("DEFINITION", `${label} delimiter must be non-empty`, {
+			subject: "flag",
+			...named,
+			reason: "empty-delimiter",
+		});
 	}
 }
 

@@ -81,17 +81,17 @@ The reasons about names, spellings, collisions, and sections come from the [defi
 
 `reason` is typed as Core's known values (`ParseErrorReason`) but accepts any string, since other packages add their own.
 
-| `reason`           | Sets       | Raised when                                                                       |
-| ------------------ | ---------- | --------------------------------------------------------------------------------- |
-| `unknown-flag`     | `flag`     | argv or `run()` input names an undeclared flag (`Unknown flag "--nope"`)          |
-| `missing-value`    | `flag`     | A value-taking flag has no value (`Missing value for flag "--count"`)             |
-| `unexpected-value` | `flag`     | A boolean flag is given a value with `=` (`Flag "--force" does not take a value`) |
-| `unknown-argument` | `argument` | `run()` input names an undeclared argument                                        |
-| `positional-gap`   | `argument` | `run()` input supplies an argument after an omitted one                           |
+| `reason`           | Sets       | Raised when                                                                                                                |
+| ------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `unknown-flag`     | `flag`     | argv or `run()` input names an undeclared flag (`Unknown flag "--nope"`)                                                   |
+| `missing-value`    | `flag`     | A value-taking flag has no value (`Missing value for flag "--count"`)                                                      |
+| `unexpected-value` | `flag`     | A boolean or count flag is given a value with `=` (`Flag "--force" does not take a value; write --force, or leave it out`) |
+| `unknown-argument` | `argument` | `run()` input names an undeclared argument                                                                                 |
+| `positional-gap`   | `argument` | `run()` input supplies an argument after an omitted one                                                                    |
 
 A flag typed before a subcommand name that only that subcommand knows is `unknown-flag`, with a hint in the message: `Unknown flag "--force"; flags of subcommand "rm" go after its name`.
 
-Invalid values (type conversion, `choices`, `parse`) and negating a `noNegate` boolean (`--no-quiet`) are `PARSE` errors without details.
+Invalid values (type conversion, `min`/`max`, `choices`, `parse`) and negating a flag that is not negatable (`--no-quiet`) are `PARSE` errors without details.
 
 ### `ValidationErrorDetails`
 
@@ -165,7 +165,7 @@ When `onError` runs:
 - `postRun` and disposal failures: after cleanup, when Context pulls reject.
 - Routing and argv syntax failures: with empty `args` and `flags` and no Contexts. `command` is the routed command when routing succeeded, and the root otherwise.
 
-Argv syntax failures are unknown flags, missing option values, and negating a `noNegate` flag. An invalid argv or environment value (conversion, `choices`, `parse`) is also `PARSE`, but surfaces during validation: after flag handlers and `preRun`, with live Contexts, so a `--help` handler still runs first. See [error handling](/docs/guide/error-handling) for worked examples.
+Argv syntax failures are unknown flags, missing option values, a value given to a boolean or count flag, and negating a flag that is not negatable. An invalid argv or environment value (conversion, `min`/`max`, `choices`, `parse`) is also `PARSE`, but surfaces during validation: after flag handlers and `preRun`, with live Contexts, so a `--help` handler still runs first. See [error handling](/docs/guide/error-handling) for worked examples.
 
 ## Cancellation
 

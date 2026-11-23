@@ -253,9 +253,25 @@ function _optionalDefinitionsStillChecked(required: { a: { type: "boolean" }; b:
 	new Crust("cli").flags(required);
 }
 
+function _countAndInteger() {
+	new Crust("cli")
+		.args({ name: "replicas", type: "integer", required: true })
+		.flags({
+			verbose: { type: "count", short: "v" },
+			port: { type: "integer", min: 1, max: 65535, default: 80 },
+			trunc: { type: "boolean", default: true },
+		})
+		.action(({ args, flags }) => {
+			type _replicas = Expect<Equal<typeof args.replicas, number>>;
+			type _verbose = Expect<Equal<typeof flags.verbose, number>>;
+			type _port = Expect<Equal<typeof flags.port, number>>;
+			type _trunc = Expect<Equal<typeof flags.trunc, boolean>>;
+		});
+}
+
 function _contexts() {
 	const auth = defineContext("auth")
-		.flags({ token: { type: "string", env: { name: "API_TOKEN" } } })
+		.flags({ token: { type: "string", env: "API_TOKEN" } })
 		.flags({ verbose: { type: "boolean", short: "v" } })
 		.setup(({ flags }) => {
 			type _token = Expect<Equal<typeof flags.token, string | undefined>>;

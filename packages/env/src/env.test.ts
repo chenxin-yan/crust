@@ -56,6 +56,19 @@ describe("defineEnv", () => {
 		});
 	});
 
+	it("reads boolean words in any case, and an empty boolean as unset", async () => {
+		const flags = { CI: { type: "boolean" }, DEBUG: { type: "boolean", required: true } } as const;
+		expect(await read(flags, { source: { CI: "Yes", DEBUG: "off" } })).toEqual({
+			CI: true,
+			DEBUG: false,
+		});
+		const error = await failure(flags, { source: { CI: "maybe", DEBUG: "" } });
+		expect(error.details.issues).toEqual([
+			{ name: "CI", expected: "boolean", received: "invalid" },
+			{ name: "DEBUG", expected: "boolean", received: "missing" },
+		]);
+	});
+
 	it("defaults the source to process.env, read at first access", async () => {
 		const env = defineEnv("env", { CRUST_ENV_TEST_PORT: { type: "number" } });
 		const app = new Crust("cli").provide(env()).action(async ({ ctx }) => ctx.env);

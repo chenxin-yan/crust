@@ -150,7 +150,7 @@ const serve = new Crust("serve").flags({
 - Long names, aliases, and `short` spellings must not collide with other flags visible on the command.
 - Names, aliases, and `short` are written without dashes: each must be non-empty, contain no whitespace, and not start with `-`. Names and aliases must also not contain `=`, because `--name=value` splits there. A spelling that breaks this throws a `DEFINITION` error, with `reason: "empty-spelling"` for an empty spelling and `"invalid-spelling"` for the rest.
 - One-character names and aliases accept one or two dashes: `aliases: ["P"]` accepts `-P` and `--P`. Generated docs list both.
-- Boolean flags accept `--no-<spelling>` for the name and every long alias. `noNegate: true` rejects negation with a `PARSE` error and hides it from generated docs. Names and aliases beginning with `no-` are reserved.
+- A boolean flag with `default: true` or `negatable: true` accepts `--no-<spelling>` for the name and every long alias; any other flag rejects it with a `PARSE` error. Generated docs list the negations only for `default: true`. Names and aliases beginning with `no-` are reserved.
 - Schema-backed flags still set `type: "string" | "boolean"` to declare whether a value token follows; the schema receives the raw value, including `undefined` when omitted. With `type: "json"`, the token is parsed as JSON first and the schema receives the parsed value.
 - Flags declared here do not reach subcommands. To share flags with descendants, give them to a [Context](/docs/guide/contexts) and `.provide()` it.
 

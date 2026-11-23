@@ -129,26 +129,24 @@ describe("buildCommandDocumentation", () => {
 		expect(model.usage).toBe("app <command>");
 	});
 
-	it("resolves every flag spelling and negation from the parser spelling table", async () => {
+	it("lists negations only for a flag with default: true", async () => {
 		const model = await docs(
 			new Crust("app")
 				.flags({
-					color: {
-						type: "boolean",
-						short: "c",
-						aliases: ["colour"],
-						required: true,
-					},
-					help: { type: "boolean", noNegate: true },
+					color: { type: "boolean", short: "c", aliases: ["colour"], default: true },
+					help: { type: "boolean" },
+					trace: { type: "boolean", negatable: true },
 				})
 				.action(() => {}),
 		);
 		expect(model.flags[0]).toMatchObject({
 			name: "color",
-			required: true,
+			negatable: true,
 			spellings: ["-c", "--color", "--colour", "--no-color", "--no-colour"],
 		});
-		expect(model.flags[1]?.spellings).toEqual(["--help"]);
+		expect(model.flags[1]).toMatchObject({ negatable: false, spellings: ["--help"] });
+		// Accepted, but help does not offer it.
+		expect(model.flags[2]).toMatchObject({ negatable: true, spellings: ["--trace"] });
 	});
 
 	it("lists the single-dash form of one-character long spellings after the short", async () => {
@@ -156,7 +154,7 @@ describe("buildCommandDocumentation", () => {
 			new Crust("app")
 				.flags({
 					port: { type: "number", short: "p", aliases: ["P", "listen"] },
-					q: { type: "boolean", aliases: ["Q"] },
+					q: { type: "boolean", aliases: ["Q"], default: true },
 				})
 				.action(() => {}),
 		);

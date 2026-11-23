@@ -609,7 +609,7 @@ describe("renderSkill", () => {
 					alpha: makeCommand({ meta: { name: "alpha" }, run() {} }),
 					beta: makeCommand({ meta: { name: "beta" }, run() {} }),
 				},
-				flags: { zulu: { type: "boolean", noNegate: true }, able: { type: "string" } },
+				flags: { zulu: { type: "boolean" }, able: { type: "string" } },
 				run() {},
 			});
 
@@ -636,7 +636,7 @@ describe("renderSkill", () => {
 						type: "string",
 						description: "Output format",
 						choices: ["json", "text"],
-						env: { name: "SERVE_FORMAT" },
+						env: "SERVE_FORMAT",
 					},
 				},
 				run() {},

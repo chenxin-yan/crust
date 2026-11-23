@@ -20,7 +20,7 @@ describe("walkCommand", () => {
 
 		expect(byName.verbose).toEqual({
 			name: "verbose",
-			spellings: ["-v", "--verbose", "--no-verbose"],
+			spellings: ["-v", "--verbose"],
 			type: "boolean",
 			description: "Verbose output",
 			takesValue: false,
@@ -38,6 +38,27 @@ describe("walkCommand", () => {
 			type: "string",
 			takesValue: true,
 			multiple: true,
+		});
+	});
+
+	it("completes a count as a repeatable switch and an integer as a number", async () => {
+		const app = new Crust("mycli").flags({
+			verbose: { type: "count", short: "v" },
+			port: { type: "integer" },
+		});
+		const [verbose, port] = (await walk(app)).flags;
+		expect(verbose).toEqual({
+			name: "verbose",
+			spellings: ["-v", "--verbose"],
+			type: "boolean",
+			takesValue: false,
+			multiple: true,
+		});
+		expect(port).toEqual({
+			name: "port",
+			spellings: ["--port"],
+			type: "number",
+			takesValue: true,
 		});
 	});
 

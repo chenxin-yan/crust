@@ -551,7 +551,7 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 			c
 				.args({ name: "id", type: "string", required: true })
 				.flags({
-					region: { type: "string", env: { name: "REGION" }, default: "us" },
+					region: { type: "string", env: "REGION", default: "us" },
 					tag: { type: "string", multiple: true, parse: (raw) => raw.toUpperCase() },
 					force: { type: "boolean" },
 				})

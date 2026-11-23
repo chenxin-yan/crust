@@ -41,7 +41,9 @@ const SETTING_PROPERTIES = {
 	multiple: true,
 	delimiter: true,
 	choices: true,
-	noNegate: true,
+	negatable: true,
+	min: true,
+	max: true,
 	parse: true,
 	default: true,
 	required: true,
@@ -233,20 +235,24 @@ function ownSetting(name: string, key: string, def: ConfigFlagDef): ConfigFlagDe
 	return (flag === undefined ? owned : { ...owned, flag }) as ConfigFlagDef;
 }
 
-/** The store field of each setting; a switch that cannot be negated is not negated in a file either. */
+/** The store field of each setting; a file value keeps within a number's `min` and `max`, as argv does. */
 function storeFields(settings: readonly (readonly [string, ConfigFlagDef])[]): FieldsDef {
-	const onlyTrue = (value: unknown) => {
-		if ((Array.isArray(value) ? value : [value]).some((item) => item !== true)) {
-			throw new Error("Expected true");
-		}
-	};
+	const inRange =
+		({ min, max }: ConfigFlagDef) =>
+		(value: unknown) => {
+			// SAFETY: the store checked the type first; only number settings have a range.
+			for (const item of (Array.isArray(value) ? value : [value]) as number[]) {
+				if (min !== undefined && item < min) throw new Error(`Expected at least ${min}`);
+				if (max !== undefined && item > max) throw new Error(`Expected at most ${max}`);
+			}
+		};
 	const fields = settings.map(([key, def]) => [
 		key,
 		{
 			type: def.parse === undefined ? def.type : "string",
 			...(def.multiple ? { array: true } : {}),
 			...(def.choices === undefined ? {} : { choices: def.choices }),
-			...(def.type === "boolean" && def.noNegate ? { validate: onlyTrue } : {}),
+			...(def.min === undefined && def.max === undefined ? {} : { validate: inRange(def) }),
 		},
 	]);
 	// SAFETY: each field is a string, number or boolean store field built from its setting.
@@ -324,7 +330,7 @@ function settled(key: string, def: ConfigFlagDef, value: unknown, where: string)
 function missingMessage(name: string, key: string, def: ConfigFlagDef, files: readonly string[]) {
 	const ways = [
 		...(def.flag === false ? [] : [`pass --${key}`]),
-		...(def.env === undefined ? [] : [`set ${def.env.name}`]),
+		...(def.env === undefined ? [] : [`set ${[def.env].flat().join(" or ")}`]),
 	];
 	const inFiles = `set "${key}" in ${files.join(" or ")}`;
 	const all = ways.length === 0 ? inFiles : `${ways.join(", ")}, or ${inFiles}`;
@@ -534,7 +540,7 @@ function withSettings(
 					body: [
 						`Each setting is the first of: its flag, its environment variable, ${where.join(", ")}, its default.`,
 						...settings.map(([key, def]) =>
-							`${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env?.name)}`.trimEnd(),
+							`${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}`.trimEnd(),
 						),
 					].join("\n"),
 				},
@@ -557,11 +563,13 @@ function withSettings(
 /** What a user writes in a file for one setting: the text type for `parse`, never the parsed value. */
 function settingSchema(def: ConfigFlagDef): Record<string, unknown> {
 	const item: Record<string, unknown> =
-		def.type === "boolean" && def.noNegate
-			? { const: true }
-			: def.choices === undefined
-				? { type: def.parse === undefined ? def.type : "string" }
-				: { enum: [...def.choices] };
+		def.choices === undefined
+			? {
+					type: def.parse === undefined ? def.type : "string",
+					...(def.min === undefined ? {} : { minimum: def.min }),
+					...(def.max === undefined ? {} : { maximum: def.max }),
+				}
+			: { enum: [...def.choices] };
 	return {
 		...(def.multiple ? { type: "array", items: item } : item),
 		...(def.description === undefined ? {} : { description: def.description }),

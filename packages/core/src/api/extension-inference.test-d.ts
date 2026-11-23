@@ -43,16 +43,17 @@ type _optionalScope = Expect<
 type Strict = {
 	type: "boolean";
 	default: true;
-	noNegate: true;
-	env: { name: "COLOR" };
+	env: "COLOR";
 };
-// Argv booleans cannot be invalid; only an env `false` under `noNegate` leaves one unset.
+// Argv booleans cannot be invalid; only `env` text that is no boolean word leaves one unset.
 type _defaultedBoolean = Expect<
 	Equal<InferExtensionFlags<{ quiet: { type: "boolean"; default: false } }>["quiet"], boolean>
 >;
 type _strictBoolean = Expect<
 	Equal<InferExtensionFlags<{ color: Strict }>["color"], boolean | undefined>
 >;
+// A count is never invalid and never absent.
+type _count = Expect<Equal<InferExtensionFlags<{ verbose: { type: "count" } }>["verbose"], number>>;
 
 type Toggle = { type: "boolean"; schema: StandardSchema<unknown, number> };
 type _scalar = Expect<

@@ -38,12 +38,15 @@ function ndArgument(text: string): string {
 function flagMacro(spelling: string): string {
 	return spelling.startsWith("--") ? `Fl Fl ${spelling.slice(2)}` : `Fl ${spelling.slice(1)}`;
 }
+function takesNoValue(flag: DocumentationFlag): boolean {
+	return flag.type === "boolean" || flag.type === "count";
+}
 function flagMacros(flag: DocumentationFlag): string {
-	const value = flag.type === "boolean" ? "" : ` Ar ${flag.type}`;
+	const value = takesNoValue(flag) ? "" : ` Ar ${flag.type}`;
 	return flag.spellings.map(flagMacro).join(" , ") + value;
 }
 function flagLabel(flag: DocumentationFlag): string {
-	return flag.spellings.join(", ") + (flag.type === "boolean" ? "" : ` ${flag.type}`);
+	return flag.spellings.join(", ") + (takesNoValue(flag) ? "" : ` ${flag.type}`);
 }
 function commandLabel(command: CommandDocumentation): string {
 	return command.aliases.length === 0
@@ -121,7 +124,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				flag.default,
 				flag.choices,
 				undefined,
-				flag.env?.name,
+				flag.env,
 			);
 			if (body) lines.push(...bodyLines(body));
 		}

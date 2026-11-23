@@ -8,9 +8,9 @@ import type { NextStep } from "./next-steps.ts";
 /** Argv parses a `json` value with `JSON.parse`, so even a string value needs its JSON encoding. */
 function argvValue(value: RunInputValue, type: ValueType | undefined, label: string): string {
 	if (typeof value === "string" && type !== "json") return value;
-	// Argv reads numbers with `Number()`: it accepts `Infinity` (JSON would print `null`) but rejects `NaN`.
+	// Argv reads only finite decimals.
 	if (typeof value === "number" && type !== "json") {
-		if (Number.isNaN(value)) throw new Error(`${label} value NaN has no argv spelling`);
+		if (!Number.isFinite(value)) throw new Error(`${label} value ${value} has no argv spelling`);
 		return Object.is(value, -0) ? "-0" : String(value);
 	}
 	if (value instanceof URL) return value.href;
@@ -51,9 +51,15 @@ function stepArgv(
 		for (const item of flag.multiple && Array.isArray(value) ? value : [value]) {
 			if (flag.type === "boolean") {
 				if (typeof item !== "boolean") throw new Error(`"--${name}" value is not a boolean`);
-				// `false` on a `noNegate` flag has no spelling: it is the flag left unset.
+				// `false` on a flag that is not negatable has no spelling: it is the flag left unset.
 				if (item) options.push(`--${name}`);
 				else if (flag.negatable) options.push(`--no-${name}`);
+				continue;
+			}
+			if (flag.type === "count") {
+				if (!Number.isSafeInteger(item) || Number(item) < 0)
+					throw new Error(`"--${name}" value is not a count`);
+				options.push(...Array.from({ length: Number(item) }, () => `--${name}`));
 				continue;
 			}
 			const text = argvValue(item, flag.type, `"--${name}"`);

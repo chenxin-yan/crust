@@ -20,7 +20,7 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 	.add(
 		defineCommand("whoami", { description: "Show the configured token" }, (command) =>
 			command
-				.flags({ token: { type: "string", env: { name: "DEMO_TOKEN" }, required: true } })
+				.flags({ token: { type: "string", env: "DEMO_TOKEN", required: true } })
 				.action(({ flags }) => ({ token: flags.token })),
 		),
 	)

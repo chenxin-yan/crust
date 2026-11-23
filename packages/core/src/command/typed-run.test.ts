@@ -157,8 +157,8 @@ describe("typed programmatic invocation", () => {
 
 		const app = new Crust("cli")
 			.flags({
-				token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, required: true },
-				port: { type: "number", env: { name: "CRUST_TEST_PORT" }, default: 1 },
+				token: { type: "string", env: "CRUST_TEST_TOKEN", required: true },
+				port: { type: "number", env: "CRUST_TEST_PORT", default: 1 },
 			})
 			.action(({ flags }) => flags);
 
@@ -186,7 +186,7 @@ describe("typed programmatic invocation", () => {
 		it("let execute() read process.env", async () => {
 			vi.stubEnv("CRUST_TEST_TOKEN", "from-shell");
 			const echo = new Crust("cli")
-				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, required: true } })
+				.flags({ token: { type: "string", env: "CRUST_TEST_TOKEN", required: true } })
 				.action(({ flags, stdout }) => stdout(flags.token));
 			const output: string[] = [];
 			const io = { stdout: lineSink(output), stderr: lineSink(output) };

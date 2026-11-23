@@ -108,8 +108,11 @@ export function renderHelpText(
 			model.flags.map(
 				(flag) =>
 					[
-						cyan(flag.spellings.join(", ") + (flag.type === "boolean" ? "" : ` <${flag.type}>`)),
-						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name),
+						cyan(
+							flag.spellings.join(", ") +
+								(flag.type === "boolean" || flag.type === "count" ? "" : ` <${flag.type}>`),
+						),
+						formatDescription(flag.description, flag.default, flag.choices, dim, flag.env),
 					] as const,
 			),
 		),

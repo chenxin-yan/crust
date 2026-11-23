@@ -14,7 +14,7 @@ $ my-cli --no-color
 FORCE_COLOR=unset NO_COLOR=1
 ```
 
-`noColor()` adds a recursive boolean `color` flag with no default. Normal boolean negation provides both `--color` and `--no-color`.
+`noColor()` adds a recursive boolean `color` flag with no default, declared `negatable`, so it accepts both `--color` and `--no-color`. Help lists `--color`, and its description names `--no-color`.
 
 ## Behavior
 

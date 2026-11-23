@@ -23,7 +23,7 @@ export async function argvErrors(): Promise<string[]> {
 				.flags({
 					verbose: { type: "boolean", short: "v" },
 					count: { type: "number", short: "c" },
-					quiet: { type: "boolean", noNegate: true },
+					quiet: { type: "boolean" },
 				})
 				.action(() => {})
 				.execute({ argv, io: { stdout: { write() {} }, stderr: lineSink(lines) } });

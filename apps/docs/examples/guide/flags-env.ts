@@ -2,14 +2,13 @@ import { Crust } from "@crustjs/core";
 
 const publish = new Crust("publish")
 	.flags({
-		token: { type: "string", env: { name: "PUBLISH_TOKEN" }, required: true },
-		registry: { type: "string", env: { name: "PUBLISH_REGISTRY" }, default: "npm" },
-		tag: {
+		token: { type: "string", env: "PUBLISH_TOKEN", required: true },
+		registry: {
 			type: "string",
-			multiple: true,
-			delimiter: ",",
-			env: { name: "PUBLISH_TAGS", delimiter: ":" },
+			env: ["PUBLISH_REGISTRY", "npm_config_registry"],
+			default: "npm",
 		},
+		tag: { type: "string", multiple: true, delimiter: ",", env: "PUBLISH_TAGS" },
 	})
 	.action(({ flags, stdout }) => {
 		stdout(`publishing to ${flags.registry} tags=${flags.tag?.join(",") ?? "undefined"}`);

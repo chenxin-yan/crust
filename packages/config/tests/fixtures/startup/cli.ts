@@ -6,7 +6,7 @@ const config = defineConfig({
 	name: "acme",
 	global: true,
 	project: true,
-}).flags({ org: { type: "string", env: { name: "ACME_ORG" } } });
+}).flags({ org: { type: "string", env: "ACME_ORG" } });
 
 const { org } = config.settings;
 

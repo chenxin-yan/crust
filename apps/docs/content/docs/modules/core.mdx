@@ -113,18 +113,21 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 
 It throws, naming `path`, when an arg and a flag share a name.
 
-| Definition                         | Schema                                                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `type: "string"` / `"path"`        | `{ type: "string" }`                                                                                                |
-| `type: "number"` / `"boolean"`     | `{ type: "number" }` / `{ type: "boolean" }`                                                                        |
-| `type: "url"`                      | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                      |
-| `type: "json"`                     | `{}` (any JSON)                                                                                                     |
-| `choices`                          | `{ type: "string", enum }`                                                                                          |
-| `variadic` (any mode) / `multiple` | `{ type: "array", items }`                                                                                          |
-| `required` without `default`       | listed in `required`, unless the flag has an `env` binding                                                          |
-| flag `env`                         | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`                                      |
-| Standard Schema                    | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args) |
-| custom `parse`                     | The declared token type; the command validates and transforms when it runs                                          |
+| Definition                         | Schema                                                                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`        | `{ type: "string" }`                                                                                                         |
+| `type: "number"` / `"boolean"`     | `{ type: "number" }` / `{ type: "boolean" }`                                                                                 |
+| `type: "integer"`                  | `{ type: "integer" }`                                                                                                        |
+| `min` / `max`                      | `minimum` / `maximum`                                                                                                        |
+| `type: "count"`                    | `{ type: "integer", minimum: 0 }`                                                                                            |
+| `type: "url"`                      | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                               |
+| `type: "json"`                     | `{}` (any JSON)                                                                                                              |
+| `choices`                          | `{ type: "string", enum }`                                                                                                   |
+| `variadic` (any mode) / `multiple` | `{ type: "array", items }`                                                                                                   |
+| `required` without `default`       | listed in `required`, unless the flag has an `env` binding                                                                   |
+| flag `env`                         | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`; a list names every variable, comma-separated |
+| Standard Schema                    | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args)          |
+| custom `parse`                     | The declared token type; the command validates and transforms when it runs                                                   |
 
 Standard Schema definitions:
 
