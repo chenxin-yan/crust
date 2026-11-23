@@ -1150,6 +1150,8 @@ describe("api preview <path>", () => {
 			"patch",
 			"-F",
 			"active=true",
+			"-F",
+			"active=false",
 			"--body",
 			'{"name":"ada"}',
 			...["Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key"].flatMap((name) => [
@@ -1164,7 +1166,7 @@ describe("api preview <path>", () => {
 		expect(stdout).not.toContain(sentinel);
 		expect(JSON.parse(stdout)).toEqual({
 			method: "PATCH",
-			url: "https://api.example.com/v1/users?page=2&active=true",
+			url: "https://api.example.com/v1/users?page=2&active=true&active=false",
 			headers: {
 				authorization: "<redacted>",
 				"content-type": "application/json",

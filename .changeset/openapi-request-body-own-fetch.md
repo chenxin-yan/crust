@@ -10,4 +10,4 @@ Generated commands take the whole request body as `--request-body`, apps can sen
 - `api`: a `-F` key given twice in a JSON field body is a `PARSE` error pointing to `--body`, instead of sending only the last value; in the query each value is still sent, such as `?tag=a&tag=b`. `--list` or `--spec` with a path or a request flag is a `PARSE` error instead of ignoring them.
 - A parameter or body field whose flag would be a built-in one (`--request-body`, `--paginate`) fails `crust build` with a fix that names `flagName`.
 
-**Behavior change:** the built-in JSON body flag of generated commands is `--request-body` instead of `--body`, so a body field named `body`, as in GitHub's API, gets its own `--body` flag instead of failing the build. Rename `--body` to `--request-body` in scripts that call generated commands, and `body` to `"request-body"` in their typed `run()` flags and MCP tool arguments. `api <path> --body` is unchanged.
+Because the whole body is `--request-body`, a body field named `body`, as in GitHub's API, gets its own `--body` flag instead of failing the build. `api <path> --body` is unchanged.
