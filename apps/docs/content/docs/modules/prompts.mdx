@@ -34,7 +34,7 @@ The ambient `withTerminalIO()` scope is shared with `@crustjs/progress`.
 
 All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened, and a `default` or `initial` outside literal choices is a compile error on that option, such as `Type '"bogus"' is not assignable to type '"eslint" | "prettier"'`. A plain-string choice is its own value, so `Choice<T>` only accepts plain strings that are themselves a `T`; non-string values such as numbers must use `{ label, value }` objects.
 
-Keys typed ahead of a prompt are kept for it: a pasted `my-app⏎n⏎` answers two prompts in a row on the same input.
+Keys typed ahead of a prompt are kept for it: a pasted `my-app⏎n⏎` answers two prompts in a row on the same input. A Ctrl+C or Ctrl+D among them cancels the prompt it was typed for.
 
 ### `input(options, io?)`
 

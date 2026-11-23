@@ -337,11 +337,36 @@ describe("runPrompt", () => {
 		harness.type("\x03x");
 		await expect(first).rejects.toMatchObject({ name: "AbortError" });
 
-		const second = runPrompt(submitOnKey, harness.io);
+		const second = runPrompt({ ...submitOnKey, handleKey: (key) => submit(key.name) }, harness.io);
 		await tick();
-		expect(harness.screen()).toContain("prompt");
 		harness.keys("return");
-		expect(await second).toBe("done");
+		expect(await second).toBe("return");
+	});
+
+	it("hands a Ctrl+D typed after a submit in the same chunk to the next prompt", async () => {
+		const harness = createPromptIO();
+		const line: PromptConfig<string, string> = {
+			render: (value) => `? ${value}`,
+			handleKey: (key, value) => (key.name === "return" ? submit(value) : value + key.char),
+			initialState: "",
+		};
+
+		const first = runPrompt(line, harness.io);
+		harness.type("one\r\x04");
+		expect(await first).toBe("one");
+		await expect(runPrompt(line, harness.io)).rejects.toMatchObject({ name: "AbortError" });
+	});
+
+	it("cancels at once on Ctrl+D while a key handler is still running", async () => {
+		const harness = createPromptIO();
+		const pending = Promise.withResolvers<undefined>();
+		const promise = runPrompt({ ...submitOnKey, handleKey: () => pending.promise }, harness.io);
+		harness.type("ab");
+		await tick();
+		harness.keys("ctrl+d");
+
+		await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+		pending.resolve(undefined);
 	});
 
 	it("counts the frame's rows at the new width after a resize", async () => {
@@ -361,6 +386,17 @@ describe("runPrompt", () => {
 
 		harness.keys("return");
 		await promise;
+	});
+
+	it("finishes on an output with on() but no removeListener(), and can run again", async () => {
+		const harness = createPromptIO();
+		const output = { isTTY: true, columns: 80, write: () => true, on: () => output };
+		for (let run = 0; run < 2; run++) {
+			const promise = runPrompt(submitOnKey, { input: harness.io.input, output });
+			harness.keys("return");
+			expect(await promise).toBe("done");
+			expect(harness.io.input.isRaw).toBe(false);
+		}
 	});
 
 	it.each(["ctrl+c", "ctrl+d"] as const)("draws the cancelled state on %s", async (key) => {

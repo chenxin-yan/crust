@@ -317,8 +317,9 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 
 		// The terminal rewraps the frame at the new width, so the next erase must count rows at it.
 		// Only a terminal stream emits "resize"; an injected output may be a plain writer.
+		const emitter = output as Partial<NodeJS.EventEmitter>;
 		const resizable =
-			typeof (output as Partial<NodeJS.EventEmitter>).on === "function"
+			typeof emitter.on === "function" && typeof emitter.removeListener === "function"
 				? // SAFETY: checked above; Node's tty.WriteStream emits "resize" when the width changes.
 					(output as unknown as NodeJS.EventEmitter)
 				: undefined;
@@ -382,11 +383,16 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 
 		// Decoded but not yet handled, in order; what is left at submit goes to `typedAhead`.
 		const unhandled: RawKey[] = [];
+		// A handleKey call is in flight; Ctrl+C or Ctrl+D must not wait behind it.
+		let handling = false;
+		const cancelled = () => new DOMException("Prompt was cancelled.", "AbortError");
 
 		function onKeypress(ch: string | undefined, key?: KeyInfo): void {
-			// Ctrl+C or Ctrl+D (end of input) → reject with a standard AbortError (handle immediately)
-			if (key?.ctrl && (key.name === "c" || key.name === "d")) {
-				cancel(new DOMException("Prompt was cancelled.", "AbortError"));
+			// Ctrl+C or Ctrl+D (end of input) → reject with a standard AbortError
+			const isCancelKey = key?.ctrl === true && (key.name === "c" || key.name === "d");
+			// Keys typed ahead of it in the same chunk run first, so a submit there hands it to the next prompt.
+			if (isCancelKey && (unhandled.length === 0 || handling)) {
+				cancel(cancelled());
 				return;
 			}
 			unhandled.push([ch, key]);
@@ -405,9 +411,15 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 			processing = processing.then(async () => {
 				unhandled.shift();
 				if (isCleanedUp) return;
+				if (isCancelKey) {
+					cancel(cancelled());
+					return;
+				}
 
 				try {
+					handling = true;
 					const result = await handleKey(event, state);
+					handling = false;
 					// A render failure or cancellation may have released these streams while awaiting.
 					if (isCleanedUp) return;
 
