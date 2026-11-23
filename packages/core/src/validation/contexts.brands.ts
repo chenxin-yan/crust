@@ -193,7 +193,7 @@ export type MissingDeclaredDependencyBrand<
 			: {
 					readonly FIX_MISSING_DEPENDENCY: `Context "${Missing}"${[DefName<T>] extends [never]
 						? ""
-						: ` needed by "${DefName<T>}"`} is not provided: .provide() it on an ancestor`;
+						: ` needed by "${DefName<T>}"`} is not provided: .provide() it on an ancestor, or .extend() the Extension that provides it`;
 				}
 		: never;
 

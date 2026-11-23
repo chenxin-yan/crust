@@ -71,15 +71,27 @@ function _normalActionsHaveNoEvents() {
 	>;
 }
 
-function _asyncActionReturningAGeneratorStreams() {
+function _onlyAnAsyncGeneratorFunctionStreams() {
 	async function* count() {
 		yield 1;
 		return "end";
 	}
+	// A promise of a generator is the result: only an `async function*` streams.
 	const app = new Crust("cli").action(async () => count());
-	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>["result"], string>>;
-	type _events = Expect<
-		Equal<Completed<ReturnType<typeof app.run<[]>>>["events"], readonly number[]>
+	type _result = Expect<
+		Equal<
+			Completed<ReturnType<typeof app.run<[]>>>["result"],
+			AsyncGenerator<number, string, unknown>
+		>
+	>;
+	type _noEvents = Expect<
+		Equal<"events" extends keyof Completed<ReturnType<typeof app.run<[]>>> ? true : false, false>
+	>;
+	const forwarded = new Crust("cli").action(async function* () {
+		return yield* count();
+	});
+	type _forwarded = Expect<
+		Equal<Completed<ReturnType<typeof forwarded.run<[]>>>["events"], readonly number[]>
 	>;
 }
 
@@ -151,24 +163,12 @@ function _outputChecksTheGeneratorReturn() {
 	type _events = Expect<
 		Equal<Completed<ReturnType<typeof app.run<[]>>>["events"], readonly string[]>
 	>;
-	// An async action may return a generator, as the guide documents.
 	async function* progress() {
 		yield "progress";
 		return { id: 1 };
 	}
-	async function* wrongId() {
-		yield "progress";
-		return { id: "1" };
-	}
-	const wrapped = new Crust("cli").output(user).action(async () => progress());
-	type _wrapped = Expect<
-		Equal<Completed<ReturnType<typeof wrapped.run<[]>>>["result"], { id: number }>
-	>;
-	type _wrappedEvents = Expect<
-		Equal<Completed<ReturnType<typeof wrapped.run<[]>>>["events"], readonly string[]>
-	>;
-	// @ts-expect-error the wrapped generator returns a string id
-	new Crust("cli").output(user).action(async () => wrongId());
+	// @ts-expect-error a promise of a generator is a result, not the schema's input
+	new Crust("cli").output(user).action(async () => progress());
 	// @ts-expect-error the generator returns a string id
 	new Crust("cli").output(user).action(async function* () {
 		yield 1;

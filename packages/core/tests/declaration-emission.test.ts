@@ -65,7 +65,7 @@ export const authenticatedApi = defineContext("authenticated-api")
 	}));
 
 // A declared Context bag preserves the factory's value type; .use() chains
-// accumulate demand and the transitive dependency closure
+// accumulate the named demands and the bag's transitive dependency closure
 export const deploy = defineCommand("deploy", (cmd) =>
 	cmd
 		.use(auth)
@@ -83,7 +83,7 @@ export const telemetry = defineExtension(defineExtensionId("telemetry"))
 	.use(authenticatedApi)
 	.provide(auth())
 	.add(deploy)
-	.preRun(async ({ ctx }) => void (await ctx.auth));
+	.postRun(async ({ ctx }) => void (await ctx.auth));
 
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")
@@ -147,14 +147,16 @@ const pool = defineContext("pool")
 const query = defineCommand("query", (cmd) =>
 	cmd.use(pool).action(async ({ ctx }) => void (await ctx.pool)),
 );
-// @ts-expect-error -- pool's transitive config dependency is unmet at .add()
-new Crust("cli").provide(pool.of({ url: "fake" })).add(query);
+// @ts-expect-error -- a real pool's config dependency is unmet where it is provided
+new Crust("cli").provide(pool()).add(query);
 // @ts-expect-error -- inline .use(pool) demand is unmet at the call site
 new Crust("cli").command("query", (cmd) => cmd.use(pool).action(() => {}));
 
 // Controls: the same shapes compile once demands are met, so the directives above only
 // pass for the unmet demand, not for an unrelated error on their line.
-new Crust("cli").provide(config(), pool.of({ url: "fake" })).add(query);
+new Crust("cli").provide(config(), pool()).add(query);
+// A provided \`.of()\` value needs nothing, so pool's config dependency is not demanded.
+new Crust("cli").provide(pool.of({ url: "fake" })).add(query);
 new Crust("cli").provide(config(), pool()).command("query", (cmd) => cmd.use(pool).action(() => {}));
 export const sameDemands: typeof extended = base.extend(extension);
 `;

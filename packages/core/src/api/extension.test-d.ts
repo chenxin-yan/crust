@@ -3,7 +3,6 @@ import { Crust, defineCommand, type AnyCrust, type RootCommandMeta } from "../co
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
-import type { ParsedFlagValue } from "../types.ts";
 import { defineContext } from "./context.ts";
 import {
 	defineExtension,
@@ -296,7 +295,8 @@ function _positionalCallbacks() {
 		.preRun(({ ctx, flags }) => {
 			// @ts-expect-error Callbacks do not see Contexts declared after them.
 			void ctx.logger;
-			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
+			// @ts-expect-error Nor flags declared after them.
+			void flags.trace;
 		})
 		.use(logger)
 		.flags({ trace: { type: "boolean" } })
@@ -305,7 +305,8 @@ function _positionalCallbacks() {
 			type _trace = Expect<Equal<typeof flags.trace, boolean | undefined>>;
 		})
 		.onError((_error, { flags }) => {
-			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
+			// A routing failure leaves `onError` no parsed flags, so each may be absent.
+			type _trace = Expect<Equal<typeof flags.trace, boolean | undefined>>;
 		});
 }
 
@@ -385,4 +386,32 @@ function _parseCommandArgv() {
 		// @ts-expect-error A path is a list of names, not a definition.
 		await ctx.parseCommandArgv(db, []);
 	});
+}
+
+// Hook flags: the owned flags and those of the used Contexts, each possibly undefined; no others.
+function _hookFlagsAreTheOwnedAndUsedContextFlags() {
+	const settings = defineContext("settings")
+		.flags({ level: { type: "string", choices: ["info", "warn"], default: "info" } })
+		.setup(({ flags }) => flags.level);
+	const plain = defineContext("plain").setup(() => "plain");
+	defineExtension(defineExtensionId("test:hook-flags"))
+		.use(settings, plain)
+		.flags({ trace: { type: "boolean", default: false } })
+		.preRun(async ({ flags, ctx }) => {
+			type _level = Expect<Equal<typeof flags.level, "info" | "warn" | undefined>>;
+			type _trace = Expect<Equal<typeof flags.trace, boolean>>;
+			// @ts-expect-error -- a typo is no flag
+			void flags.levle;
+			// A Context that owns flags rejects before validation, so pre-validation hooks lack it.
+			// @ts-expect-error -- settings owns flags
+			void ctx.settings;
+			const _plain: string = await ctx.plain;
+		})
+		.handle("trace", (ctx) => {
+			// @ts-expect-error -- handlers run before validation too
+			void ctx.ctx.settings;
+		})
+		.postRun(async ({ ctx }) => {
+			const _level: "info" | "warn" = await ctx.settings;
+		});
 }

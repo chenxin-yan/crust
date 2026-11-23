@@ -194,7 +194,13 @@ Provide every dependency. Order within one `.provide()` call does not matter. Se
   ../../../examples/guide/contexts-doubles.ts#replacement
 </include>
 
-The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs.
+The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs. An `.of()` value needs none of the real setup's dependencies, and it fits wherever the real instance does, such as a parameter typed `ReturnType<typeof database>`.
+
+To swap a Context on an app that is already assembled, pass `provide` to [`run()`](/docs/api/crust#runpath-input-options) or the [testing helpers](/docs/modules/testing#captureoptions). It replaces the same-name Context for that invocation only:
+
+<include lang="ts" meta='title="work.test.ts"'>
+  ../../../examples/guide/contexts-doubles.ts#provide-option
+</include>
 
 <Callout type="warn">
   A disposable supplied through `.of()` is still disposed by each invocation that reads it. Use a

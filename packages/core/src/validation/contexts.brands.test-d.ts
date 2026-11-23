@@ -101,7 +101,7 @@ type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 	type _missing = Expect<
 		Equal<
 			Missing[0]["FIX_MISSING_DEPENDENCY"],
-			'Context "db" is not provided: .provide() it on an ancestor'
+			'Context "db" is not provided: .provide() it on an ancestor, or .extend() the Extension that provides it'
 		>
 	>;
 	type Named = ValidateDeclaredDeps<
@@ -111,7 +111,7 @@ type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 	type _named = Expect<
 		Equal<
 			Named[0]["FIX_MISSING_DEPENDENCY"],
-			'Context "db" needed by "version" is not provided: .provide() it on an ancestor'
+			'Context "db" needed by "version" is not provided: .provide() it on an ancestor, or .extend() the Extension that provides it'
 		>
 	>;
 	type Broad = ValidateDeclaredDeps<

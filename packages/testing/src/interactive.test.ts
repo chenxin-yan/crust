@@ -1,4 +1,4 @@
-import { Crust } from "@crustjs/core";
+import { Crust, defineContext } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 import { bold } from "@crustjs/style";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -63,6 +63,17 @@ describe("runInteractive", () => {
 		await run.waitFor(/abé/);
 		expect(await run.done).toEqual({ stdout: "ab", stderr: "abé", exitCode: 0 });
 		expect(run.stdout()).toBe("ab");
+	});
+
+	it("replaces the app's Contexts for the run with the provide option", async () => {
+		const clock = defineContext("clock").setup(() => "real");
+		const app = new Crust("test-cli")
+			.provide(clock())
+			.action(async ({ ctx, stdout }) => stdout(await ctx.clock));
+
+		const run = runInteractive(app, [], { provide: [clock.of("fake")] });
+
+		expect(await run.done).toMatchObject({ stdout: "fake\n", exitCode: 0 });
 	});
 
 	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {

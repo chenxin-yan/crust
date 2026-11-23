@@ -192,6 +192,11 @@ describe("Crust .provide()", () => {
 	});
 });
 
+/** A hook's Context bag as the runtime has it: the types hide flag-dependent Contexts before validation. */
+function bagOf(bag: object): Readonly<Record<string, Promise<unknown>>> {
+	return bag as Readonly<Record<string, Promise<unknown>>>;
+}
+
 const apiKey = defineFlag({ type: "string", short: "k", aliases: ["token"] });
 
 describe("Context-owned sections", () => {
@@ -1190,7 +1195,7 @@ describe("Context setup dependencies", () => {
 		);
 	});
 
-	it("fails loud when a transitive dependency above an .of() cut is unprovided", async () => {
+	it("fails loud when a setup reads a transitive dependency above an .of() cut that is unprovided", async () => {
 		const config = defineContext("config").setup(() => "config");
 		const db = defineContext("db")
 			.use(config)
@@ -1198,9 +1203,12 @@ describe("Context setup dependencies", () => {
 		const report = defineContext("report")
 			.use(db)
 			.setup(async ({ ctx }) => await ctx.config);
-		expect(() => new Crust("cli").provide(db.of("fake"), report() as never)).toThrow(
-			'No provider for Context "config"',
-		);
+		// The `.of()` value needs nothing, so preparing the app demands no config; the read fails.
+		const app = new Crust("cli")
+			.provide(db.of("fake"), report() as never)
+			.action(async ({ ctx }) => await (ctx as Record<string, Promise<unknown>>).report);
+
+		await expect(unwrap(app.run([]))).rejects.toThrow('No provider for Context "config"');
 	});
 
 	it("builds Extension hook bags from the declared factory graph across an .of() cut", async () => {
@@ -1315,7 +1323,7 @@ describe("lazy Context bags", () => {
 			});
 		const observer = defineExtension(defineExtensionId("degraded-observer"))
 			.use(wrapper)
-			.preRun(async ({ ctx }) => void (await ctx.wrapper));
+			.preRun(async ({ ctx }) => void (await bagOf(ctx).wrapper!));
 		await unwrap(
 			new Crust("cli")
 				.provide(gate(), wrapper())
@@ -1356,7 +1364,7 @@ describe("lazy Context bags", () => {
 			.setup(async ({ ctx }) => await ctx.auth);
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service));
+			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -1385,7 +1393,7 @@ describe("lazy Context bags", () => {
 			});
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
+			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!.catch(() => undefined)));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -1429,7 +1437,7 @@ describe("lazy Context bags", () => {
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
 			.preRun(async (ctx) => {
-				await ctx.ctx.service.catch(() => undefined);
+				await bagOf(ctx.ctx).service!.catch(() => undefined);
 			});
 		const app = new Crust("cli")
 			.provide(auth(), service())
@@ -2002,7 +2010,7 @@ describe("Context setup defer()", () => {
 			});
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
+			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!.catch(() => undefined)));
 		await unwrap(
 			new Crust("cli")
 				.provide(auth(), service())
@@ -2190,5 +2198,40 @@ describe("checked Context definitions", () => {
 			});
 		await unwrap(app.run([], { flags: { token: "original" } }));
 		expect(Object.keys((await app.snapshot()).flags)).toEqual(["token"]);
+	});
+});
+
+describe("Context replacements", () => {
+	const config = defineContext("config").setup(() => ({ region: "eu" }));
+	const workspace = defineContext("workspace")
+		.use(config)
+		.setup(async ({ ctx }) => ({ root: `/${(await ctx.config).region}` }));
+	const list = defineCommand("list", (cmd) =>
+		cmd.use(workspace).action(async ({ ctx }) => (await ctx.workspace).root),
+	);
+
+	it("runs a command whose Context is an `.of()` value without the real one's dependencies", async () => {
+		const app = new Crust("mono").provide(workspace.of({ root: "/fake" })).add(list);
+
+		expect(await app.run(["list"])).toMatchObject({ status: "completed", result: "/fake" });
+	});
+
+	it("replaces a Context for one invocation with the provide option", async () => {
+		const app = new Crust("mono").provide(config(), workspace()).add(list);
+		const hooked: unknown[] = [];
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(workspace)
+			.preRun(async ({ ctx }) => void hooked.push(await ctx.workspace));
+
+		expect(
+			await app.run(["list"], {}, { provide: [workspace.of({ root: "/double" })] }),
+		).toMatchObject({ status: "completed", result: "/double" });
+		expect(await app.run(["list"])).toMatchObject({ status: "completed", result: "/eu" });
+		await app.extend(observer).execute({
+			argv: ["list"],
+			io: { stdout: { write() {} } },
+			provide: [workspace.of({ root: "/hooked" })],
+		});
+		expect(hooked).toEqual([{ root: "/hooked" }]);
 	});
 });

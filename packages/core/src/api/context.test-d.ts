@@ -82,14 +82,14 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 	new Crust("cli")
 		.provide(config(), db())
 		.command("query", (cmd) => cmd.use(db).action(async ({ ctx }) => void (await ctx.db)));
+	// A provided `.of()` value needs nothing, so db's config dependency is not demanded.
+	new Crust("cli")
+		.provide(db.of({ url: "fake" }))
+		.command("query", (cmd) => cmd.use(db).action(async ({ ctx }) => void (await ctx.db)));
 
 	const invalidCompositions = () => {
 		// @ts-expect-error -- inline .use(db) demand is unmet at the call site
 		new Crust("cli").command("query", (cmd) => cmd.use(db).action(() => {}));
-		new Crust("cli")
-			.provide(db.of({ url: "fake" }))
-			// @ts-expect-error -- db's transitive config dependency is still unmet
-			.command("query", (cmd) => cmd.use(db).action(() => {}));
 		// @ts-expect-error -- .use() takes factories; instances belong to .provide()
 		new Crust("cli").provide(config(), db()).command("query", (cmd) => cmd.use(db()));
 	};
@@ -145,13 +145,9 @@ function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 	new Crust("cli").provide(config(), db()).add(query);
 	new Crust("cli").provide(config(), db()).extend(carrier);
 
-	const invalidCompositions = () => {
-		// @ts-expect-error -- db's transitive config dependency is unmet at .add()
-		new Crust("cli").provide(db.of({ url: "fake" })).add(query);
-		// @ts-expect-error -- db's transitive config dependency is unmet at .extend()
-		new Crust("cli").provide(db.of({ url: "fake" })).extend(carrier);
-	};
-	void invalidCompositions;
+	// A provided `.of()` value needs nothing, so db's config dependency is not demanded.
+	new Crust("cli").provide(db.of({ url: "fake" })).add(query);
+	new Crust("cli").provide(db.of({ url: "fake" })).extend(carrier);
 }
 
 // infers options, ctx, flags, and the value together from one fluent chain
@@ -457,4 +453,33 @@ function _typecheckTypesContextFlagsAtUseSites() {
 
 	// A command may provide a flag-owning Context it uses.
 	defineCommand("local", (command) => command.use(config).provide(config()));
+}
+
+// an `.of()` value stands in for the real instance and demands no dependencies
+function _typecheckOfValueStandsInForTheRealInstance() {
+	const engine = defineContext("engine")
+		.use(config)
+		.setup(async ({ ctx }) => ({ url: (await ctx.config).url }));
+	const make = (instance: ReturnType<typeof engine>) =>
+		new Crust("cli").provide(config()).provide(instance);
+	make(engine());
+	make(engine.of({ url: "fake" }));
+	const real: ReturnType<typeof engine.of> = engine.of({ url: "fake" });
+	// @ts-expect-error -- a real instance needs config, which an `.of()` slot does not promise
+	const _reverse: ReturnType<typeof engine.of> = engine();
+	void real;
+
+	const list = defineCommand("list", (cmd) =>
+		cmd.use(engine).action(async ({ ctx }) => (await ctx.engine).url),
+	);
+	const app = new Crust("cli").provide(engine.of({ url: "fake" })).add(list);
+	// @ts-expect-error -- a real engine still needs config where it is provided
+	new Crust("cli").provide(engine()).add(list);
+
+	// `provide` replaces a Context for one invocation, typed against the app's root Contexts.
+	void app.run(["list"], {}, { provide: [engine.of({ url: "double" })] });
+	// @ts-expect-error -- the double's value must have the Context's type
+	void app.run(["list"], {}, { provide: [engine.of({ url: 1 })] });
+	// @ts-expect-error -- the app provides no Context named config
+	void app.run(["list"], {}, { provide: [config.of({ url: "x" })] });
 }

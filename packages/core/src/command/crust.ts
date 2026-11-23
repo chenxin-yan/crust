@@ -10,6 +10,7 @@ import {
 	type ContextMap,
 	type ContextsOutput,
 	type ContextsOwnedFlags,
+	type ContextReplacement,
 	type ContextUseFlags,
 	type DefiningOf,
 } from "../api/context.ts";
@@ -20,6 +21,7 @@ import type {
 	ExtensionData,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
+	UsedContextDemands,
 	UsedContexts,
 	UseSource,
 } from "../api/extension.ts";
@@ -219,8 +221,8 @@ export interface CommandDefinition<
 > {
 	/** The subcommand name this definition is added under */
 	readonly name: Name;
-	/** The same definition under a different name; configured aliases travel with it. */
-	as<const N extends string>(name: N): CommandDefinition<N, Aliases, Shape, Deps>;
+	/** The same definition under a different name, without its aliases, which name the original. */
+	as<const N extends string>(name: N): CommandDefinition<N, readonly [], Shape, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
 		readonly _aliases?: Aliases;
@@ -730,8 +732,8 @@ function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): valu
  *
  * The recipe runs once per `.add()`, receiving a fresh builder.
  *
- * Static metadata belongs in `config`. Use `.as(name)`
- * to add one definition under a different name; configured aliases travel with it.
+ * Static metadata belongs in `config`. Use `.as(name)` to add one definition under a different
+ * name; the copy has no aliases, since they name the original.
  *
  * `name` and the aliases are checked here when the CLI runs from source and in
  * `crust build`.
@@ -775,17 +777,26 @@ export function defineCommand(
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		meta,
 	};
-	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
+	const { aliases: _aliases, ...renamedMeta } = meta;
+	// Aliases are a type-only phantom here; the overloads restate the configured ones.
+	const named = <const DefName extends string>(
+		defName: DefName,
+		definitionMeta: Omit<CommandMeta, "name">,
+	): CommandDefinition<DefName, readonly []> => {
 		return Object.freeze({
 			name: defName,
 			as: <const NewName extends string>(newName: NewName) => {
-				if (process.env.CRUST_INTERNAL_BUILD !== "1") checkChildCommandName(newName, meta.aliases);
-				return named(newName);
+				if (process.env.CRUST_INTERNAL_BUILD !== "1") checkChildCommandName(newName);
+				return named(newName, renamedMeta);
 			},
-			[commandDefinitionInternal]: Object.freeze({ ...internal, name: defName }),
+			[commandDefinitionInternal]: Object.freeze({
+				...internal,
+				name: defName,
+				meta: definitionMeta,
+			}),
 		});
 	};
-	return named(name);
+	return named(name, meta);
 }
 
 function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[] {
@@ -870,20 +881,38 @@ type ExtensionCommandsOf<S extends AnyBuilderFacts> = [S["extensionCommands"]] e
 type AppRecursiveFlagsOf<S extends AnyBuilderFacts> = Exclude<S["recursiveFlags"], undefined>;
 
 /**
- * `schema` is the `.output()` schema; `actionReturn` wraps the action's awaited return
+ * `schema` is the `.output()` schema; `actionReturn` holds the action's {@link ActionCompletion}
  * (`undefined` before any `.action()`), kept apart from the result the schema produces.
  */
 type OutputState = {
 	readonly schema: StandardSchema | undefined;
-	readonly actionReturn: readonly [unknown] | undefined;
+	readonly actionReturn: AnyActionCompletion | undefined;
 };
 
 // `actionReturn` stays open (no action, or any) so a builder annotated with the default state,
 // such as `CommandDefinitionBuilder<F, A>`, still accepts one after `.action()`.
 type InitialOutputState = {
 	readonly schema: undefined;
-	readonly actionReturn: readonly [unknown] | undefined;
+	readonly actionReturn: AnyActionCompletion | undefined;
 };
+
+// `never` events: an action that never returns (see `ActionCompletion`).
+type AnyActionCompletion = readonly [result: unknown, events: readonly unknown[] | undefined];
+
+/**
+ * What an action returning `R` completes with: its awaited return and no events, or, when it
+ * returns an async generator (an `async function*`), the generator's `return` value and the
+ * values it yields. A promise of a generator is an ordinary result: only an `async function*`
+ * streams. Not distributed, so `any` and `never` stay whole.
+ */
+type ActionCompletion<R> =
+	IsAny<R> extends true
+		? readonly [result: any, events: readonly unknown[] | undefined]
+		: [R] extends [never]
+			? readonly [result: never, events: never]
+			: [R] extends [AsyncGenerator<infer Event, infer Returned>]
+				? readonly [result: Awaited<Returned>, events: readonly Event[]]
+				: readonly [result: Awaited<R>, events: undefined];
 
 type OutputStateOf<S extends AnyBuilderFacts> = Exclude<S["output"], undefined>;
 
@@ -893,17 +922,13 @@ type ActionReturnOf<S extends AnyBuilderFacts> = OutputStateOf<S>["actionReturn"
 
 /**
  * What the action may return: anything, or the `.output()` schema's input (possibly awaited,
- * or the `return` value of an async generator, itself possibly awaited).
+ * or the `return` value of an `async function*`).
  */
 type ActionReturn<S extends AnyBuilderFacts> = [OutputSchemaOf<S>] extends [never]
 	? unknown
 	: | InferInput<OutputSchemaOf<S>>
 		| PromiseLike<InferInput<OutputSchemaOf<S>>>
-		| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>
-		| PromiseLike<AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>>;
-
-/** An awaited action return's value: an async generator's `return` value, else itself. */
-type ActionValue<V> = V extends AsyncGenerator<any, infer Returned> ? Awaited<Returned> : V;
+		| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>;
 
 /**
  * The values an async generator action yields; `undefined` for any other (or no) action. Erased
@@ -914,29 +939,30 @@ type ActionEvents<S extends AnyBuilderFacts> = undefined extends S["output"]
 	? readonly unknown[] | undefined
 	: IsAny<ActionReturnOf<S>> extends true
 		? readonly unknown[] | undefined
-		: ActionReturnOf<S> extends readonly [infer V]
-			? V extends AsyncGenerator<infer Event>
-				? readonly Event[]
-				: undefined
+		: ActionReturnOf<S> extends readonly [
+					unknown,
+					infer Events extends readonly unknown[] | undefined,
+			  ]
+			? Events
 			: undefined;
 
 /**
- * The command result: the awaited action return (an async generator's `return` value), or the
+ * The command result: the awaited action return (an `async function*`'s `return` value), or the
  * `.output()` schema's output, awaited too because the invocation resolves any promise the
  * schema returns.
  */
 type ActionResult<S extends AnyBuilderFacts, R> = [OutputSchemaOf<S>] extends [never]
-	? ActionValue<Awaited<R>>
+	? ActionCompletion<R>[0]
 	: Awaited<InferOutput<OutputSchemaOf<S>>>;
 
-// `.output()` after `.action()` checks the action's awaited return against the new schema;
+// `.output()` after `.action()` checks the action's result against the new schema;
 // a state that may have no action (see `InitialOutputState`) has nothing to check.
 type OutputResultBrand<
-	Return extends readonly [unknown] | undefined,
+	Return extends AnyActionCompletion | undefined,
 	S extends StandardSchema,
 > = undefined extends Return
 	? {}
-	: [ActionValue<NonNullable<Return>[0]>] extends [InferInput<S>]
+	: [NonNullable<Return>[0]] extends [InferInput<S>]
 		? {}
 		: {
 				readonly FIX_OUTPUT: "The action's result does not match this output schema's input type";
@@ -989,7 +1015,7 @@ type AfterUse<
 	CtxFlags & UsedContextFlags<Us>,
 	BuilderFacts<
 		Facts["demands"],
-		MergeContext<RecipeDepsOf<Facts>, UsedContexts<Us>>,
+		MergeContext<RecipeDepsOf<Facts>, UsedContextDemands<Us>>,
 		ProvidersOf<Facts>,
 		ActionDepsOf<Facts>,
 		Facts["extensionCommands"],
@@ -1056,7 +1082,7 @@ type AfterAction<
 		readonly actionDeps: Ctx;
 		readonly output: {
 			readonly schema: OutputStateOf<Facts>["schema"];
-			readonly actionReturn: readonly [Awaited<R>];
+			readonly actionReturn: ActionCompletion<R>;
 		};
 	},
 	ActionResult<Facts, R>,
@@ -1225,14 +1251,21 @@ type KnownDepsAt<State extends BuilderState> = State["caps"] extends "recipe"
 	? string
 	: keyof State["ctx"] & string;
 
-// An inline child's builder: it parses the Context-owned flags its parent has at the call site.
-// Recursive Extension flags stay out: readers apply them to every command (see `AppShape`).
-type InlineCommandBuilder<State extends BuilderState> = CommandDefinitionBuilder<
-	State["ctxFlags"],
+// An inline child's builder: it parses the Context-owned flags its parent has at the call site,
+// and the recursive Extension flags registered so far, which every command parses. Its facts
+// carry those on, so its own inline children see them too; readers still apply them to every
+// stored shape (see `AppShape`), which also covers commands added before `.extend()`.
+type InlineCommandBuilder<State extends BuilderState> = Crust<
+	State["ctxFlags"] & AppRecursiveFlagsOf<State["facts"]>,
 	[],
 	State["ctx"],
 	{},
-	State["ctxFlags"]
+	State["ctxFlags"],
+	BuilderFacts<{}, {}, {}, {}, never, AppRecursiveFlagsOf<State["facts"]>>,
+	void,
+	{},
+	string,
+	"recipe"
 >;
 
 type InlineCommandRecipe<State extends BuilderState, N extends string, B> = ((
@@ -1502,8 +1535,13 @@ export class Crust<
 	 * another factory must own exactly the declared flags, or preparing the app throws `DEFINITION`.
 	 */
 	use<const Us extends readonly [UseSource, ...UseSource[]] = never>(
-		this: { readonly _types: { readonly caps: "recipe" } },
-		...sources: Us & DeclaredDependencyValuesBrand<UsedContexts<Us>, ProvidersOf<Facts>>
+		...sources: Us &
+			DeclaredDependencyValuesBrand<UsedContexts<Us>, ProvidersOf<Facts>> &
+			(Caps extends "recipe"
+				? {}
+				: {
+						readonly FIX_USE_ON_APP: "An app supplies a Context with .provide(context()); .use() declares the Contexts a command reads";
+					})
 	): AfterUse<Flags, A, Ctx, Tree, CtxFlags, Facts, Result, Us, Meta>;
 
 	use<const Us extends readonly [UseSource, ...UseSource[]]>(
@@ -1607,7 +1645,13 @@ export class Crust<
 			// installed; preparation checks that the provider owns exactly those.
 			if (flags.length === 0 || declared.has(instance.name)) continue;
 			for (const name of flags) {
-				registerFlag(cloned._node, name, instance.ownedFlags[name]!, "owned");
+				registerFlag(
+					cloned._node,
+					name,
+					instance.ownedFlags[name]!,
+					"owned",
+					`Context "${instance.name}"`,
+				);
 			}
 			flagContexts ??= new Map(this._node.flagContexts);
 			flagContexts.set(instance.name, [...(flagContexts.get(instance.name) ?? []), ...flags]);
@@ -1916,7 +1960,7 @@ export class Crust<
 			: never,
 		path: KnownCommandPath<Path, Tree>,
 		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
-		options?: InvocationOptions<ShapeEvent<S>>,
+		options?: InvocationOptions<ShapeEvent<S>, ContextReplacement<Ctx>>,
 	): Promise<ShapeRunOutcome<S>>;
 	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
@@ -1933,7 +1977,8 @@ export class Crust<
 		]
 			? readonly [
 					options?: InvocationOptions<
-						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, Facts>, NoInfer<Path>>>
+						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, Facts>, NoInfer<Path>>>,
+						ContextReplacement<Ctx>
 					>,
 				]
 			: readonly [invalidInput: never]

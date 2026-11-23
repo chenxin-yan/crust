@@ -28,6 +28,7 @@ import {
 	type AnyContextFactory,
 	type AnyContextInstance,
 	type ContextBag,
+	type ContextDemands,
 	type ContextDependencies,
 	type ContextMap,
 	type ContextUseFlags,
@@ -186,14 +187,15 @@ export interface ExtensionContext<
 	 */
 	readonly args: Readonly<Record<string, ParsedArgValue>>;
 	/**
-	 * Bound own flags plus unknown flags from the resolved command, before validation;
-	 * parsed from argv tokens for `execute()`, taken as-is from the structured input for typed `run()`.
-	 * A flag whose argv or environment value failed conversion, `choices`, or `parse` is
-	 * `undefined` (not its default); the error surfaces at validation.
+	 * Bound flags of the resolved command, before validation; parsed from argv tokens for
+	 * `execute()`, taken as-is from the structured input for typed `run()`. Typed are the flags
+	 * the Extension owns and those of the Contexts its hooks `.use()`, each of which may be
+	 * `undefined`: a flag whose argv or environment value failed conversion, `choices`, or `parse`
+	 * is `undefined` (not its default), and the error surfaces at validation.
 	 *
 	 * @example `{ trace: true }`
 	 */
-	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, ParsedFlagValue>>;
+	readonly flags: Readonly<InferExtensionFlags<F>>;
 	/**
 	 * Where each current value came from, keyed by declared argument name and canonical flag
 	 * name; a name without a value is absent. `argv` covers aliases, `--no-<name>`, and
@@ -288,7 +290,7 @@ export interface Renderer {
 	 */
 	result?(value: unknown): void;
 	/**
-	 * Called once when the Command Action turns out to be an async generator, before its first
+	 * Called once when the Command Action is an `async function*`, before its first
 	 * event, so `event`, `result`, and `error` know the invocation streams. A throw fails the
 	 * invocation and closes the generator. Default: ignored.
 	 */
@@ -396,12 +398,14 @@ export interface ExtensionHooks<
 	 * throws ends the chain: remaining hooks are skipped and the original failure
 	 * reaches that same `error` or default rendering.
 	 *
-	 * Receives the base context: routing or syntax-parse failures render with a
-	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
+	 * Every flag is optional here: routing or syntax-parse failures render with a fallback
+	 * context whose `flags` are empty.
 	 */
 	readonly onError?: (
 		error: CaughtError,
-		ctx: ExtensionContext<{}, Deps, MetaKeys>,
+		ctx: ExtensionContext<{}, Deps, MetaKeys> & {
+			readonly flags: Readonly<Partial<InferExtensionFlags<F>>>;
+		},
 	) => Awaitable<boolean | void>;
 }
 
@@ -485,9 +489,7 @@ type ExtensionDeps<
 	Use extends readonly AnyContextFactory[],
 	Provide extends readonly AnyContextInstance[],
 	Commands extends readonly CommandDefinition<any, any, any, any>[],
-> = ContextDependencies<Use> &
-	ContextsDependencies<Provide> &
-	CommandDefinitionsDependencies<Commands>;
+> = ContextDemands<Use> & ContextsDependencies<Provide> & CommandDefinitionsDependencies<Commands>;
 
 // Only a definitely empty state takes the first-call fast path; unions retain their uncertainty.
 type AppendedFlags<OF extends ExtensionFlagsDef, F extends ExtensionFlagsDef> =
@@ -590,12 +592,34 @@ type UseSourcesContexts<Us extends readonly unknown[], Acc = {}> = Us extends re
 	? UseSourcesContexts<T, Acc & UseSourceContexts<H>>
 	: Acc;
 
-/** The Contexts (and their dependencies) a `.use()` call demands. */
+/** The Contexts (and their dependencies) a `.use()` call puts in `ctx`. */
 export type UsedContexts<Us extends readonly UseSource[]> = Us extends readonly AnyContextFactory[]
 	? ContextDependencies<Us>
 	: IsStaticTuple<Us> extends true
 		? UseSourcesContexts<Us>
 		: Record<string, ContextValue>;
+
+type UseSourceDemands<S> = S extends AnyContextFactory
+	? ContextDemands<[S]>
+	: ExtensionProvidesOutput<S extends AnyExtensionFactory ? ReturnType<S> : S>;
+
+type UseSourcesDemands<Us extends readonly unknown[], Acc = {}> = Us extends readonly [
+	infer H,
+	...infer T,
+]
+	? UseSourcesDemands<T, Acc & UseSourceDemands<H>>
+	: Acc;
+
+/**
+ * The Contexts a `.use()` call demands: those it names, or an Extension's provided ones. What
+ * their setups use is demanded where each is provided (see {@link ContextDemands}).
+ */
+export type UsedContextDemands<Us extends readonly UseSource[]> =
+	Us extends readonly AnyContextFactory[]
+		? ContextDemands<Us>
+		: IsStaticTuple<Us> extends true
+			? UseSourcesDemands<Us>
+			: Record<string, ContextValue>;
 
 type ExtensionProvidesOutput<E> =
 	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
@@ -664,12 +688,40 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 		? ExtensionFactory<Args, Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags>
 		: never;
 
+/** Hooks that run before flag validation, where pulling a Context that owns flags rejects. */
+type PreValidationHook = "setup" | "renderer" | "preRun";
+
+/**
+ * The used Contexts a hook that runs before validation can read: those that own no flags,
+ * themselves or through the Contexts their setup uses. A widened list stays as it is.
+ */
+type PreValidationContexts<
+	Use extends readonly AnyContextFactory[],
+	Acc extends readonly AnyContextFactory[] = [],
+> =
+	IsStaticTuple<Use> extends true
+		? Use extends readonly [
+				infer H extends AnyContextFactory,
+				...infer T extends readonly AnyContextFactory[],
+			]
+			? PreValidationContexts<T, keyof ContextUseFlags<[H]> extends never ? [...Acc, H] : Acc>
+			: Acc
+		: Use;
+
+// Hooks read the owned flags and those of the Contexts they use.
 type ExtensionHook<
 	Name extends keyof ExtensionHooks,
 	Use extends readonly AnyContextFactory[],
 	F extends ExtensionFlagsDef,
 	MetaKeys extends RootMetaKey,
-> = NonNullable<ExtensionHooks<F, ContextDependencies<Use>, MetaKeys>[Name]>;
+	BeforeValidation extends boolean = Name extends PreValidationHook ? true : false,
+> = NonNullable<
+	ExtensionHooks<
+		F & ContextUseFlags<Use>,
+		ContextDependencies<BeforeValidation extends true ? PreValidationContexts<Use> : Use>,
+		MetaKeys
+	>[Name]
+>;
 
 /**
  * Immutable fluent Extension authoring handle returned by {@link defineExtension}.
@@ -690,7 +742,7 @@ export interface ExtensionBuilder<
 	OF,
 	Commands,
 	MetaKeys,
-	ContextDependencies<Use>,
+	ContextDemands<Use>,
 	ContextUseFlags<Use>
 > {
 	/**
@@ -740,7 +792,7 @@ export interface ExtensionBuilder<
 	 */
 	handle(
 		flag: keyof OF & string,
-		run: ExtensionHook<"noAction", Use, OF, MetaKeys>,
+		run: ExtensionHook<"noAction", Use, OF, MetaKeys, true>,
 		options?: ExtensionHandleOptions,
 	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys>;
 	/** See {@link ExtensionHooks.renderer}. */

@@ -7,9 +7,16 @@ import {
 	type ExecutableApp,
 	executeInProcess,
 	isolate,
+	type ProvideOption,
 } from "./capture.ts";
 
-export type { CaptureOptions, CapturedExecute, Environment, ExecutableApp } from "./capture.ts";
+export type {
+	CaptureOptions,
+	CapturedExecute,
+	Environment,
+	ExecutableApp,
+	ProvideOption,
+} from "./capture.ts";
 export { withEnv } from "./capture.ts";
 
 /** {@link CaptureOptions} plus the streams the action sees. */
@@ -35,11 +42,12 @@ export type CaptureExecuteOptions = CaptureOptions & {
  * without spawning a subprocess. `options.env` and `options.cwd` replace the process's for the
  * run, and captured text is plain unless `options.raw` is set. The action's streams are no
  * terminal unless `options.isTTY` is set, and its `stdin` holds `options.stdin`, else nothing.
+ * `options.provide` replaces the app's same-name Contexts for the run.
  */
-export async function captureExecute(
-	app: ExecutableApp,
+export async function captureExecute<App extends ExecutableApp>(
+	app: App,
 	argv: readonly string[],
-	options?: CaptureExecuteOptions,
+	options?: CaptureExecuteOptions & ProvideOption<App>,
 ): Promise<CapturedExecute> {
 	const stdoutChunks: Buffer[] = [];
 	const stderrChunks: Buffer[] = [];
@@ -61,6 +69,7 @@ export async function captureExecute(
 		executeInProcess(app, {
 			argv,
 			io: { stdin, stdout: sink(stdoutChunks), stderr: sink(stderrChunks) },
+			...(options?.provide && { provide: options.provide }),
 		}),
 	);
 	return {

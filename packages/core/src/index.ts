@@ -7,6 +7,7 @@ export type {
 	ContextFactory,
 	ContextInstance,
 	ContextMap,
+	ContextReplacement,
 	ContextSetup,
 	FactoryValueOf,
 } from "./api/context.ts";
@@ -96,6 +97,8 @@ export type {
 	SectionConsumer,
 	FlagDef,
 	FlagsDef,
+	InferArgs,
+	InferFlags,
 	InputArgs,
 	InputFlags,
 	ExecuteOptions,

@@ -11,6 +11,7 @@ import {
 	type ExecutableApp,
 	executeInProcess,
 	isolate,
+	type ProvideOption,
 } from "./capture.ts";
 
 type Letter =
@@ -70,12 +71,13 @@ export interface InteractiveRun {
  * Run `argv` through `app.execute()` on a fake terminal: prompts and `stderr` draw on it and read
  * keys from it, and `stdout` is captured apart, as a pipe. `options.env` and `options.cwd`
  * replace the process's until `done` settles, and captured text is plain unless `options.raw`
- * is set. Throws for `env` or `cwd` while another run is active.
+ * is set. Throws for `env` or `cwd` while another run is active. `options.provide` replaces the
+ * app's same-name Contexts for the run.
  */
-export function runInteractive(
-	app: ExecutableApp,
+export function runInteractive<App extends ExecutableApp>(
+	app: App,
 	argv: readonly string[],
-	options?: CaptureOptions,
+	options?: CaptureOptions & ProvideOption<App>,
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const terminal = harness.io.output;
@@ -114,6 +116,7 @@ export function runInteractive(
 				argv,
 				io: { stdin: harness.io.input, stdout, stderr },
 				signal: controller.signal,
+				...(options?.provide && { provide: options.provide }),
 			}),
 		),
 	).then((code) => {

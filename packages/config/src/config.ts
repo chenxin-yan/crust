@@ -308,7 +308,8 @@ type AnyStore = Store<Record<string, unknown>>;
 /** A file value or the default as the setting's value: a `parse` setting parses what the user typed. */
 function settled(key: string, def: ConfigFlagDef, value: unknown, where: string): unknown {
 	const { parse } = def;
-	if (parse === undefined || value === undefined) return value;
+	// A function: the non-string types' `parse` is only a diagnostic.
+	if (typeof parse !== "function" || value === undefined) return value;
 	const parseOne = (raw: string) => {
 		let parsed: unknown;
 		try {

@@ -245,13 +245,13 @@ $ my-cli api /users/9 --json
 {"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404}}   # stderr
 ```
 
-| Command                 | Result on stdout                                                                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api --list`            | An array of `{ method, path, operationId?, summary?, unavailable? }`                                                                                                               |
-| `api --spec <target>`   | The definition `--spec` prints, as above                                                                                                                                           |
-| `api <path>`            | The response body: parsed when it is JSON, otherwise its text as a JSON string; nothing for an empty body. A body that is not UTF-8 fails the command, since JSON can't hold it    |
-| `api <path> --paginate` | NDJSON: one `{"type":"event","data":…}` line per page with its body as above (an empty body is `""`), then `{"type":"result"}`, or `{"type":"error","error":…}` for a failing page |
-| `api preview …`         | The [preview](#preview-a-request) object                                                                                                                                           |
+| Command                 | Result on stdout                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api --list`            | An array of `{ method, path, operationId?, summary?, unavailable? }`                                                                                                            |
+| `api --spec <target>`   | The definition `--spec` prints, as above                                                                                                                                        |
+| `api <path>`            | The response body: parsed when it is JSON, otherwise its text as a JSON string; nothing for an empty body. A body that is not UTF-8 fails the command, since JSON can't hold it |
+| `api <path> --paginate` | One array of every page's body as above (an empty body is `""`), like `gh api --paginate --slurp`; a failing page fails the command and prints no page                          |
+| `api preview …`         | The [preview](#preview-a-request) object                                                                                                                                        |
 
 - A non-2xx body is written to stderr, followed by the error JSON, whose `details` hold the `status`.
 - JSON numbers are read as JavaScript numbers, so digits beyond double precision are lost and `-0` becomes `0`. Without `--json`, the body is printed exactly, and `--paginate` pages keep their exact digits.

@@ -265,7 +265,7 @@ describe("input", () => {
 	it("binds before every preRun, including one registered before input()", async () => {
 		const seen: unknown[] = [];
 		const check = defineExtension(defineExtensionId("check")).preRun(
-			({ flags }) => void seen.push(flags.region),
+			({ flags }) => void seen.push((flags as Record<string, unknown>).region),
 		);
 		const app = new Crust("app")
 			.extend(check, input())

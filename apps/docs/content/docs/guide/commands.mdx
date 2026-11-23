@@ -153,12 +153,12 @@ To report progress to programs while a command works, write its action as an `as
 
 Events are for programs: Crust never prints them. A terminal user sees only the action's `stdout(text)` and `stderr(text)`.
 
-- **Delivery:** each event goes live to the selected [renderer's](/docs/guide/extensions#renderers) `event`, if any, then to `options.onEvent` of `run()` or `execute()`. The action pauses at each `yield` until both return.
+- **Delivery:** each event goes live to the selected [renderer's](/docs/guide/extensions#renderers) `event`, if any, then to `options.onEvent` of `run()` or `execute()`. The action pauses at each `yield` until both return, and until the promise an async `onEvent` returns resolves.
 - **Outcome:** `run()` collects every event in `outcome.events`, typed from the yields, whether the command completes or fails mid-stream. Ordinary actions have no `events`.
 - **Cancellation:** when the invocation's `signal` aborts, Crust closes the generator at its next `yield`, so its `finally` blocks run, and the invocation fails with the abort reason. Pass `signal` to the work between yields to stop sooner.
-- **Throwing consumers:** a throwing renderer `event` or `onEvent` closes the generator the same way and fails the invocation.
+- **Throwing consumers:** a throwing renderer `event`, or an `onEvent` that throws or rejects, closes the generator the same way and fails the invocation.
 - **Failed cleanup:** if closing the generator throws, the invocation fails with a `SuppressedError` (`error`: the cleanup failure, `suppressed`: the original), as with a failed [Context disposal](/docs/api/errors#propagation-boundaries). A cancelled invocation still exits `130` (`143` after `SIGTERM`, `141` after a closed stdout).
-- **Returned generators:** an action that returns an async generator object, such as `async () => watch()`, streams the same way. Other async iterables are ordinary results.
+- **Only `async function*` streams:** an ordinary action that returns a generator, such as `async () => watch()`, returns it as its result. To stream another generator's events, forward them: `async function* () { return yield* watch(); }`.
 
 ## Unknown commands
 

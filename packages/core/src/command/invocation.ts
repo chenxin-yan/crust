@@ -6,7 +6,11 @@ import {
 	writeProcessOutput,
 } from "@crustjs/utils/terminal";
 
-import { validateContextAvailability } from "../api/context.ts";
+import {
+	definingOf,
+	validateContextAvailability,
+	type AnyContextInstance,
+} from "../api/context.ts";
 import type {
 	ExtensionData,
 	ExtensionHandler,
@@ -60,6 +64,7 @@ import {
 	registerFlag,
 	type AddedChild,
 	type ChildEntry,
+	type CommandAction,
 	type CommandNode,
 	type FlagShapes,
 } from "./node.ts";
@@ -835,31 +840,14 @@ function selectHandler(
 	return first;
 }
 
-/**
- * Strict on purpose: an action may return any other async iterable, such as a stream,
- * as its result. `Symbol.asyncIterator` is probed first so an ordinary result's getters
- * (e.g. `next`) are never read here; serialization reads them exactly once.
- */
-function isAsyncGenerator(value: unknown): value is AsyncGenerator {
-	if (typeof value !== "object" || value === null) return false;
-	const candidate = value as Partial<AsyncGenerator>;
-	try {
-		return (
-			Symbol.asyncIterator in candidate &&
-			typeof candidate[Symbol.asyncIterator] === "function" &&
-			typeof candidate.next === "function" &&
-			typeof candidate.return === "function" &&
-			typeof candidate.throw === "function"
-		);
-	} catch {
-		// A result whose properties throw when read (e.g. a strict Proxy) is an ordinary result.
-		return false;
-	}
+/** Only an `async function*` action streams; any value an ordinary action returns is its result. */
+function isAsyncGeneratorFunction(action: CommandAction): boolean {
+	return Object.prototype.toString.call(action) === "[object AsyncGeneratorFunction]";
 }
 
 /** One invocation's action events: the caller's live callback, and every event once a generator action starts. */
 interface ActionEventStream {
-	readonly onEvent?: ((event: unknown) => void) | undefined;
+	readonly onEvent?: ((event: unknown) => unknown) | undefined;
 	events?: unknown[];
 }
 
@@ -902,6 +890,8 @@ async function dispatch(
 	output: InvocationOutput,
 	signal: AbortSignal,
 	stream: ActionEventStream,
+	// The caller's `provide` option: replaces the same-name Contexts for this invocation.
+	provide: readonly AnyContextInstance[] | undefined,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<
@@ -927,7 +917,11 @@ async function dispatch(
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
-	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
+	// The resolver takes the last instance of a name, so a replacement wins.
+	const contexts = [
+		...resolvedNode.contexts.map(({ instance }) => instance),
+		...(provide ?? []).map(definingOf),
+	];
 	const resolver = createContextResolver(
 		contexts,
 		resolvedNode.flagContexts,
@@ -1017,8 +1011,10 @@ async function dispatch(
 					actionExitCode = code;
 				},
 			} satisfies CrustCommandContext;
-			result = await resolvedNode.run(context);
-			if (isAsyncGenerator(result)) result = await drain(result, (stream.events = []));
+			result = isAsyncGeneratorFunction(resolvedNode.run)
+				? // SAFETY: calling an async generator function returns its generator.
+					await drain(resolvedNode.run(context) as AsyncGenerator, (stream.events = []))
+				: await resolvedNode.run(context);
 		}
 		// An actionless command's `undefined` result still meets its `.output()` contract.
 		const checked = resolvedNode.outputSchema
@@ -1043,7 +1039,7 @@ async function dispatch(
 				if (step.done) return step.value;
 				events.push(step.value);
 				output.renderer?.event?.(step.value);
-				stream.onEvent?.(step.value);
+				await stream.onEvent?.(step.value);
 			}
 		} catch (error) {
 			if (done) throw error;
@@ -1321,6 +1317,7 @@ export async function runInvocation(
 					createInvocationOutput(resolvedIO),
 					signal,
 					stream,
+					options?.provide,
 					undefined,
 					// Recorded before `postRun` runs, as `execute()` does: a hook cannot rewrite the status.
 					async (error) => {
@@ -1463,6 +1460,7 @@ export async function executeInvocation(
 				output,
 				signal,
 				{ onEvent: options?.onEvent },
+				options?.provide,
 				(context) => {
 					extensionContext = context;
 				},

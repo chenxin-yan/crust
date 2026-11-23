@@ -1,6 +1,8 @@
-import { Crust } from "@crustjs/core";
+import { Crust, defineContext } from "@crustjs/core";
 
 import { withEnv } from "./capture.ts";
+import { captureExecute } from "./index.ts";
+import { runInteractive } from "./interactive.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -26,3 +28,18 @@ async function _typecheckWithEnvKeepsTypedRun() {
 }
 
 void _typecheckWithEnvKeepsTypedRun;
+
+// `provide` is typed against the app's root Contexts.
+async function _typecheckProvideReplacesAppContexts() {
+	const clock = defineContext("clock").setup(() => "real");
+	const other = defineContext("other").setup(() => 1);
+	const app = new Crust("cli").provide(clock()).action(async ({ ctx }) => await ctx.clock);
+	await captureExecute(app, [], { provide: [clock.of("fake")] });
+	runInteractive(app, [], { provide: [clock.of("fake")] });
+	// @ts-expect-error -- the app provides no Context named other
+	await captureExecute(app, [], { provide: [other.of(2)] });
+	// @ts-expect-error -- the app provides no Context named other
+	runInteractive(app, [], { provide: [other.of(2)] });
+}
+
+void _typecheckProvideReplacesAppContexts;

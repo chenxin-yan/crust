@@ -71,7 +71,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 
 ## Owned flags and commands
 
-The preview flag above is available on every command, so no command may declare its own `--preview`. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings, and a subcommand that reuses one must take a value only if the root's flag does.
+The preview flag above is available on every command, so no command may declare its own `--preview`. The action of each command added after `.extend()` sees it in its `flags` type, inline `.command()` children at any depth included. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings, and a subcommand that reuses one must take a value only if the root's flag does.
 
 Extension flags configure the invocation, not the command, so [`--input`](/docs/modules/extensions/input) JSON, `schema`, and [MCP](/docs/modules/mcp#tools) tool inputs leave them out. For a flag agents should set, own it through a [provided Context](#dependency-injection) instead.
 
@@ -127,6 +127,8 @@ Only handlers and `noAction` can end an invocation early, and reordering `.exten
 <Callout type="warn">
   Hook flags are **pre-validation values**, not schema outputs. Check values before using them.
 </Callout>
+
+`ctx.flags` types the flags the Extension owns and those of the Contexts its hooks `.use()`, each of which may be `undefined`; any other name, such as a typo, is a compile error. A Context that owns flags, or uses one that does, can be read only once flags are validated: `setup`, `renderer`, flag handlers, and `preRun` leave it out of `ctx`, while `noAction` and `postRun` have it.
 
 See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
 

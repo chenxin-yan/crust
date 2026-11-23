@@ -20,3 +20,10 @@ const testApp = new Crust("work").provide(fakeDatabase).add(query);
 const outcome = await testApp.run(["query"]);
 console.log(outcome.stdout); // => fake: select 1
 //#endregion
+
+//#region provide-option
+const app = new Crust("work").provide(database()).add(query);
+// [!code highlight]
+const swapped = await app.run(["query"], {}, { provide: [fakeDatabase] });
+console.log(swapped.stdout); // => fake: select 1
+//#endregion

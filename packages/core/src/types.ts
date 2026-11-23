@@ -2,8 +2,9 @@ import type { JsonValue } from "@crustjs/utils/json";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferInput, InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
+import type { AnyContextInstance } from "./api/context.ts";
 import type { ExtensionId } from "./identity.ts";
-import type { IsClosedName, IsStaticTuple, IsUnion } from "./validation/shared.ts";
+import type { IsClosedName, IsUnion } from "./validation/shared.ts";
 
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
@@ -65,7 +66,7 @@ export interface OutputSink {
  * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
  * Its output streams are no terminal, and its `stdin` is the process's.
  */
-export interface InvocationOptions<Event = unknown> {
+export interface InvocationOptions<Event = unknown, Replacement = AnyContextInstance> {
 	/** Receives each stdout write live, as it was made: `stdout(text)` arrives as `text` and a newline. */
 	stdout?: (chunk: string | Uint8Array) => void;
 	/** Receives each stderr write live, as it was made. */
@@ -74,9 +75,16 @@ export interface InvocationOptions<Event = unknown> {
 	signal?: AbortSignal;
 	/**
 	 * Receives each value an async generator Command Action yields, as it is yielded,
-	 * after the selected Renderer's `event`. A throw fails the invocation.
+	 * after the selected Renderer's `event`. The action resumes once it returns, or once the
+	 * promise it returns resolves. A throw or rejection fails the invocation.
 	 */
-	onEvent?: (event: Event) => void;
+	onEvent?: (event: Event) => unknown;
+	/**
+	 * Context instances that replace the app's same-name Contexts for this invocation, such as
+	 * test doubles from `factory.of(value)`. `run()` types them against the Contexts the app
+	 * provides at its root.
+	 */
+	provide?: readonly Replacement[];
 }
 
 /**
@@ -127,9 +135,15 @@ export interface ExecuteOptions {
 	signal?: AbortSignal;
 	/**
 	 * Receives each value an async generator Command Action yields, as it is yielded,
-	 * after the selected Renderer's `event`. Core never prints events. A throw fails the invocation.
+	 * after the selected Renderer's `event`. Core never prints events. The action resumes once it
+	 * returns, or once the promise it returns resolves. A throw or rejection fails the invocation.
 	 */
-	onEvent?: (event: unknown) => void;
+	onEvent?: (event: unknown) => unknown;
+	/**
+	 * Context instances that replace the app's same-name Contexts for this invocation, such as
+	 * test doubles from `factory.of(value)`; see {@link InvocationOptions.provide}.
+	 */
+	provide?: readonly AnyContextInstance[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -513,7 +527,9 @@ type TypedFlagFields<T extends Exclude<ValueType, "string">, Default> = {
 	 */
 	negatable?: T extends "boolean" ? true : never;
 	/** Use `type: "string"` with `parse` for custom parsing. */
-	parse?: never;
+	parse?: {
+		readonly FIX_PARSE: '`parse` is for string flags: use type: "string" with parse';
+	};
 } & (T extends "number" | "integer" ? NumberRange : NoRange);
 
 type CoreFlagFields<T extends ValueType, Default, ParseOutput> = T extends "string"
@@ -805,7 +821,8 @@ type ExclusiveValue<M, Input extends boolean> = {
 /**
  * Infer the resolved type for a single FlagDef:
  *
- * - **multiple** → wraps the resolved type in an array
+ * - **multiple** → wraps the resolved type in an array: `[primitive, ...primitive[]]` when
+ *   required without a default, like a required variadic argument
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  */
@@ -818,8 +835,8 @@ type InferFlagValue<F extends FlagDef> = F extends {
 		: F extends { type: "count" }
 			? number
 			: F extends { multiple: true }
-				? F extends { required: true }
-					? ResolveBaseType<F>[]
+				? F extends { required: true; default?: never }
+					? [ResolveBaseType<F>, ...ResolveBaseType<F>[]]
 					: // See InferArgValue: narrow on default presence. With `parse`,
 						// the raw default is `string[]` while ResolveBaseType<F> is the
 						// parsed element type.
@@ -892,11 +909,11 @@ type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
 									? D extends { type: infer T extends ValueType }
 										? Resolve<T>
 										: never
-									: IsStaticTuple<Choices> extends true
-										? IsClosedName<Choices[number]> extends true
-											? Choices[number]
-											: never
-										: never
+									: // A list built at runtime types its input as its element type; a
+										// conditional pair of lists proves neither list's members.
+										IsUnion<Choices> extends true
+										? never
+										: Choices[number]
 								: never
 							: D extends { parse: (raw: string) => infer _ParseOutput }
 								? string
@@ -909,8 +926,8 @@ type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extend
 	? never
 	: D extends { variadic: VariadicMode }
 		? RequiredArgNames<[D]> extends never
-			? Value[]
-			: [Value, ...Value[]]
+			? readonly Value[]
+			: readonly [Value, ...Value[]]
 		: "variadic" extends keyof D
 			? [Extract<D["variadic"], VariadicMode>] extends [never]
 				? Value
@@ -919,7 +936,9 @@ type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extend
 type InputFlagValue<D, Value = InputBaseValue<D>> = [Value] extends [never]
 	? never
 	: D extends { multiple: true }
-		? Value[]
+		? D extends { required: true; default?: never }
+			? readonly [Value, ...Value[]]
+			: readonly Value[]
 		: "multiple" extends keyof D
 			? true extends D["multiple"]
 				? never

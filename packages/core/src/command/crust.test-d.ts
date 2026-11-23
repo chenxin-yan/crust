@@ -232,9 +232,8 @@ function _typecheckExtensionOwnedHookFlags() {
 			// Schema flags reflect the raw syntax token, not the schema output.
 			type _endpoint = Expect<Equal<typeof ctx.flags.endpoint, string | undefined>>;
 			type _tags = Expect<Equal<typeof ctx.flags.tags, string[] | undefined>>;
-			type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
-			const commandFlag: unknown = ctx.flags.commandFlag;
-			void commandFlag;
+			// @ts-expect-error A flag the Extension neither owns nor reaches through a Context is untyped.
+			void ctx.flags.commandFlag;
 		});
 }
 
@@ -256,4 +255,29 @@ function _typecheckNestedRecipeChildrenDoNotOwnRecursiveExtensionFlags() {
 	const deep = defineCommand("deep", (command) => command);
 	const app = new Crust("app").extend(trace).command("x", (c) => c.add(deep).action(() => {}));
 	void app.run(["x", "deep"], { flags: { trace: true } });
+}
+
+// inline .command() children, at any depth, see the recursive Extension flags registered before them
+function _typecheckInlineChildrenSeeRecursiveExtensionFlags() {
+	const logging = defineExtension(defineExtensionId("logging")).flags({
+		trace: { type: "boolean", default: false },
+		root: { type: "string", recursive: false },
+	});
+	new Crust("x").extend(logging).command("group", (group) =>
+		group.command("leaf", (leaf) =>
+			leaf.action(({ flags }) => {
+				type _trace = Expect<Equal<typeof flags.trace, boolean>>;
+				// @ts-expect-error -- a root-only flag does not reach children
+				void flags.root;
+			}),
+		),
+	);
+}
+
+// `.use()` on an app says what to write instead
+function _typecheckUseOnAnAppNamesProvide() {
+	const db = defineContext("db").setup(() => 1);
+	// @ts-expect-error -- FIX_USE_ON_APP: an app supplies a Context with .provide(db())
+	new Crust("x").use(db);
+	new Crust("x").provide(db());
 }

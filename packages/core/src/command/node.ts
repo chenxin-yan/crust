@@ -124,12 +124,26 @@ export function createCommandNode(name: string): CommandNode {
 	};
 }
 
-/** Register one effective flag and its source-owned state with a single collision policy. */
+/** Who declares the existing flag `name` on `node`, for collision messages; `undefined` for the command. */
+function existingFlagOwner(node: CommandNode, name: string): string | undefined {
+	if (Object.hasOwn(node.localFlags, name)) return undefined;
+	for (const [context, flags] of node.flagContexts) {
+		if (flags.includes(name)) return `Context "${context}"`;
+	}
+	const extension = node.extensionFlags?.get(name);
+	return extension === undefined ? "a Context" : `Extension "${extension}"`;
+}
+
+/**
+ * Register one effective flag and its source-owned state with a single collision policy.
+ * `owner` names a Context that owns the flag, for the collision message.
+ */
 export function registerFlag(
 	node: CommandNode,
 	name: string,
 	def: FlagDef,
 	source: "local" | "owned",
+	owner?: string,
 ): void {
 	def = normalizeFlag(name, def);
 
@@ -143,9 +157,15 @@ export function registerFlag(
 			)
 			.find((existing) => existing !== undefined);
 		if (existingName !== undefined) {
+			const extension = node.extensionFlags?.get(name);
+			const newOwner =
+				source === "local"
+					? undefined
+					: (owner ?? (extension === undefined ? "a Context" : `Extension "${extension}"`));
+			const of = (by: string | undefined) => (by === undefined ? "" : ` of ${by}`);
 			throw new CrustError(
 				"DEFINITION",
-				`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
+				`Flag "${name}"${of(newOwner)} collides with existing flag "${existingName}"${of(existingFlagOwner(node, existingName))} on command "${node.meta.name}"`,
 				{ subject: "flag", name, reason: "flag-collision" },
 			);
 		}
@@ -189,7 +209,9 @@ export function installContextFlags(
 		const installed = (flagContexts ?? node.flagContexts).get(contextName) ?? [];
 		const added = Object.keys(ownedFlags).filter((flag) => !installed.includes(flag));
 		if (added.length === 0) continue;
-		for (const flag of added) registerFlag(node, flag, ownedFlags[flag]!, "owned");
+		for (const flag of added) {
+			registerFlag(node, flag, ownedFlags[flag]!, "owned", `Context "${contextName}"`);
+		}
 		(flagContexts ??= new Map(node.flagContexts)).set(contextName, [...installed, ...added]);
 	}
 	if (flagContexts) node.flagContexts = flagContexts;

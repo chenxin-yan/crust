@@ -1302,14 +1302,27 @@ describe("api with json()", () => {
 		});
 	});
 
-	it("streams --paginate pages as NDJSON events, ending with an error line on a non-2xx page", async () => {
-		stubFetch(({ url }) =>
-			url.endsWith("page=3")
-				? new Response("gone", { status: 410, statusText: "Gone" })
-				: new Response(`{ "page": ${url.endsWith("page=2") ? 2 : 1} }`),
-		);
+	it("returns every --paginate page body in one array under --json", async () => {
+		stubFetch(({ url }) => new Response(`{ "page": ${url.endsWith("page=2") ? 2 : 1} }`));
 		let pagesSeen = 0;
-		const app = jsonApp({ paginate: () => ({ path: `/users?page=${++pagesSeen + 1}` }) });
+		const app = jsonApp({
+			paginate: () => (pagesSeen++ === 0 ? { path: "/users?page=2" } : undefined),
+		});
+
+		expect(await captureExecute(app, ["api", "/users", "--paginate", "--json"])).toEqual({
+			stdout: '[{"page":1},{"page":2}]\n',
+			stderr: "",
+			exitCode: 0,
+		});
+	});
+
+	it("fails --paginate under --json on a non-2xx page, printing no page", async () => {
+		stubFetch(({ url }) =>
+			url.endsWith("page=2")
+				? new Response("gone", { status: 410, statusText: "Gone" })
+				: new Response('{ "page": 1 }'),
+		);
+		const app = jsonApp({ paginate: () => ({ path: "/users?page=2" }) });
 		const { stdout, stderr, exitCode } = await captureExecute(app, [
 			"api",
 			"/users",
@@ -1317,31 +1330,11 @@ describe("api with json()", () => {
 			"--json",
 		]);
 
-		expect(stdout.split("\n")).toEqual([
-			'{"type":"event","data":{"page":1}}',
-			'{"type":"event","data":{"page":2}}',
-			'{"type":"error","error":{"message":"GET /users: HTTP 410 Gone","details":{"status":410}}}',
-			"",
-		]);
-		expect({ stderr, exitCode }).toEqual({ stderr: "gone\n", exitCode: 1 });
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+		expect(stderr).toContain("GET /users: HTTP 410 Gone");
 	});
 
-	it("ends --paginate pages with a result line", async () => {
-		stubFetch(() => new Response("[1]"));
-		const { stdout, exitCode } = await captureExecute(jsonApp({ paginate: () => undefined }), [
-			"api",
-			"/users",
-			"--paginate",
-			"--json",
-		]);
-
-		expect({ stdout, exitCode }).toEqual({
-			stdout: '{"type":"event","data":[1]}\n{"type":"result"}\n',
-			exitCode: 0,
-		});
-	});
-
-	it("ends --paginate with an error line on a binary page or one that is not UTF-8", async () => {
+	it("fails --paginate under --json on a binary page or one that is not UTF-8", async () => {
 		for (const contentType of ["application/octet-stream", "application/json"]) {
 			stubFetch(({ url }) =>
 				url.endsWith("page=2")
@@ -1354,21 +1347,17 @@ describe("api with json()", () => {
 			const app = jsonApp({
 				paginate: () => (pagesSeen++ === 0 ? { path: "/users?page=2" } : undefined),
 			});
-			const { stdout, exitCode } = await captureExecute(app, [
+			const { stdout, stderr, exitCode } = await captureExecute(app, [
 				"api",
 				"/users",
 				"--paginate",
 				"--json",
 			]);
 
-			expect({ stdout: stdout.split("\n"), exitCode }).toEqual({
-				stdout: [
-					'{"type":"event","data":[1]}',
-					`{"type":"error","error":{"message":"api: a --paginate page body is binary (${contentType}); --paginate prints only text and JSON bodies"}}`,
-					"",
-				],
-				exitCode: 1,
-			});
+			expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+			expect(stderr).toContain(
+				`api: a --paginate page body is binary (${contentType}); --paginate prints only text and JSON bodies`,
+			);
 		}
 	});
 

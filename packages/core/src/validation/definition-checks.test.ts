@@ -140,7 +140,6 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 	["invalid-alias", () => defineCommand("a", { aliases: ["b c"] }, action)],
 	["invalid-alias", () => defineCommand("a", { aliases: [""] }, action)],
 	["alias-collision", () => defineCommand("a", { aliases: ["a"] }, action)],
-	["alias-collision", () => defineCommand("a", { aliases: ["b"] }, action).as("b")],
 	[
 		"command-collision",
 		() => new Crust("cli").add(defineCommand("a", action)).add(defineCommand("a", action)),

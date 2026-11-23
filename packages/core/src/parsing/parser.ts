@@ -181,7 +181,8 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 	const { default: defaultValue, parse } = def;
 	if (defaultValue === undefined) return undefined;
 
-	if (parse) {
+	// A function: the non-string flag types' `parse` is only a diagnostic.
+	if (typeof parse === "function") {
 		if (Array.isArray(defaultValue)) {
 			return defaultValue.map((v, i) => invokeParse(parse, String(v), label, i));
 		}
@@ -215,7 +216,7 @@ function coerceToken(
 ): ParsedArgValue {
 	if (def.schema && def.type !== "json") return raw;
 	if (def.choices) validateChoice(raw, def.choices, label);
-	if (def.parse) return invokeParse(def.parse, raw, label, index);
+	if (typeof def.parse === "function") return invokeParse(def.parse, raw, label, index);
 	return coerceValue(raw, def, label);
 }
 

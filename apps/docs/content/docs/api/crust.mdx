@@ -23,7 +23,7 @@ Exact overloads and generic constraints live in [`command/crust.ts`](https://git
 - Successful materialization is cached; a recipe that throws may run again on a later attempt. Don't rely on recipe side effects.
 - `.use(logging)` declares demand for a Context factory; `.provide(logging())` supplies an instance. A reusable definition's `ctx` holds the Contexts it declares with [`.use()`](#usefactories) or provides, and the Contexts their setup uses, transitively.
 - A definition demands the Contexts it declares with `.use()`, plus those demanded by the commands it adds with `.add()` or `.command()` that it doesn't provide itself. TypeScript checks the demands where the definition is added; the root reports one that nothing provides. At runtime, they are checked when the recipe materializes against the providers where it was added.
-- `definition.as(name)` returns the same definition under another name, so one definition can be added twice. Its aliases travel with it and must stay unique among siblings.
+- `definition.as(name)` returns the same definition under another name, so one definition can be added twice. The copy has no aliases: they name the original.
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
 
@@ -242,7 +242,7 @@ const whoami = new Crust("whoami")
 
 Defines the Command Action. It runs after validation, unless an Extension's flag handler took over (see [invocation order](#invocation-order)). Its awaited return value becomes the `result` of typed `run()` calls, unless [`.output()`](#outputschema) declares it. A later `.action()` replaces both the action and its result type.
 
-An `async function*` action [streams events](/docs/guide/commands#stream-events): each yielded value is delivered live to the selected [renderer's `event`](/docs/api/types#renderer) and the caller's `onEvent` option, and collected in the outcome's `events`; its `return` value is the result. Crust never prints events. An action that returns an async generator object, an object with `next`, `return`, and `throw` methods and `Symbol.asyncIterator`, streams the same way.
+An `async function*` action [streams events](/docs/guide/commands#stream-events): each yielded value is delivered live to the selected [renderer's `event`](/docs/api/types#renderer) and the caller's `onEvent` option, and collected in the outcome's `events`; its `return` value is the result. Crust never prints events. Only an `async function*` streams: a generator an ordinary action returns is its result, never drained. Forward one with `return yield* watch();`.
 
 ```ts
 const greet = new Crust("greet")
@@ -315,7 +315,7 @@ Editors complete command names, argument and flag names, and the action's result
 - `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Eager authoring checks throw at the builder call; deferred definition errors encountered during `run()` produce a `failed` outcome.
 - Captured output is what was written, decoded as UTF-8, without one final newline: `stdout("a")` then `stdout("b")` captures `"a\nb"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved. Neither is a terminal: `isTTY` is `false` and `columns` is `undefined`. `stdin` is the process's stdin.
 - Default `@crustjs/prompts` and `@crustjs/progress` output is captured into `stderr`. Direct `console` or `process` writes, subprocesses, and files are not captured.
-- `options.stdout` / `options.stderr` also receive each write live, as it was made: `stdout(text)` arrives as `text` and a newline, and bytes as a `Uint8Array`. `options.onEvent` receives each event an async generator action yields, live, typed like the outcome's `events`. `options.signal` cancels the invocation. `run()` never installs a `SIGINT` or `SIGTERM` handler.
+- `options.stdout` / `options.stderr` also receive each write live, as it was made: `stdout(text)` arrives as `text` and a newline, and bytes as a `Uint8Array`. `options.onEvent` receives each event an async generator action yields, live, typed like the outcome's `events`; the action waits for a promise it returns. `options.signal` cancels the invocation. `options.provide` takes Context instances, such as `.of()` test doubles, that replace the app's same-name Contexts for this invocation only: `app.run(["ps"], {}, { provide: [engine.of(fakeEngine)] })`. It is typed against the Contexts the app provides at its root. `run()` never installs a `SIGINT` or `SIGTERM` handler.
 - Preparation is cached per builder and shared by later `run()`, `execute()`, and `snapshot()` calls on it. Pending commands materialize as needed; `snapshot()` visits the full tree.
 
 For terminal interaction in tests, use `execute()` or [`runInteractive`](/docs/modules/testing#runinteractiveapp-argv).
@@ -344,7 +344,8 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 - On macOS and Linux, each write to the default stdout or stderr is made synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
 - On macOS and Linux, a failed write to the default stdout throws from `stdout(text)` and `stdout.write(chunk)`. Once the reader is gone (`app | head -1`, `EPIPE`), it throws an `AbortError` whose `cause` is `"SIGPIPE"` and aborts the invocation's `signal` with it: nothing renders, and the exit code is `141` whatever the action did. No signal is re-raised: Node.js and Bun ignore `SIGPIPE`. Any other error, such as `ENOSPC` from `app > /dev/full`, is thrown as it is and fails the run with exit code `1`. A failed write to the default stderr is ignored.
 - `options.io` replaces the process's streams, such as in tests: `stdout` and `stderr` take an [`OutputSink`](/docs/api/types#outputsink) that receives each write and may report `isTTY` and `columns`, and `stdin` takes an async iterable of text or bytes, such as a Node.js readable stream. An iterable the action did not read to its end is closed when the invocation ends (its `return()` is called), as leaving a `for await` loop does; a Node.js readable is left open and paused. Each one omitted stays the process's. The injected `stderr` also receives default prompt and progress output. It does not provide prompt input. With `io` set, even to `stdin` alone, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running.
-- `options.onEvent` receives each event an async generator action yields, live. Events are never printed.
+- `options.onEvent` receives each event an async generator action yields, live; the action waits for a promise it returns. Events are never printed.
+- `options.provide` replaces the app's same-name Contexts for this invocation, as for `run()`; here it is not checked against the app's Contexts.
 
 Ctrl-C (`SIGINT`) and `SIGTERM` (sent by `docker stop`, Kubernetes, systemd, `timeout`, and CI cancellation):
 

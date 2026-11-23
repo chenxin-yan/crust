@@ -139,6 +139,19 @@ new Crust("build").flags({ verbose }).args(target); // --verbose
 
 Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions are checked where they are consumed. `UnnamedArgDef` is the `defineArg()` definition without its name.
 
+### `InferFlags` and `InferArgs`
+
+`InferFlags<F>` and `InferArgs<A>` are the value types an action receives for a flag record and an argument tuple: the types of its `flags` and `args`. A required `multiple` flag without a default is a non-empty tuple, `[T, ...T[]]`, as a required variadic argument is.
+
+```ts
+import type { FlagsDef, InferFlags } from "@crustjs/core";
+
+const shared = {
+  region: { type: "string", choices: ["us", "eu"], default: "us" },
+} as const satisfies FlagsDef;
+type SharedFlags = InferFlags<typeof shared>; // { region: "us" | "eu" }
+```
+
 ### `MergeFlags`
 
 `MergeFlags<Base, Override>` is `Base & Override` for two flag definition maps.
@@ -216,7 +229,7 @@ type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], reado
 
 `Crust._types` is a type-only view of an application's inferred flags, arguments, Contexts, tree, shape, and root metadata (`rootMeta`); it has no runtime value. `AnyCrust` has no authoring methods; use it for inspection, `execute()`, and genuinely dynamic `run()` calls.
 
-JSON inputs accept JSON primitives, structurally JSON-compatible objects, and arrays; `Date`, `bigint`, and functions are excluded. `url` inputs accept `URL`.
+JSON inputs accept JSON primitives, structurally JSON-compatible objects, and arrays; `Date`, `bigint`, and functions are excluded. `url` inputs accept `URL`. A `multiple` flag or variadic argument takes any array, readonly ones included, and a required one at least one value. A `choices` list built at runtime, such as `readonly Template[]`, types its input as the list's element type. A command alias known only at runtime is no typed path: use the command's name.
 
 ### `RunOutcome<Result, Events>`
 
@@ -313,7 +326,7 @@ app.provide(config()); // runs setup lazily in each invocation
 app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test double
 ```
 
-`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags and sections. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
+`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags and sections. It is assignable wherever the factory's own instance is (`ReturnType<typeof config>`), and it demands nothing: a command that `.use()`s the Context needs only the Context itself, not what the real setup would read. Reading such a dependency through the command's `ctx` then fails with `No provider for Context`. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
 
 ### `ContextSetup` and `ContextBag`
 
@@ -342,7 +355,7 @@ The awaited value a factory produces: `FactoryValueOf<typeof config>` is what `a
 
 ### `UseSource` and `UsedContexts`
 
-For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`.
+For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`. `ContextReplacement<Contexts>` is an instance that can replace one of an app's Contexts (name to value), as `run()`'s `provide` option takes.
 
 ## Extension types
 
@@ -397,7 +410,7 @@ Dynamic or conditional records do not claim typed ownership of hook values. An o
   name="ExtensionContext"
 />
 
-`args` and `flags` are syntax-parsed values. Hooks do not change Command Action types.
+`args` and `flags` are syntax-parsed values. `flags` types the owned flags and those of the Contexts the hooks `.use()`, each possibly `undefined`, and no others. Hooks do not change Command Action types.
 
 #### `commandPathOf(definition)`
 
@@ -457,7 +470,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 - `renderer` runs once after every setup, before any flag handler, with the same context, and returns (or resolves to) the invocation's [`Renderer`](#renderer) or `undefined` for the default. Core awaits it, so it can load a formatter lazily; a throw or rejection fails the invocation, rendered by default. It also runs when a setup throws, so that failure goes through the chosen renderer; if the selector then fails too, the setup failure renders by default. A selector or renderer that throws there never replaces the setup failure. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-renderer`).
 - Flag handlers registered with [`.handle()`](#extensionbuilder) run after every setup. The selected handler ends the invocation as `handled`; `preRun`, validation, and the Command Action don't run.
 - `noAction` runs when the routed command has no Command Action and no flag handler took over, after validation, with the same context, and ends the invocation as `handled`. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-no-action`). Without one, validation runs too; then a command with subcommands fails with a `VALIDATION` error (`Missing command. Available: …`), and any other command completes without a result. A command with subcommands given nothing after its path by `execute()` skips validation, so it reaches `noAction` or `Missing command` even when a required flag is unset.
-- `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
+- `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet, so the `ctx` of `setup`, `renderer`, flag handlers, and `preRun` leaves out the Contexts that own flags or use one that does. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to the selected [renderer's `error`](#renderer), or Core's default rendering without one. A hook that throws ends the chain and the original failure falls through the same way.
 - `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, argv-parse, and typed `run()` input-binding failures skip it; a `bindInput` failure is a failure of the `setup` or `preRun` hook that called it and does not.
 
