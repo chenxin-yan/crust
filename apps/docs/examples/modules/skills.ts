@@ -1,6 +1,6 @@
 //#region extension
 import { Crust, defineCommand } from "@crustjs/core";
-import { skill } from "@crustjs/skills";
+import { skills } from "@crustjs/skills";
 
 const deploy = defineCommand("deploy", { description: "Deploy the app" }, (command) =>
 	command.action(() => {}),
@@ -8,12 +8,12 @@ const deploy = defineCommand("deploy", { description: "Deploy the app" }, (comma
 
 export const app = new Crust("my-cli", { description: "Manage deployments", version: "1.2.3" })
 	.add(deploy)
-	.extend(skill({}));
+	.extend(skills({}));
 //#endregion
 
 //#region write
 import { Crust as WriteCrust, defineCommand as defineWriteCommand } from "@crustjs/core";
-import { skill as writeSkill, writeSkills } from "@crustjs/skills";
+import { skills as writeSkillsExtension, writeSkills } from "@crustjs/skills";
 
 const writeApp = new WriteCrust("my-cli", {
 	description: "Manage deployments",
@@ -24,7 +24,7 @@ const writeApp = new WriteCrust("my-cli", {
 			command.action(() => {}),
 		),
 	)
-	.extend(writeSkill({}));
+	.extend(writeSkillsExtension({}));
 const files = await writeSkills({
 	app: writeApp,
 	outDir: ".crust/artifacts/skills",
@@ -38,7 +38,7 @@ console.log(files);
 
 //#region sections
 import { defineCommand as defineSectionCommand } from "@crustjs/core";
-import { skill as sectionSkill } from "@crustjs/skills";
+import { skills as sectionSkills } from "@crustjs/skills";
 
 export const documentedDeploy = defineSectionCommand(
 	"deploy",
@@ -48,7 +48,7 @@ export const documentedDeploy = defineSectionCommand(
 			{
 				title: "Agent procedure",
 				body: "Inspect preview output.",
-				only: [sectionSkill],
+				only: [sectionSkills],
 			},
 		],
 	},

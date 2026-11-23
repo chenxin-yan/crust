@@ -46,7 +46,7 @@ The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninsta
 
 - A custom `command` name replaces the default command, without the alias. Pass it as a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked.
 - A command name that collides with an app command fails with a `DEFINITION` error when the app prepares.
-- It adds an `Agent skills` section to the root command's documentation, such as help and man pages, listing each packaged skill and its source directory. It uses `except: [skill]`, so generated skills leave it out.
+- It adds an `Agent skills` section to the root command's documentation, such as help and man pages, listing each packaged skill and its source directory. It uses `except: [skills]`, so generated skills leave it out.
 
 During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. A bundle that `crust build` produces does not register the hook, so the CLI it ships does not carry the renderer. At runtime the commands read them from [`artifactPath("skills")`](/docs/api/crust#artifactpathpath), so run `crust build` before using them; until then help shows a note instead of failing.
 
@@ -136,7 +136,7 @@ await uninstallSkill({ name: "my-cli" });
 
 Each command file lists the command's usage, then its `examples` under `## Examples`, its arguments, and its flags; a flag with a `valueName` shows it with its last spelling, such as `` `--memory <bytes>` ``. A required argument or flag includes one whose schema rejects a missing value.
 
-Command metadata sections render as `## Title` blocks in each command's file under `commands/`. Passing the `skill` factory in `only` limits a section to the skills renderer.
+Command metadata sections render as `## Title` blocks in each command's file under `commands/`. Passing the `skills` factory in `only` limits a section to the skills renderer.
 
 Sections with the same exact title share one heading and join their bodies. See [`CommandSectionInput`](/docs/api/types#commandsectioninput) for audience rules.
 

@@ -1,6 +1,6 @@
 import { Crust, defineCommand } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
-import { skill } from "@crustjs/skills";
+import { skills } from "@crustjs/skills";
 
 const deploy = defineCommand(
 	"deploy",
@@ -14,7 +14,7 @@ const app = new Crust("my-cli", {
 })
 	// [!code highlight:2]
 	.extend(help()) // --help for humans
-	.extend(skill({})) // SKILL.md for agents
+	.extend(skills({})) // SKILL.md for agents
 	.add(deploy);
 
 await app.execute();

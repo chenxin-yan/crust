@@ -7,7 +7,7 @@ export type { WriteSkillsOptions } from "./build.ts";
 export { detectInstalledAgents, getUniversalAgents } from "./agents.ts";
 export type { AgentClass, AgentTarget, Scope } from "./agents.ts";
 export { SkillConflictError, SkillSourceConflictError } from "./errors.ts";
-export { skill } from "./extension.ts";
+export { skills } from "./extension.ts";
 export type { SkillExtension } from "./extension.ts";
 export { getSkillStatus, installSkill, uninstallSkill } from "./install.ts";
 export { isValidSkillName } from "./skill-name.ts";

@@ -14,8 +14,8 @@ it("leaves the skill renderer out of a Crust-built bundle", () => {
 		writeFileSync(
 			entry,
 			`import { Crust } from ${JSON.stringify(fileURLToPath(import.meta.resolve("@crustjs/core")))};
-import { skill } from ${JSON.stringify(fileURLToPath(new URL("./index.ts", import.meta.url)))};
-await new Crust("demo").extend(skill({})).action(() => {}).execute();
+import { skills } from ${JSON.stringify(fileURLToPath(new URL("./index.ts", import.meta.url)))};
+await new Crust("demo").extend(skills({})).action(() => {}).execute();
 `,
 		);
 		const outfile = join(dir, "cli.js");

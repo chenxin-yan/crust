@@ -9,5 +9,5 @@ vi.mock("@crustjs/progress", () => {
 });
 
 it("does not load prompts or progress when imported", async () => {
-	await expect(import("./index.ts")).resolves.toHaveProperty("skill");
+	await expect(import("./index.ts")).resolves.toHaveProperty("skills");
 });

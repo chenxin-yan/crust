@@ -354,13 +354,13 @@ Preparing Command Snapshot for my-cli...
 
 - Return file contents; don't write into the build output yourself.
 - Put files under an Extension-specific directory such as `acme-manifest/`. Loose files at the root of `.crust/artifacts/` aren't copied into staged packages.
-- Hooks run in registration order, and section callbacks refresh after each one, so later hooks see sections based on earlier files. For example, register `skill()` before `man()` to list packaged skills in the man page.
+- Hooks run in registration order, and section callbacks refresh after each one, so later hooks see sections based on earlier files. For example, register `skills()` before `man()` to list packaged skills in the man page.
 
 See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildFile`](/docs/api/types#buildfile) for output and path rules.
 
 ## Section consumers
 
-The built-in `help`, `man`, `schema`, and `skill` Extensions render sections for different audiences. A custom generator can do the same with `visibleSectionsFor()`:
+The built-in `help`, `man`, `schema`, and `skills` Extensions render sections for different audiences. A custom generator can do the same with `visibleSectionsFor()`:
 
 <include lang="ts" meta='title="web-docs.ts" twoslash'>
   ../../../examples/guide/extensions-consumer.ts
