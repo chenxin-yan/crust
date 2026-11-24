@@ -329,7 +329,12 @@ describe("generated commands", () => {
 			},
 		});
 		expect(
-			await captureExecute(things, ["edit-thing", "1", "--request-body", '{"id":9007199254740993}']),
+			await captureExecute(things, [
+				"edit-thing",
+				"1",
+				"--request-body",
+				'{"id":9007199254740993}',
+			]),
 		).toMatchObject({
 			stderr: expect.stringContaining('the body field "id" must be an integer from'),
 			exitCode: 2,
