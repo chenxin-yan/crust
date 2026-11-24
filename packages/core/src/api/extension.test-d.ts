@@ -462,4 +462,53 @@ function _replacingAnExtensionIdRecomputesItsFlags() {
 		.action(({ flags }) => {
 			type _level = Expect<Equal<typeof flags.level, string>>;
 		});
+	// An Extension that adds commands keeps its id.
+	const withCommand = defineExtension(id)
+		.flags({ format: { type: "string", default: "text" } })
+		.add(defineCommand("hello", (c) => c.action(() => {})));
+	new Crust("x")
+		.extend(withCommand)
+		.extend(replacement)
+		.action(({ flags }) => {
+			// @ts-expect-error -- the replacement does not contribute format
+			void flags.format;
+		});
+}
+
+function _onlyACertainRegistrationRetiresAnId() {
+	const condition = Math.random() > 0.5;
+	const old = defineExtension(defineExtensionId("test:old")).flags({
+		q: { type: "string", required: true },
+	});
+	const same = defineExtension(defineExtensionId("test:old"));
+	const other = defineExtension(defineExtensionId("test:other"));
+	const maybe = defineExtension(defineExtensionId(condition ? "test:old" : "test:other"));
+	const rest: (typeof same)[] = [];
+	// @ts-expect-error -- a union id may be the other one: q stays required
+	void new Crust("x").extend(old).extend(maybe).run([]);
+	// @ts-expect-error -- a conditional list
+	void new Crust("x")
+		.extend(old)
+		.extend(...(condition ? ([same] as const) : ([other] as const)))
+		.run([]);
+	// @ts-expect-error -- a list that may be empty
+	void new Crust("x")
+		.extend(old)
+		.extend(...(condition ? ([same] as const) : ([] as const)))
+		.run([]);
+	// @ts-expect-error -- a conditional element
+	void new Crust("x")
+		.extend(old)
+		.extend(condition ? same : other)
+		.run([]);
+	// @ts-expect-error -- an open list
+	void new Crust("x")
+		.extend(old)
+		.extend(...rest)
+		.run([]);
+	// A certain replacement, alone or beside another Extension, retires q.
+	void new Crust("x").extend(old).extend(same).run([]);
+	void new Crust("x").extend(old).extend(other, same).run([]);
+	// @ts-expect-error -- another id keeps q required
+	void new Crust("x").extend(old).extend(other).run([]);
 }

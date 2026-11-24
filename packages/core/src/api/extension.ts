@@ -792,7 +792,7 @@ export interface ExtensionBuilder<
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds
-	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys>;
+	): ExtensionBuilder<Use, Provide, OF, readonly [...Commands, ...Ds], MetaKeys, Id>;
 	/** See {@link ExtensionHooks.setup}. */
 	setup(
 		hook: ExtensionHook<"setup", Use, OF, MetaKeys>,

@@ -641,15 +641,21 @@ type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extend
 	? Base & Next
 	: { [K in keyof Base as K extends LiteralKeys<Next> ? never : K]: Base[K] } & Next;
 
-/** The flag names each literal Extension id contributed so far; see `ReplacedFlagNames`. */
+/** `readonly [id, flag names]` for each literal Extension id registered so far; see `ReplacedFlagNames`. */
 type ExtensionFlagNamesOf<S extends AnyBuilderFacts> = Exclude<S["extensionFlagNames"], undefined>;
 
 /** An Extension's literal id; `never` for a runtime-only one, which the types cannot follow. */
 type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
 	? string extends Id
 		? never
-		: Id
+		: IsUnion<Id> extends true
+			? never
+			: Id
 	: never;
+
+// Only a registration that certainly happens retires an id: not a conditional or open list.
+type DefiniteExtensionIds<Es extends readonly AnyExtension[]> =
+	IsStaticTuple<Es> extends true ? LiteralExtensionId<Es[number]> : never;
 
 /**
  * Flag names an Extension contributes, for a later same-id registration; an open record names
@@ -664,28 +670,28 @@ type ContributedFlagNames<E> = keyof (ExtensionOwnFlags<E> &
 
 // A same-id registration replaces the earlier one at runtime, so the flags only the earlier one
 // contributed are gone; the later one's own come back through `ReplaceEntries`.
-type ReplacedFlagNames<S extends AnyBuilderFacts, Es extends readonly AnyExtension[]> = {
-	[K in keyof ExtensionFlagNamesOf<S>]: K extends LiteralExtensionId<Es[number]>
-		? ExtensionFlagNamesOf<S>[K]
-		: never;
-}[keyof ExtensionFlagNamesOf<S>];
+type ReplacedFlagNames<S extends AnyBuilderFacts, Es extends readonly AnyExtension[]> = Extract<
+	ExtensionFlagNamesOf<S>,
+	readonly [DefiniteExtensionIds<Es>, unknown]
+>[1];
 
 type WithoutNames<Base, Names> = [Names] extends [never]
 	? Base
 	: { [K in keyof Base as K extends Names ? never : K]: Base[K] };
 
-// Resolved with `infer R`, so a chain of `.extend()` calls keeps one flat record.
+// A flat union of pairs: a nested record per `.extend()` call hits TS2589 at about 48 calls.
 type RegisteredFlagNames<Names extends object, Es extends readonly AnyExtension[]> = [
-	LiteralExtensionId<Es[number]>,
+	DefiniteExtensionIds<Es>,
 ] extends [never]
 	? Names
-	: {
-				[K in keyof Names as K extends LiteralExtensionId<Es[number]> ? never : K]: Names[K];
-		  } & {
-				[E in Es[number] as LiteralExtensionId<E>]: ContributedFlagNames<E>;
-		  } extends infer R extends object
-		? R
-		: never;
+	: | Exclude<Names, readonly [DefiniteExtensionIds<Es>, unknown]>
+		| (Es[number] extends infer E
+				? E extends unknown
+					? [LiteralExtensionId<E>] extends [never]
+						? never
+						: readonly [LiteralExtensionId<E>, ContributedFlagNames<E>]
+					: never
+				: never);
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
@@ -877,7 +883,7 @@ type BuilderFacts<
 	Output extends OutputState | undefined = InitialOutputState,
 	// Extension-provided Context flags registered so far; see `TreeWithInlineFlags`.
 	InlineFlags extends FlagsDef = {},
-	// Flag names each literal Extension id contributed; see `ReplacedFlagNames`.
+	// `readonly [id, flag names]` per literal Extension id registered; see `ReplacedFlagNames`.
 	ExtensionFlagNames extends object = {},
 > = {
 	readonly extensionFlagNames: ExtensionFlagNames;
@@ -1790,7 +1796,8 @@ export class Crust<
 	 * registration — its contributions and providers replace the earlier ones
 	 * and its hooks run once, at the later position. A literal flag or command name
 	 * the later registration contributes again takes its type. For a literal id
-	 * registered again in a later call, the flags only the earlier registration
+	 * certainly registered again in a later call (not through a conditional
+	 * Extension or list, or an array of unknown length), the flags only the earlier registration
 	 * contributed leave the types too, except in inline `.command()` children declared
 	 * between the two calls, for flags of Contexts the earlier one's hooks `.use()`, and
 	 * when an explicit `MetaKeys` argument (`defineExtension<"version">(id)`) widened the
