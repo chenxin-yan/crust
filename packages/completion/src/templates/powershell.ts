@@ -8,10 +8,11 @@ import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.t
  * fixed `Register-ArgumentCompleter -Native` script block that walks it.
  * The walk mirrors the bash script's: words up to the first positional
  * route through subcommands, a value flag's spelling takes the next word,
- * `--` ends options, and a `"passthrough"` argument takes every word after
- * the first positional. The cursor then completes a flag spelling, a flag's
- * value (also as `--name=value`), or a positional slot together with the
- * subcommands at the first one.
+ * `--` ends options, a lone `-` is a positional, and a `"passthrough"`
+ * argument takes every word from the first positional on, `--` included.
+ * The cursor then completes a flag spelling, a flag's value (also as
+ * `--name=value`), or a positional slot together with the subcommands at
+ * the first one.
  *
  * Values are a definition's `choices`, or the lines `<bin> __complete`
  * prints for its `complete` function. Without values the block returns
@@ -132,8 +133,10 @@ Register-ArgumentCompleter -Native -CommandName ${bin} -ScriptBlock {
 	foreach ($word in $words) {
 		if ($null -ne $valueOf) { $valueOf = $null; continue }
 		if ($endOfOptions) { $after++; continue }
-		if ($word -ceq '--') { $endOfOptions = $true; continue }
-		if (-not $noFlags -and $word.StartsWith('-')) {
+		# From a "passthrough" argument's first positional on, every word fills a slot, as Core binds it.
+		if (-not $noFlags -and $word -ceq '--') { $endOfOptions = $true; continue }
+		# A lone - (stdin) is a positional.
+		if (-not $noFlags -and $word.Length -gt 1 -and $word.StartsWith('-')) {
 			if (-not ($word.StartsWith('--') -and $word.Contains('='))) {
 				$valueOf = Find-ValueFlag $node $word
 			}

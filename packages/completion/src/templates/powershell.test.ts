@@ -47,6 +47,33 @@ const completeFixture: CompletionCommand = {
 	],
 };
 
+const passthroughFixture: CompletionCommand = {
+	name: "mycli",
+	flags: [],
+	args: [],
+	subCommands: [
+		{
+			name: "box",
+			flags: [
+				{ name: "rm", spellings: ["--rm"], type: "boolean", takesValue: false },
+				{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
+			],
+			args: [
+				{ name: "image", type: "string", required: true, variadic: false, choices: ["img"] },
+				{ name: "command", type: "string", required: false, variadic: false, choices: ["cmd"] },
+				{
+					name: "tail",
+					type: "string",
+					required: false,
+					variadic: "passthrough",
+					choices: ["tail"],
+				},
+			],
+			subCommands: [],
+		},
+	],
+};
+
 describe("renderPowerShell", () => {
 	it("registers a native completer for the command, after a header naming the regenerate command", () => {
 		const script = renderPowerShell(fixture, "mycli", "1.0.0", "completions");
@@ -91,6 +118,7 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 	let tmpDir: string;
 	let scriptPath: string;
 	let completeScriptPath: string;
+	let passthroughScriptPath: string;
 
 	beforeAll(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "pwsh-completion-"));
@@ -100,6 +128,12 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 		await writeFile(
 			completeScriptPath,
 			renderPowerShell(completeFixture, "mycli", "1.0.0"),
+			"utf8",
+		);
+		passthroughScriptPath = join(tmpDir, "passthrough.ps1");
+		await writeFile(
+			passthroughScriptPath,
+			renderPowerShell(passthroughFixture, "mycli", "1.0.0"),
 			"utf8",
 		);
 		// Answers `mycli __complete -- <address> <word>` as the hidden command would.
@@ -152,6 +186,18 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 			"us-two",
 		]);
 		expect(await complete(completeScriptPath, "mycli deploy api")).toEqual(["api-one", "api-two"]);
+	});
+
+	it('offers no flags after the first positional of a command with a "passthrough" argument', async () => {
+		expect(await complete(passthroughScriptPath, "mycli box --")).toEqual(["--name", "--rm"]);
+		expect(await complete(passthroughScriptPath, "mycli box img ")).toEqual(["cmd"]);
+		// From the first positional on, every word fills a slot, as Core binds it.
+		expect(await complete(passthroughScriptPath, "mycli box img --rm ")).toEqual(["tail"]);
+		expect(await complete(passthroughScriptPath, "mycli box img --name x ")).toEqual(["tail"]);
+		expect(await complete(passthroughScriptPath, "mycli box img -- ")).toEqual(["tail"]);
+		expect(await complete(passthroughScriptPath, "mycli box --rm --name x img ")).toEqual(["cmd"]);
+		// A lone `-` (stdin) is a positional.
+		expect(await complete(passthroughScriptPath, "mycli box - ")).toEqual(["cmd"]);
 	});
 });
 
