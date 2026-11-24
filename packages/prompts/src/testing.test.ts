@@ -40,6 +40,15 @@ describe("createPromptIO screen", () => {
 		expect(harness.screen()).toBe(`${"a".repeat(15)}\nbc`);
 	});
 
+	it("keeps a line break written into a wrapped row when resize() rewraps", () => {
+		const harness = createPromptIO();
+		harness.resize(10, 5);
+		harness.io.output.write("abcdefghijkl\x1B[1A\r1234567890\nXY");
+		harness.resize(80, 5);
+
+		expect(harness.screen()).toBe("1234567890\nXY");
+	});
+
 	it("delays the wrap at the last column until another character arrives", () => {
 		const harness = createPromptIO();
 		harness.io.output.write(`${"a".repeat(80)}\r\nnext`);

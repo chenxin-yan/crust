@@ -101,6 +101,8 @@ class FakeTerminal {
 				this.row++;
 				this.column = 0;
 				this.ensureLine();
+				// An explicit line break ends the wrapped line, also in a row written before.
+				this.continued[this.row] = false;
 				index++;
 			} else {
 				// Segment the printable run so wide and combined characters land in whole cells.

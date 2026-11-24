@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import * as readline from "node:readline";
+import { stripVTControlCharacters } from "node:util";
 
 import { stringWidth } from "@crustjs/style";
 import {
@@ -148,6 +149,8 @@ const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
 const SHOW_CURSOR = `${ESC}?25h`;
 
+const graphemes = new Intl.Segmenter();
+
 /**
  * Count the number of physical terminal lines a string occupies,
  * accounting for line wrapping based on terminal column width.
@@ -160,12 +163,19 @@ const SHOW_CURSOR = `${ESC}?25h`;
  * @returns Number of physical lines the content occupies
  */
 function physicalLineCount(content: string, columns: number): number {
-	const lines = content.split("\n");
 	let count = 0;
-	for (const line of lines) {
-		const width = stringWidth(line);
-		// An empty line still occupies one physical row
-		count += width === 0 ? 1 : Math.ceil(width / columns);
+	for (const line of content.split("\n")) {
+		count++;
+		let column = 0;
+		for (const { segment } of graphemes.segment(stripVTControlCharacters(line))) {
+			const width = stringWidth(segment);
+			// A wide character that does not fit in the last column starts the next row.
+			if (column > 0 && column + width > columns) {
+				count++;
+				column = 0;
+			}
+			column += width;
+		}
 	}
 	return count;
 }
@@ -388,6 +398,7 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 		const cancelled = () => new DOMException("Prompt was cancelled.", "AbortError");
 
 		function onKeypress(ch: string | undefined, key?: KeyInfo): void {
+			if (isCleanedUp) return;
 			// Ctrl+C or Ctrl+D (end of input) → reject with a standard AbortError
 			const isCancelKey = key?.ctrl === true && (key.name === "c" || key.name === "d");
 			// Keys typed ahead of it in the same chunk run first, so a submit there hands it to the next prompt.
@@ -396,6 +407,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: TerminalIO): Pr
 				return;
 			}
 			unhandled.push([ch, key]);
+			// A handler still running after this tick waits on something; cancel as a later Ctrl+C would.
+			if (isCancelKey) setTimeout(() => !isCleanedUp && handling && cancel(cancelled()), 0);
 
 			const event: KeypressEvent = {
 				char: ch ?? "",

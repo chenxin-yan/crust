@@ -357,6 +357,28 @@ describe("runPrompt", () => {
 		await expect(runPrompt(line, harness.io)).rejects.toMatchObject({ name: "AbortError" });
 	});
 
+	it("cancels the next prompt once when Ctrl+C and Ctrl+D follow a submit in the same chunk", async () => {
+		const harness = createPromptIO();
+		const first = runPrompt({ ...submitOnKey, renderSubmitted: () => "first" }, harness.io);
+		harness.type("\r\x03\x04");
+		await first;
+		const second = runPrompt({ ...submitOnKey, renderCancelled: () => "x second" }, harness.io);
+
+		await expect(second).rejects.toMatchObject({ name: "AbortError" });
+		expect(harness.screen()).toBe("first\nx second");
+	});
+
+	it("cancels on a Ctrl+C typed in the same chunk as a key whose handler never settles", async () => {
+		const harness = createPromptIO();
+		const promise = runPrompt(
+			{ ...submitOnKey, handleKey: () => new Promise<undefined>(() => {}) },
+			harness.io,
+		);
+		harness.type("a\x03");
+
+		await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+	});
+
 	it("cancels at once on Ctrl+D while a key handler is still running", async () => {
 		const harness = createPromptIO();
 		const pending = Promise.withResolvers<undefined>();
@@ -383,6 +405,19 @@ describe("runPrompt", () => {
 		recorded.output.emit("resize");
 		await tick();
 		expect(recorded.raw).toContain("\x1B[2A");
+
+		harness.keys("return");
+		await promise;
+	});
+
+	it("counts a wide character that does not fit the last column as starting a new row", async () => {
+		const harness = createPromptIO();
+		const promise = runPrompt({ ...submitOnKey, render: () => "界界界" }, harness.io);
+
+		// At 3 columns each two-column character takes a row of its own: 3 rows, not 6 / 3.
+		harness.resize(3, 24);
+		await tick();
+		expect(harness.screen()).toBe("界\n界\n界");
 
 		harness.keys("return");
 		await promise;
