@@ -1,4 +1,4 @@
-import { Crust, defineContext } from "@crustjs/core";
+import { Crust, type CrustCommandContext, defineContext } from "@crustjs/core";
 import { defineEnv } from "@crustjs/env";
 import { Context, Effect, Layer } from "effect";
 
@@ -136,6 +136,23 @@ new Crust("cli").provide(config()).action(
 		return yield* service(otherConfig);
 	}),
 );
+// A same-name factory with a wider value is rejected too: the brand is invariant.
+const widerConfig = defineContext("config").setup(() => ({ prefix: "cfg", extra: 1 }));
+new Crust("cli").provide(config()).action(
+	// @ts-expect-error -- ctx.config holds { prefix: string }.
+	handler(function* () {
+		return (yield* service(widerConfig)).extra;
+	}),
+);
+// A handler defined outside .action() annotates its input with the Contexts it pulls.
+const standalone = handler(function* (
+	_input: CrustCommandContext<any, any, { config: { prefix: string } }>,
+) {
+	return (yield* service(config)).prefix;
+});
+new Crust("cli").provide(config()).action(standalone);
+// @ts-expect-error -- no config Context on the path.
+new Crust("cli").provide(db()).action(standalone);
 // A Context the command uses (not only provides) satisfies service().
 new Crust("cli").provide(config()).command("show", (cmd) =>
 	cmd.use(config).action(

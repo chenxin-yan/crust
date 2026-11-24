@@ -31,7 +31,8 @@ declare const ContextServiceBrand: unique symbol;
  * `Value`. {@link handler} accepts it only when the command's `ctx` holds that Context.
  */
 export interface ContextService<Name extends string, Value> {
-	readonly [ContextServiceBrand]: { readonly name: Name; readonly value: Value };
+	// A function-typed `value` makes the brand invariant, so a same-name factory with a wider value is rejected.
+	readonly [ContextServiceBrand]: { readonly name: Name; readonly value: (value: Value) => Value };
 }
 
 /**
@@ -59,7 +60,8 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
  * exits with 130 (143 after SIGTERM, 141 after a closed stdout). Aborting the
  * invocation's `ctx.signal` interrupts the fiber.
  * A compile error saying a service is not assignable to `HandlerInput` means
- * no {@link layer} on the path provides that service.
+ * no {@link layer} on the path provides that service; one naming `ContextService<"x", …>`
+ * means the command's `ctx` has no Context `x` of that value type for {@link service}.
  */
 export function handler<Input extends ActionInput, Out, E>(
 	fn: (input: Input) => Effect.Effect<Out, E, ServicesOf<Input> | HandlerInput>,
