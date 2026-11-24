@@ -44,6 +44,7 @@ const app = new Crust("acme")
 					prompt: "Features",
 				},
 				tags: { type: "string", multiple: true, prompt: "Tags" },
+				verbose: { type: "boolean", multiple: true, prompt: "Verbose?" },
 			})
 			.action(({ args, flags, stdout }) =>
 				stdout(
@@ -80,6 +81,15 @@ const app = new Crust("acme")
 			.args(
 				{ name: "name", type: "string", default: "my-app", prompt: "Project name" },
 				{ name: "dir", type: "string", prompt: "Directory" },
+				// A variadic argument's default is one word.
+				{
+					name: "targets",
+					type: "string",
+					variadic: true,
+					choices: ["web", "api"],
+					default: "api",
+					prompt: "Targets",
+				},
 			)
 			.flags({
 				template: {
@@ -92,15 +102,17 @@ const app = new Crust("acme")
 					type: "string",
 					multiple: true,
 					choices: ["lint", "test"],
-					default: ["test"],
+					// Out of choice order: Enter keeps it as declared.
+					default: ["test", "lint"],
 					prompt: "Features",
 				},
 				git: { type: "boolean", default: true, prompt: "Use git?" },
 				description: { type: "string", prompt: "Description" },
+				config: { type: "json", default: { enabled: true }, prompt: "Config" },
 			})
 			.action(({ args, flags, stdout }) =>
 				stdout(
-					`name=${args.name} dir=${args.dir} template=${flags.template} features=${String(flags.features)} git=${flags.git} description=${flags.description}`,
+					`name=${args.name} dir=${args.dir} targets=${String(args.targets)} template=${flags.template} features=${String(flags.features)} git=${flags.git} description=${flags.description} config=${JSON.stringify(flags.config)}`,
 				),
 			),
 	)
@@ -108,6 +120,30 @@ const app = new Crust("acme")
 		c
 			.args({ name: "from", type: "string" }, { name: "to", type: "string", prompt: "Destination" })
 			.action(({ args, stdout }) => stdout(`copy ${args.from} ${args.to}`)),
+	)
+	.command("exec", (c) =>
+		c
+			.args(
+				{ name: "files", type: "string", variadic: true },
+				{
+					name: "command",
+					type: "string",
+					variadic: "afterDoubleDash",
+					choices: ["lint", "test"],
+					prompt: "Command",
+				},
+			)
+			.action(({ args, stdout }) =>
+				stdout(`exec ${String(args.files)} -- ${String(args.command)}`),
+			),
+	)
+	.command("rename", (c) =>
+		c
+			.args(
+				{ name: "prefix", type: "string", default: "", prompt: "Prefix" },
+				{ name: "name", type: "string", prompt: "Name" },
+			)
+			.action(({ args, stdout }) => stdout(`rename prefix=${args.prefix} name=${args.name}`)),
 	)
 	.add(deploy)
 	.add(db);
@@ -200,6 +236,7 @@ describe("prompts()", () => {
 			exitCode: 0,
 		});
 		expect(run.screen()).not.toContain("Tags");
+		expect(run.screen()).not.toContain("Verbose?");
 	});
 
 	it("keeps every default on Enter, and leaves an optional value without one unset", async () => {
@@ -209,14 +246,26 @@ describe("prompts()", () => {
 			[/Project name/, ""],
 			// A later positional follows the kept default.
 			[/Directory/, "out"],
+			[/Targets/, ""],
 			[/Framework/, ""],
 			[/Features/, ""],
 			[/Use git\?/, ""],
 			[/Description/, ""],
+			[/Config/, ""],
 		);
 		expect(result).toMatchObject({
-			stdout: "name=my-app dir=out template=vue features=test git=true description=undefined\n",
+			stdout:
+				'name=my-app dir=out targets=api template=vue features=test,lint git=true description=undefined config={"enabled":true}\n',
 			stderr: "",
+			exitCode: 0,
+		});
+		expect(run.screen()).toContain("Targets api");
+	});
+
+	it("binds an empty default kept on Enter, so a later positional is asked", async () => {
+		const run = runInteractive(app, ["rename"]);
+		expect(await answer(run, [/Prefix/, ""], [/Name/, "bee"])).toMatchObject({
+			stdout: "rename prefix= name=bee\n",
 			exitCode: 0,
 		});
 	});
@@ -229,6 +278,14 @@ describe("prompts()", () => {
 			exitCode: 0,
 		});
 		expect(run.screen()).not.toContain("Destination");
+	});
+
+	it("asks for a list after -- even when a positional before it is omitted", async () => {
+		const run = runInteractive(app, ["exec"]);
+		expect(await answer(run, [/Command/, "", "space"])).toMatchObject({
+			stdout: "exec  -- lint\n",
+			exitCode: 0,
+		});
 	});
 
 	it("refuses an empty pick for a required list and asks again", async () => {

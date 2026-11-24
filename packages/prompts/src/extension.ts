@@ -50,29 +50,40 @@ async function ask(
 	bindText: (text: string | readonly string[]) => void,
 	bindBoolean: (value: boolean) => void,
 ): Promise<void> {
-	if (def.type === "boolean") {
+	if (def.type === "boolean" && !list) {
 		bindBoolean(await confirm({ message, default: def.default === true }));
 	} else if (def.choices && list) {
-		const preselected = Array.isArray(def.default) ? def.default.map(String) : undefined;
-		bindText(
-			await multiselect({
-				message,
-				choices: def.choices,
-				default: preselected,
-				required: def.required,
-			}),
-		);
+		// A variadic argument's default is one word.
+		const preselected = def.default === undefined ? undefined : [def.default].flat().map(String);
+		const picked = await multiselect({
+			message,
+			choices: def.choices,
+			default: preselected,
+			required: def.required,
+		});
+		// An unchanged pick keeps the default as declared: its order and its repeats.
+		const kept =
+			preselected !== undefined &&
+			picked.length === new Set(preselected).size &&
+			picked.every((value) => preselected.includes(value));
+		bindText(kept ? preselected : picked);
 	} else if (def.choices) {
 		const preselected = typeof def.default === "string" ? def.default : undefined;
 		bindText(await select({ message, choices: def.choices, default: preselected }));
 	} else if (!list && def.type !== "count" && def.type !== "exclusive") {
 		await input({
 			message,
-			// A kept default is bound too, so a later positional argument can follow it; core
-			// parses declared defaults as text, so it converts as declared.
-			default: def.default === undefined ? undefined : String(def.default),
+			// A kept default is bound too, so a later positional argument can follow it. Its text
+			// converts back to the declared value: a `json` default is already parsed, a `url` one is
+			// its href, and core parses a `parse` or `path` default as text.
+			default:
+				def.default === undefined
+					? undefined
+					: def.type === "json"
+						? JSON.stringify(def.default)
+						: String(def.default),
 			validate: (answer) => {
-				if (answer !== "") bindText(answer);
+				if (answer !== "" || def.default === "") bindText(answer);
 				else if (def.required) throw new Error("A value is required");
 			},
 		});
@@ -93,7 +104,11 @@ export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension(PROMPTS
 			// Typed `run()` captures stderr, so it is never a terminal there.
 			if (!ctx.stderr.isTTY || !canPrompt()) return;
 			const missing = (source: string | undefined) => source === undefined || source === "default";
+			let gap = false;
 			for (const arg of ctx.command.args) {
+				// A positional argument cannot follow an omitted one, so asking for it could never
+				// bind; a list after `--` is bound apart from the positionals before it.
+				if (gap && arg.variadic !== "afterDoubleDash") continue;
 				if (arg.prompt !== undefined && missing(ctx.sources.args[arg.name])) {
 					await ask(
 						arg,
@@ -103,8 +118,7 @@ export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension(PROMPTS
 						(value) => ctx.bindInput({ args: { [arg.name]: value } }),
 					);
 				}
-				// A positional argument cannot follow an omitted one, so asking for it could never bind.
-				if (missing(ctx.sources.args[arg.name])) break;
+				gap ||= missing(ctx.sources.args[arg.name]);
 			}
 			for (const [name, flag] of Object.entries(ctx.command.flags)) {
 				if (flag.prompt === undefined || !missing(ctx.sources.flags[name])) continue;
