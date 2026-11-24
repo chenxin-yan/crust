@@ -56,6 +56,7 @@ $ my-cli checkout release
 `complete: (typed) => string[] | Promise<string[]>` on an argument, or on a flag that takes a value, supplies its candidates when the user presses Tab. It receives the word being completed, possibly empty; the shell keeps the values that start with it. Its values replace the definition's `choices` and file completion.
 
 - The generated script runs `my-cli __complete`, a hidden command `completion()` adds, which calls the function and prints one value per line. A value containing a line break or a tab is left out.
+- A required flag that another Extension adds to every command applies to `__complete` too, so completion offers no values until that flag is given. Give such a flag an [`env`](/docs/guide/arguments-and-flags#environment-variables) so the shell can supply it.
 - Bash, zsh, and PowerShell insert each value quoted for the shell. Zsh passes the function the word unquoted; bash passes it as typed, so after `pro\ ` the function receives `pro\ `, backslash included.
 - Errors and output on stderr stay off the terminal; a failing function offers nothing.
 - The key exists in every file of a project that imports `@crustjs/completion`. Without `completion()` in `.extend()`, a `complete` key is a `DEFINITION` error (`unowned-key`), from source and in `crust build`. See [Own a definition key](/docs/guide/extensions#own-a-definition-key).
