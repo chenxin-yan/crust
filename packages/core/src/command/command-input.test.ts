@@ -444,8 +444,8 @@ describe("commandInputSchema", () => {
 		expect(
 			parseCommandInput(await app.snapshot(), {
 				target: { flag: "host", value: "https://example.com/", local: true },
-			}).flags.target,
-		).toEqual({ flag: "host", value: new URL("https://example.com/"), local: true });
+			}).flags,
+		).toEqual({ target: { flag: "host", value: new URL("https://example.com/"), local: true } });
 	});
 
 	it("leaves out a group with no listed member", async () => {
