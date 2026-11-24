@@ -11,6 +11,7 @@ import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help, renderHelp } from "./help.ts";
+import { noColor } from "./no-color.ts";
 
 const stripAnsi = stripVTControlCharacters;
 
@@ -569,6 +570,27 @@ describe("help", () => {
 		const unknownCommand = await captureExecute(app, ["deplyo", "--help"]);
 		expect(unknownCommand.stdout).toBe("");
 		expect(unknownCommand.exitCode).toBe(2);
+	});
+
+	it("help that wins over a mistyped flag follows a typed --no-color or --color", async () => {
+		const app = new Crust("app", { sections: [{ title: "Notes", body: "\x1b[31mred\x1b[39m" }] })
+			.extend(help())
+			.extend(noColor())
+			.action(() => {});
+
+		const plain = await captureExecute(app, ["--typo", "--no-color", "--help"], {
+			env: { FORCE_COLOR: "1" },
+			raw: true,
+		});
+		expect(plain.exitCode).toBe(2);
+		expect(plain.stdout).toContain("Notes:");
+		expect(plain.stdout).not.toContain("\x1b[");
+		const colored = await captureExecute(app, ["--color", "--typo", "--help"], {
+			env: { NO_COLOR: "1" },
+			raw: true,
+		});
+		expect(colored.exitCode).toBe(2);
+		expect(colored.stdout).toContain("\x1b[31mred");
 	});
 
 	it("help({ command: true }) adds help [command...], which prints what --help prints", async () => {

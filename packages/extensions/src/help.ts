@@ -12,6 +12,8 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
+import { withTypedColorFlag } from "./no-color.ts";
+
 const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
 
 /** Options for {@link renderHelp}. */
@@ -105,7 +107,7 @@ const helpFactory: ExtensionFactory<
 			const end = context.argv.indexOf("--");
 			const words = end === -1 ? context.argv : context.argv.slice(0, end);
 			if (!words.includes("-h") && !words.includes("--help")) return;
-			await showHelp(context);
+			await withTypedColorFlag(context, () => showHelp(context));
 			return true;
 		});
 	if (options.command !== true) return shown;
