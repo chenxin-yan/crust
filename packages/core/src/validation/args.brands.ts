@@ -79,14 +79,12 @@ type OrderBrand<Head, AfterOptional extends boolean> = AfterOptional extends tru
 	: unknown;
 
 /** A variadic may precede only a final `"afterDoubleDash"` argument, whose words follow `--`. */
-type HeadPositionBrand<Head, Tail extends readonly unknown[]> = Head extends {
-	variadic: "afterDoubleDash" | "passthrough";
-}
-	? LastPositionError
-	: Head extends { variadic: true }
-		? Tail extends readonly [{ variadic: "afterDoubleDash" }]
-			? unknown
-			: VariadicPositionError
+type HeadPositionBrand<Head, Tail extends readonly unknown[]> = Head extends { variadic: true }
+	? Tail extends readonly [{ variadic: "afterDoubleDash" }]
+		? unknown
+		: VariadicPositionError
+	: Head extends { variadic: VariadicMode }
+		? LastPositionError
 		: unknown;
 
 /**
@@ -131,12 +129,12 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 	...unknown[],
 	infer Last,
 ]
-	? Last extends { variadic: "afterDoubleDash" | "passthrough" }
-		? BrandPosition<ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>, LastPositionError>
-		: Last extends { variadic: true }
-			? NewA extends readonly [{ variadic: "afterDoubleDash" }]
-				? ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>
-				: BrandPosition<ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>, VariadicPositionError>
+	? Last extends { variadic: true }
+		? NewA extends readonly [{ variadic: "afterDoubleDash" }]
+			? ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>
+			: BrandPosition<ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>, VariadicPositionError>
+		: Last extends { variadic: VariadicMode }
+			? BrandPosition<ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>, LastPositionError>
 			: ValidateArgs<NewA, ArgNames<A>, HasOptionalArg<A>>
 	: ValidateArgs<NewA>;
 

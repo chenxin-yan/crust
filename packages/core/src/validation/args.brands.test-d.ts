@@ -2,6 +2,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
+import type { VariadicMode } from "../types.ts";
 import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.brands.ts";
 
 // ValidateArgs type inference
@@ -211,6 +212,28 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 			unknown
 		>
 	>;
+
+	// A mode typed as the whole union is illegal before another argument whichever member it holds.
+	const mode = "passthrough" as VariadicMode;
+	new Crust("wrap").args(
+		// @ts-expect-error a `VariadicMode` argument that is not last
+		{ name: "head", type: "string", variadic: mode },
+		{ name: "tail", type: "string" },
+	);
+	new Crust("wrap")
+		.args({ name: "head", type: "string", variadic: mode })
+		// @ts-expect-error an argument after a `VariadicMode` argument
+		.args({ name: "tail", type: "string" });
+	const listOrRest = true as true | "passthrough";
+	new Crust("wrap").args(
+		// @ts-expect-error `true | "passthrough"` is not last
+		{ name: "head", type: "string", variadic: listOrRest },
+		{ name: "tail", type: "string" },
+	);
+	new Crust("wrap").args(
+		{ name: "head", type: "string" },
+		{ name: "tail", type: "string", variadic: mode },
+	);
 }
 
 {
