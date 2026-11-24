@@ -66,7 +66,7 @@ function exclusiveSchema(
 		oneOf: Object.entries(members)
 			.filter(([, member]) => member.hidden !== true)
 			.map(([flag, member]) => {
-				const { description, deprecated, ...value } = propertySchema(member, false);
+				const { description, deprecated, ...value } = propertySchema(member, false, member);
 				const boolean = member.type === "boolean";
 				return {
 					type: "object",
@@ -81,9 +81,8 @@ function exclusiveSchema(
 }
 
 /** Whether an `env` binding, or a group member's, may supply the definition. */
-function hasEnv(def: ArgSnapshot | FlagSnapshot): boolean {
-	if (!("negatable" in def)) return false;
-	return def.env !== undefined || Object.values(def.flags ?? {}).some(hasEnv);
+function hasEnv(flag: FlagSnapshot): boolean {
+	return flag.env !== undefined || Object.values(flag.flags ?? {}).some(hasEnv);
 }
 
 /** Keywords whose keys are names; only their values are schemas. */
@@ -132,9 +131,11 @@ function schemaPropertySchema(
 	return schema;
 }
 
+/** `flag` is `def` when it is a flag: an argument's same-named keys belong to a package. */
 function propertySchema(
 	def: ArgSnapshot | FlagSnapshot,
 	list: boolean,
+	flag?: FlagSnapshot,
 ): CommandInputPropertySchema {
 	const value = valueSchema(def);
 	const schema: CommandInputPropertySchema =
@@ -155,8 +156,7 @@ function propertySchema(
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
 	}
-	const env =
-		"negatable" in def && def.env ? [def.env].flat().map((variable) => `$${variable}`) : [];
+	const env = flag?.env ? [flag.env].flat().map((variable) => `$${variable}`) : [];
 	const declared = "description" in schema ? schema.description : def.description;
 	const description =
 		env.length === 0
@@ -168,7 +168,7 @@ function propertySchema(
 		...schema,
 		...(description === undefined ? {} : { description }),
 		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
-		...("deprecated" in def && def.deprecated !== undefined && { deprecated: true }),
+		...(flag?.deprecated !== undefined && { deprecated: true }),
 	};
 }
 
@@ -209,15 +209,21 @@ export function commandInputSchema(
 	// which `in` and plain assignment would confuse with Object.prototype.
 	const properties: Record<string, CommandInputPropertySchema> = Object.create(null);
 	const required: string[] = [];
-	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean, listed: boolean) => {
+	const claim = (
+		name: string,
+		def: ArgSnapshot | FlagSnapshot,
+		list: boolean,
+		listed: boolean,
+		flag?: FlagSnapshot,
+	) => {
 		if (Object.hasOwn(properties, name)) {
 			throw new Error(
 				`Command "${formatPath(path)}" declares "${name}" more than once across args and flags; command input is one flat object`,
 			);
 		}
 		if (!listed) return;
-		properties[name] = propertySchema(def, list);
-		if (def.required === true && !hasEnv(def)) required.push(name);
+		properties[name] = propertySchema(def, list, flag);
+		if (def.required === true && !(flag && hasEnv(flag))) required.push(name);
 	};
 	for (const arg of command.args) claim(arg.name, arg, arg.variadic !== undefined, true);
 	for (const [name, flag] of commandInputFlags(command)) {
@@ -227,7 +233,7 @@ export function commandInputSchema(
 			flag.hidden !== true &&
 			(flag.flags === undefined ||
 				Object.values(flag.flags).some((member) => member.hidden !== true));
-		claim(name, flag, flag.multiple === true, listed);
+		claim(name, flag, flag.multiple === true, listed, flag);
 	}
 	return required.length === 0
 		? { type: "object", properties }

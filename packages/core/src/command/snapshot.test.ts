@@ -249,16 +249,18 @@ describe("keys packages add", () => {
 
 	it("leaves an argument's key alone when a flag field has its name", async () => {
 		const env = { hint: "local" };
+		const owned = { env, aliases: "abc", negatable: false, deprecated: "x" };
 		const app = new Crust("cli")
-			.extend(defineExtension(defineExtensionId("owner")).owns(...(["env", "aliases"] as never[])))
-			.args({ name: "file", type: "string", env, aliases: "abc" } as {
-				name: "file";
-				type: "string";
-			})
+			.extend(defineExtension(defineExtensionId("owner")).owns(...(Object.keys(owned) as never[])))
+			.args({ name: "file", type: "string", required: true, ...(owned as object) })
 			.action(() => {});
 		const snapshot = await app.snapshot();
-		expect(snapshot.args[0]).toEqual({ name: "file", type: "string", env, aliases: "abc" });
-		expect(commandInputSchema(snapshot, []).properties.file).toEqual({ type: "string" });
+		expect(snapshot.args[0]).toEqual({ name: "file", type: "string", required: true, ...owned });
+		expect(commandInputSchema(snapshot, [])).toEqual({
+			type: "object",
+			properties: { file: { type: "string" } },
+			required: ["file"],
+		});
 	});
 
 	it("keeps a key named `__proto__` as a field, not the prototype", () => {
