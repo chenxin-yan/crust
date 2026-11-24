@@ -90,10 +90,12 @@ function walkFlag(
 		...(def.multiple || def.type === "count" ? { multiple: true as const } : {}),
 	};
 
-	const shape = valueShape(def.type, def.choices);
+	const live = completeAddress(command, node, `--${def.name}`);
+	// A complete function replaces the choices, so they are not held to the scripts' character set.
+	const shape = valueShape(def.type, live.complete === undefined ? def.choices : undefined);
 	return shape.type === "boolean"
 		? { ...common, ...shape, takesValue: false }
-		: { ...common, ...shape, ...completeAddress(command, node, `--${def.name}`), takesValue: true };
+		: { ...common, ...shape, ...live, takesValue: true };
 }
 
 /** Project a single documentation argument onto a `CompletionArg`. */
@@ -104,13 +106,14 @@ function walkArg(
 ): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const description = normaliseDescription(def.description);
+	const live = completeAddress(command, node, def.name);
 	return {
 		name: def.name,
 		required: def.required,
 		variadic: def.variadic,
 		...(description === undefined ? {} : { description }),
-		...valueShape(def.type, def.choices),
-		...completeAddress(command, node, def.name),
+		...valueShape(def.type, live.complete === undefined ? def.choices : undefined),
+		...live,
 	};
 }
 

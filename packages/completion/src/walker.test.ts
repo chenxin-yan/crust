@@ -165,9 +165,9 @@ describe("walkCommand — complete and punctuation shorts", () => {
 			.add(
 				defineCommand("deploy", (command) =>
 					command
-						.args({ name: "service", type: "string", choices: ["api"], complete })
+						.args({ name: "service", type: "string", choices: ["api server"], complete })
 						.flags({
-							region: { type: "string", complete },
+							region: { type: "string", choices: ["us east"], complete },
 							scope: { type: "exclusive", flags: { team: { type: "string", complete } } },
 							plain: { type: "string" },
 						})
@@ -177,6 +177,9 @@ describe("walkCommand — complete and punctuation shorts", () => {
 		const spec = await walk(app);
 		const deploy = spec.subCommands.find((command) => command.name === "deploy")!;
 		expect(deploy.args[0]?.complete).toBe("mycli deploy service");
+		// The complete function replaces the choices, so a space in them does not stop the walk.
+		expect(deploy.args[0]?.choices).toBeUndefined();
+		expect(deploy.flags[0]?.choices).toBeUndefined();
 		expect(deploy.flags.map((flag) => [flag.name, flag.complete])).toEqual([
 			["region", "mycli deploy --region"],
 			["team", "mycli deploy --team"],
