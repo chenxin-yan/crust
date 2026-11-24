@@ -70,6 +70,14 @@ function buildCli() {
 }
 
 describe("schema", () => {
+	it("prints its JSON once under --json, on stdout", async () => {
+		const app = buildCli().extend(json());
+		const plain = await captureExecute(app, ["schema", "deploy"]);
+		const { stdout, stderr, exitCode } = await captureExecute(app, ["schema", "deploy", "--json"]);
+
+		expect({ stdout, stderr, exitCode }).toEqual({ stdout: plain.stdout, stderr: "", exitCode: 0 });
+	});
+
 	it("prints a command's input and output JSON Schema", async () => {
 		const { stdout, stderr, exitCode } = await captureExecute(buildCli(), ["schema", "deploy"]);
 
