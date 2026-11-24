@@ -200,7 +200,7 @@ describe("defineExtension", () => {
 		).toThrow(CrustError);
 	});
 
-	it.each(["toJSON", "inputSchema", "extension"])("refuses to own `%s`", (key) => {
+	it.each(["toJSON", "inputSchema", "extension", "inherited"])("refuses to own `%s`", (key) => {
 		expect(() => defineExtension(HELP).owns(key as never)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
