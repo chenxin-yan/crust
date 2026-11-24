@@ -62,6 +62,7 @@ import {
 	installContextFlags,
 	lazyChildRecord,
 	registerFlag,
+	sameFlags,
 	type AddedChild,
 	type ChildEntry,
 	type CommandNode,
@@ -912,10 +913,23 @@ async function dispatch(
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
 	// The resolver takes the last instance of a name, so a replacement wins.
-	const contexts = [
-		...resolvedNode.contexts.map(({ instance }) => instance),
-		...(provide ?? []).map(definingOf),
-	];
+	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
+	for (const replacement of (provide ?? []).map(definingOf)) {
+		const replaced = contexts.findLast(({ name }) => name === replacement.name);
+		// Its setup receives the flags parsed for the Context it replaces.
+		if (
+			process.env.CRUST_INTERNAL_BUILD !== "1" &&
+			replaced &&
+			!sameFlags(replaced.ownedFlags, replacement.ownedFlags)
+		) {
+			throw new CrustError(
+				"DEFINITION",
+				`Context "${replacement.name}" given to the provide option does not own the same flags as the Context "${replacement.name}" it replaces: pass the same factory (for example its .of()).`,
+				{ subject: "context", name: replacement.name, reason: "context-flags-not-parsed" },
+			);
+		}
+		contexts.push(replacement);
+	}
 	const resolver = createContextResolver(
 		contexts,
 		resolvedNode.flagContexts,
@@ -988,7 +1002,9 @@ async function dispatch(
 			const context = {
 				args: validated.args,
 				flags: validated.flags,
-				ctx: resolver.bag(contexts),
+				// The declared factories first: an `.of()` instance's empty `use` list would leave a
+				// transitive read typed through `.use()` undefined instead of failing loud.
+				ctx: resolver.bag([...resolvedNode.demands, ...resolvedNode.inheritedDemands, ...contexts]),
 				signal,
 				get command() {
 					return snapshots.command;

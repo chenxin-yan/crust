@@ -1212,6 +1212,18 @@ describe("Context setup dependencies", () => {
 		await expect(unwrap(app.run([]))).rejects.toThrow('No provider for Context "config"');
 	});
 
+	it("fails loud when an action reads a transitive dependency above an .of() cut that is unprovided", async () => {
+		const config = defineContext("config").setup(() => "config");
+		const db = defineContext("db")
+			.use(config)
+			.setup(async ({ ctx }) => await ctx.config);
+		const app = new Crust("cli")
+			.provide(db.of("fake"))
+			.command("read", (cmd) => cmd.use(db).action(async ({ ctx }) => await ctx.config));
+
+		await expect(unwrap(app.run(["read"]))).rejects.toThrow('No provider for Context "config"');
+	});
+
 	it("builds Extension hook bags from the declared factory graph across an .of() cut", async () => {
 		const config = defineContext("config").setup(() => "memory://");
 		const db = defineContext("db")
@@ -2234,5 +2246,26 @@ describe("Context replacements", () => {
 			provide: [workspace.of({ root: "/hooked" })],
 		});
 		expect(hooked).toEqual([{ root: "/hooked" }]);
+	});
+
+	it("rejects a replacement of another factory that owns other flags", async () => {
+		const text = defineContext("a")
+			.flags({ value: { type: "string", default: "s" } })
+			.setup(({ flags }) => flags.value.length);
+		// Same name and value type; its setup would get the string parsed for `text`'s flag.
+		const number = defineContext("a")
+			.flags({ value: { type: "number", default: 7 } })
+			.setup(({ flags }) => flags.value);
+		const app = new Crust("cli")
+			.provide(text())
+			.command("read", (cmd) => cmd.use(text).action(async ({ ctx }) => await ctx.a));
+
+		await expect(unwrap(app.run(["read"], {}, { provide: [number()] }))).rejects.toThrow(
+			'Context "a" given to the provide option does not own the same flags',
+		);
+		expect(await app.run(["read"], {}, { provide: [text.of(99)] })).toMatchObject({
+			status: "completed",
+			result: 99,
+		});
 	});
 });

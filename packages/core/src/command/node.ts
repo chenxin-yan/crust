@@ -333,7 +333,7 @@ export function declaredContextNames(factories: readonly AnyContextFactory[]): S
 }
 
 // The same flag names with equal definitions; a schema, even a plain object, by identity.
-function sameFlags(a: FlagsDef, b: FlagsDef): boolean {
+export function sameFlags(a: FlagsDef, b: FlagsDef): boolean {
 	const names = Object.keys(a);
 	return (
 		names.length === Object.keys(b).length &&
