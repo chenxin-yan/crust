@@ -14,7 +14,7 @@ import {
 	type Stats,
 	writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
 import { isWithin, resolvePathLike } from "@crustjs/utils/path";
@@ -31,7 +31,7 @@ import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
  * For example, `_gitignore` becomes `.gitignore`.
  * Files starting with `__` (double underscore) are left unchanged to avoid
  * collisions with conventional directory names like `__tests__` or `__mocks__`,
- * and a file named only `_` is left unchanged, since `.` is no file name.
+ * and a file named only `_` or `_.` is left unchanged, since `.` and `..` are no file names.
  * Only the filename is renamed — parent directories are left unchanged.
  *
  * @param relativePath - The file path relative to the template root.
@@ -41,7 +41,7 @@ function renameDotfile(relativePath: string): string {
 	const dir = dirname(relativePath);
 	const base = relativePath.slice(dir === "." ? 0 : dir.length + 1);
 
-	if (base.length > 1 && base.startsWith("_") && !base.startsWith("__")) {
+	if (base !== "_" && base !== "_." && base.startsWith("_") && !base.startsWith("__")) {
 		const renamed = `.${base.slice(1)}`;
 		return dir === "." ? renamed : join(dir, renamed);
 	}
@@ -154,7 +154,8 @@ function assertDestinationWritable(
  * @throws When a template file to copy cannot be read.
  * @throws When `dest` exists and is not a directory.
  * @throws When `conflict` is `"abort"` and the destination holds anything besides `.git`.
- * @throws When `conflict` is `"replace"` and the template and the destination contain each other.
+ * @throws When `conflict` is `"replace"` and the template and the destination contain each other,
+ *   or the destination is a filesystem root.
  * @throws When an existing destination file or ancestor directory is a symlink that
  *   resolves outside the destination (or to a missing target) or into its `.git`, regardless of
  *   `conflict`. A `dest` that is itself a symlink is followed once: its target is the destination.
@@ -255,6 +256,11 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	const relPaths = [...plan.keys()].sort();
 	if (destStat) {
 		const realDestDir = realpathSync(destDir);
+		if (conflict === "replace" && parse(realDestDir).root === realDestDir) {
+			throw new Error(
+				`Destination "${destDir}" is a filesystem root, and conflict: "replace" would delete everything in it.`,
+			);
+		}
 		if (conflict === "replace" && templateDir !== undefined) {
 			const realTemplateDir = realpathSync(templateDir);
 			if (isWithin(realDestDir, realTemplateDir) || isWithin(realTemplateDir, realDestDir)) {
@@ -269,23 +275,29 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	}
 	if (dryRun) return { files: relPaths };
 
+	// Every source is read before the first write: where the template and the destination overlap,
+	// a written file can be the source of a later one.
+	const copies = relPaths.map((relPath) => {
+		const { source, text } = plan.get(relPath)!;
+		return {
+			relPath,
+			mode: source === undefined ? undefined : statSync(source).mode & 0o777,
+			content: text ?? readFileSync(source!),
+		};
+	});
 	if (conflict === "replace") {
 		for (const name of existing) rmSync(join(destDir, name), { recursive: true, force: true });
 	}
 	mkdirSync(destDir, { recursive: true });
 	const realDestDir = realpathSync(destDir);
-	for (const relPath of relPaths) {
-		const { source, text } = plan.get(relPath)!;
+	for (const { relPath, mode, content } of copies) {
 		const destFilePath = join(realDestDir, relPath);
 		mkdirSync(dirname(destFilePath), { recursive: true });
-		if (source === undefined) {
-			writeFileSync(destFilePath, text!);
+		if (mode === undefined) {
+			writeFileSync(destFilePath, content);
 			continue;
 		}
 		// Permission bits go on before the bytes, so a private file is never readable by others.
-		// Read before opening: with `template` as `dest`, opening truncates the source.
-		const mode = statSync(source).mode & 0o777;
-		const content = text ?? readFileSync(source);
 		const fd = openSync(destFilePath, "w", mode);
 		try {
 			fchmodSync(fd, mode);

@@ -11,7 +11,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
@@ -349,6 +349,28 @@ describe("scaffold", () => {
 			expect(readFileSync(join(templateDir, "file.txt"), "utf-8")).toBe("new content");
 		});
 
+		it("'overwrite' into a folder of the template reads every source before writing", async () => {
+			createTemplateFile("a.txt", "root");
+			createTemplateFile("out/a.txt", "nested");
+			const innerDest = join(templateDir, "out");
+
+			await scaffold({ template: templateDir, dest: innerDest, conflict: "overwrite" });
+
+			expect(readFileSync(join(innerDest, "a.txt"), "utf-8")).toBe("root");
+			expect(readFileSync(join(innerDest, "out", "a.txt"), "utf-8")).toBe("nested");
+		});
+
+		it("'replace' refuses a filesystem root, in a dry run", async () => {
+			await expect(
+				scaffold({
+					dest: parse(tempDir).root,
+					files: { "a.txt": "x" },
+					conflict: "replace",
+					dryRun: true,
+				}),
+			).rejects.toThrow("filesystem root");
+		});
+
 		it("'overwrite' replaces conflicting files and leaves the others", async () => {
 			writeFileSync(join(destDir, "file.txt"), "old content");
 			writeFileSync(join(destDir, "other.txt"), "other");
@@ -397,6 +419,18 @@ describe("scaffold", () => {
 		expect(result.files).toEqual(["_", join("sub", "_")]);
 		expect(readOutputFile("_")).toBe("root");
 		expect(readOutputFile(join("sub", "_"))).toBe("nested");
+	});
+
+	// Windows drops a trailing dot, so it cannot hold a file named `_.`.
+	it.skipIf(process.platform === "win32")("does not rename a file named only _.", async () => {
+		createTemplateFile("_.", "root");
+		createTemplateFile("sub/_.", "nested");
+
+		const result = await scaffoldTemplate();
+
+		expect(result.files).toEqual(["_.", join("sub", "_.")]);
+		expect(readOutputFile("_.")).toBe("root");
+		expect(readOutputFile(join("sub", "_."))).toBe("nested");
 	});
 
 	it("defaults conflict to 'abort'", async () => {
