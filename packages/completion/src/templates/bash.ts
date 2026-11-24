@@ -412,7 +412,8 @@ export function renderBash(
 	const lines: string[] = [];
 
 	// Emit one `case` over `$subject` for the value token `$value`. The
-	// equals form passes `prefix` so candidates keep their `--flag=` head.
+	// equals form passes `prefix`, the `--flag=` head each candidate needs
+	// when Readline replaces the whole word (empty when `=` breaks words).
 	const pushFlagValueCase = (indent: string, subject: string, value: string, prefix?: string) => {
 		if (flagValueCases.length === 0) return;
 		lines.push(`${indent}case "$cmd_path|${subject}" in`);
