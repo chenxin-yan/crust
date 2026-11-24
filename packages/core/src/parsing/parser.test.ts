@@ -257,6 +257,11 @@ describe("parseArgs — values that start with a dash or `=`", () => {
 		expect(() => parseArgs(cmd, ["-D=1"])).toThrow(
 			expect.objectContaining({ details: { flag: "dry", reason: "unexpected-value" } }),
 		);
+		const withEquals = makeNode({
+			meta: "test",
+			flags: { dry: { type: "boolean", short: "D" }, eq: { type: "boolean", short: "=" } },
+		});
+		expect(parseArgs(withEquals, ["-D="]).flags).toEqual({ dry: true, eq: true });
 	});
 });
 

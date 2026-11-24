@@ -604,7 +604,8 @@ export function matchFlagToken(
 			// A stray `-` would print as `--`, which reads as the separator; name the whole token instead.
 			if (!spelling) return unknownFlag(short === "-" ? token : `-${short}`, short);
 			if (!flagTakesValue(spelling.def)) {
-				if (token[index] === "=") {
+				// `=` declared as a short is the next flag of the cluster, not a value.
+				if (token[index] === "=" && !spellings.has("=")) {
 					return new CrustError("PARSE", `Flag "-${short}" does not take a value.`, {
 						flag: spelling.canonicalName,
 						reason: "unexpected-value",
