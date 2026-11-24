@@ -380,7 +380,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 - Lifecycle setters replace the previous callback: `.setup()`, `.renderer()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings are checked for collisions when the method runs, and contributed command names when the app prepares, by the [definition checks](/docs/api/crust#definition-checks).
-- `.owns(...keys)` declares the keys the Extension owns among those packages add through [`ArgExtras`, `FlagExtras`, and `CommandExtras`](#argextras-flagextras-and-commandextras); repeated calls append. A definition that sets a key no installed Extension owns fails preparation with a `DEFINITION` error (`unowned-key`) from the definition checks.
+- `.owns(...keys)` declares the keys the Extension owns among those packages add through [`ArgExtras`, `FlagExtras`, and `CommandExtras`](#argextras-flagextras-and-commandextras); repeated calls append. It refuses `toJSON`, `inputSchema`, and `extension` with a `DEFINITION` error (`reserved-name`). A definition that sets a key no installed Extension owns fails preparation with a `DEFINITION` error (`unowned-key`) from the definition checks.
 
 `.factory(define)` returns an [`ExtensionFactory`](#extensionfactory).
 

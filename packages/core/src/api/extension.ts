@@ -794,7 +794,9 @@ export interface ExtensionBuilder<
 	 * Own definition keys that a package adds to argument, flag, or command definitions with
 	 * module augmentation of `ArgExtras`, `FlagExtras`, or `CommandExtras`. Only this Extension
 	 * reads them, from the snapshots. A definition that sets a key no installed Extension owns is a
-	 * `DEFINITION` error (`unowned-key`), from source and in `crust build`.
+	 * `DEFINITION` error (`unowned-key`), from source and in `crust build`. Owning `toJSON`, or
+	 * `inputSchema` or `extension`, which a snapshot sets itself, is a `DEFINITION` error
+	 * (`reserved-name`).
 	 */
 	owns(
 		...keys: readonly Extract<keyof (ArgExtras & FlagExtras & CommandExtras), string>[]
@@ -868,6 +870,10 @@ interface ExtensionState extends Omit<ExtensionData, "flags"> {
 
 type ErasedExtensionBuilder = ExtensionBuilder<any, any, any, any, any>;
 
+// Fields a snapshot sets itself, which would replace an owned key of that name, and `toJSON`,
+// which JSON.stringify would call in place of writing the definition.
+const SNAPSHOT_KEYS = new Set(["inputSchema", "extension", "toJSON"]);
+
 function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 	const flags = Object.freeze(toFlagsRecord(state.flags));
 	// Provided Context-owned spellings collide with owned flags but stay Context-owned.
@@ -903,7 +909,17 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 					...flagRecordEntries(record).map(([name, def]) => [name, ownDefinition(def)] as const),
 				],
 			}),
-		owns: (...keys: readonly string[]) => next({ owns: [...state.owns, ...keys] }),
+		owns: (...keys: readonly string[]) => {
+			const taken = keys.find((key) => SNAPSHOT_KEYS.has(key));
+			if (process.env.CRUST_INTERNAL_BUILD !== "1" && taken !== undefined) {
+				throw new CrustError(
+					"DEFINITION",
+					`Extension "${state.id}" cannot own "${taken}": a snapshot uses that name itself`,
+					{ subject: "extension", name: state.id, reason: "reserved-name" },
+				);
+			}
+			return next({ owns: [...state.owns, ...keys] });
+		},
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		setup: (setup: ExtensionHooks["setup"]) => next({ hooks: { ...state.hooks, setup } }),

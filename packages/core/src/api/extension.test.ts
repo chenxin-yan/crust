@@ -200,6 +200,15 @@ describe("defineExtension", () => {
 		).toThrow(CrustError);
 	});
 
+	it.each(["toJSON", "inputSchema", "extension"])("refuses to own `%s`", (key) => {
+		expect(() => defineExtension(HELP).owns(key as never)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "extension", name: HELP, reason: "reserved-name" },
+			}),
+		);
+	});
+
 	it("rejects factories that return a differently identified Extension", () => {
 		const other = defineExtension(defineExtensionId("acme:other"));
 		const rebranded = defineExtension(HELP).factory(() => other);
