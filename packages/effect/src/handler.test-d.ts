@@ -70,6 +70,13 @@ type _Services = Expect<
 		Db | ContextService<"db", LayerValue<Db>> | ContextService<"unbranded", Context.Context<Cache>>
 	>
 >;
+// A value that is only sometimes a layer() value provides no service.
+type _NullableLayer = Expect<
+	Equal<
+		ServicesOf<{ ctx: { db: Promise<LayerValue<Db> | null> } }>,
+		ContextService<"db", LayerValue<Db> | null>
+	>
+>;
 
 // A layer() with a non-literal name provides nothing: its entry cannot be tied to the path.
 declare const dynamicName: string;

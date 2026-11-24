@@ -46,7 +46,7 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
 		? never
 		: {
 				[K in keyof Bag & string]-?: Bag[K] extends Promise<infer Value>
-					? ContextService<K, Value> | (Value extends LayerValue<infer S> ? S : never)
+					? ContextService<K, Value> | ([Value] extends [LayerValue<infer S>] ? S : never)
 					: never;
 			}[keyof Bag & string]
 	: never;
