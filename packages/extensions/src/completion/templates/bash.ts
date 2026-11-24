@@ -572,7 +572,7 @@ export function renderBash(
 		// Count completed positional tokens between the resolved command
 		// path and the cursor. Before `--`, token classes we *skip*:
 		//  - `--name=value`        (single token, value is inlined)
-		//  - bare flags `-*`       (and the next token if the flag takes a value)
+		//  - bare flags `-?*`      (and the next token if the flag takes a value)
 		// What remains is positional values. Every token after `--` is one
 		// (`pos_after`). `pos_idx` is the slot the cursor is currently
 		// filling (0 for the first positional slot).
