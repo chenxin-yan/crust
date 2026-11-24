@@ -39,14 +39,20 @@ function failureText({ error }: FailedOutcome): string {
  * A JSON-faithful `completed` result becomes `structuredContent` (plain objects
  * as themselves, other JSON values wrapped as `{ result }`) plus a text block
  * holding the value's JSON. Any other `completed` result, and every `handled`
- * outcome, returns the captured stdout as text. `failed` sets `isError`.
- * Non-empty captured stderr (warnings, next steps) follows as one more text
- * block, whatever the status.
+ * outcome, returns the captured stdout as text. A non-zero `exitCode` sets
+ * `isError`: every `failed` outcome, and a `completed` one whose action set
+ * `exitCode(n)`, with its content unchanged. Non-empty captured stderr
+ * (warnings, next steps) follows as one more text block, whatever the status.
  */
 export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 	const result = resultFromOutcome(outcome);
-	if (!outcome.stderr) return result;
-	return { ...result, content: [...result.content, { type: "text", text: outcome.stderr }] };
+	return {
+		...result,
+		...(outcome.stderr && {
+			content: [...result.content, { type: "text", text: outcome.stderr }],
+		}),
+		...(outcome.exitCode !== 0 && { isError: true }),
+	};
 }
 
 function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
@@ -76,7 +82,7 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 		case "handled":
 			return text(outcome.stdout);
 		case "failed":
-			return { ...text(failureText(outcome)), isError: true };
+			return text(failureText(outcome));
 	}
 }
 
