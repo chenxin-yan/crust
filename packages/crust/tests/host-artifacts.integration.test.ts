@@ -183,7 +183,7 @@ async function expectUnknownFlag(command: string, args: readonly string[]) {
 		cwd: elsewhere,
 		timeout: 60_000,
 	});
-	expect(result.exitCode).toBe(1);
+	expect(result.exitCode).toBe(2);
 	expect(result.stderr).toContain("Unknown flag");
 }
 

@@ -120,7 +120,7 @@ describe("nextSteps", () => {
 
 		const { stderr, exitCode } = await captureExecute(app, ["deploy"]);
 
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toMatch(/^Error: .*\nNext steps:\n {2}app deploy staging$/);
 		expect(seen).toHaveLength(1);
 	});

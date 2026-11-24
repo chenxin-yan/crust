@@ -321,7 +321,7 @@ describe("help", () => {
 
 		const failed = await captureExecute(app, ["serve"], { env });
 		expect(failed.stderr).toContain("Expected a number for --port (from $PORT).");
-		expect(failed.exitCode).toBe(1);
+		expect(failed.exitCode).toBe(2);
 		expect(actions).toEqual([]);
 	});
 

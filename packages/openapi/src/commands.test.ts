@@ -315,7 +315,7 @@ describe("generated commands", () => {
 		expect(calls[0]?.headers["content-type"]).toBe("application/json");
 		expect(fromBody.exitCode).toBe(0);
 		expect(JSON.parse(calls[1]!.body!)).toEqual({ name: "Bo" });
-		expect(missing).toMatchObject({ exitCode: 1 });
+		expect(missing).toMatchObject({ exitCode: 2 });
 		expect(missing.stderr).toContain('missing the body field "name" (--name)');
 		expect(notObject.stderr).toContain("flags.body: must be a JSON object");
 		expect(wrongType.stderr).toContain('the body field "role" must be one of admin, member');
@@ -1072,7 +1072,7 @@ describe("generated command inputs", () => {
 		expect((await captureExecute(app, ["probe", "abc"])).exitCode).toBe(0);
 		expect((await captureExecute(app, ["post-body", "--proto", "abc"])).exitCode).toBe(0);
 		expect(await captureExecute(app, ["post-required", "--body", "{}"])).toMatchObject({
-			exitCode: 1,
+			exitCode: 2,
 			stderr: expect.stringContaining('missing the body field "toString"'),
 		});
 		await captureExecute(new Crust("acme").extend(bound.extension).add(...bound.commands), [
@@ -1111,7 +1111,7 @@ describe("generated command inputs", () => {
 		);
 
 		expect(await captureExecute(app, ["probe", "--body", '{"tags":"x"}'])).toMatchObject({
-			exitCode: 1,
+			exitCode: 2,
 			stderr: expect.stringContaining('the body field "tags" must be a list of string'),
 		});
 		expect(
@@ -1484,7 +1484,7 @@ describe("generated command bindings, positionals and confirmation", () => {
 			.override({ probe: { confirm: "Send?" } });
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 
-		expect(await captureExecute(app, ["probe", ".."])).toMatchObject({ exitCode: 1 });
+		expect(await captureExecute(app, ["probe", ".."])).toMatchObject({ exitCode: 2 });
 		expect(asked).not.toHaveBeenCalled();
 		expect(calls).toEqual([]);
 	});
@@ -1520,7 +1520,7 @@ describe("generated command bindings, positionals and confirmation", () => {
 			(await captureExecute(v30.app, ["probe", "--body", '{"tags":[null,"x"]}'])).exitCode,
 		).toBe(0);
 		expect(await captureExecute(app, ["probe", "--body", '{"name":null}'])).toMatchObject({
-			exitCode: 1,
+			exitCode: 2,
 			stderr: expect.stringContaining('the body field "name"'),
 		});
 		expect(calls).toHaveLength(2);

@@ -162,7 +162,7 @@ describe("schema", () => {
 		expect(await captureExecute(buildCli(), ["schema", "nope"])).toEqual({
 			stdout: "",
 			stderr: 'Error: Unknown command "nope".',
-			exitCode: 1,
+			exitCode: 2,
 		});
 	});
 
@@ -285,7 +285,7 @@ describe("schema", () => {
 	it("--llms is root-only", async () => {
 		const { exitCode, stderr } = await captureExecute(buildCli(), ["deploy", "staging", "--llms"]);
 
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(stderr).toContain("--llms");
 	});
 });

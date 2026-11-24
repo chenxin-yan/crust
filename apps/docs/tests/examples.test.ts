@@ -61,7 +61,7 @@ it("extensions example prints the version for `--version` on the actionless root
 });
 
 it.each([
-	["validate", 1, "", 'Error: Missing required flag "--name"\n'],
+	["validate", 2, "", 'Error: Missing required flag "--name"\n'],
 	[
 		"cleanup",
 		1,
@@ -69,6 +69,7 @@ it.each([
 		"Error: Deployment service is unavailable. Try again later.\nClosed database\n",
 	],
 	["config", 1, "", "Error: No app.config.json found. Run `app init` to create one.\n"],
+	["search", 2, "", 'Error: Missing required argument "<pattern>"\n'],
 	["cancel", 130, "", ""],
 	["inspect", 0, "No app.config.json found. Run `app init` to create one.\n", ""],
 ])(
@@ -129,6 +130,14 @@ it("commands guide sections example prints what the guide shows", async () => {
 	const guide = await read("../content/docs/guide/commands.mdx");
 	expect(result.status).toBe(0);
 	expect(guide).toContain(`$ my-cli deploy --help\n${result.stdout}\`\`\``);
+});
+
+it.each([
+	[["b", "a", "b"], 0, "b\n"],
+	[["z", "a"], 1, ""],
+])("error-handling exit-code example searching %j exits %i", (argv, exitCode, stdout) => {
+	const result = runGuideExample("error-handling.ts", ["search", ...argv]);
+	expect(result).toMatchObject({ status: exitCode, stdout, stderr: "" });
 });
 
 it("error-handling example reports an unreadable config as is, not as missing", async () => {

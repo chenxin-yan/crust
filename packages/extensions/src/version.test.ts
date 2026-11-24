@@ -33,7 +33,7 @@ describe("version", () => {
 		});
 		const failed = await captureExecute(app, [], { env });
 		expect(failed.stderr).toContain("Expected a number for --port (from $PORT).");
-		expect(failed.exitCode).toBe(1);
+		expect(failed.exitCode).toBe(2);
 		expect(ran).toBe(false);
 	});
 

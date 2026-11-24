@@ -62,7 +62,7 @@ export interface ExecuteOptions {
 	/**
 	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`
 	 * with the same reason. If work throws that reason, an `AbortError` exits `130`
-	 * and other errors exit `1`. Effect signal interruption instead becomes an
+	 * and other errors exit as any failure does. Effect signal interruption instead becomes an
 	 * `AbortError`, regardless of the caller's reason.
 	 */
 	signal?: AbortSignal;

@@ -17,7 +17,10 @@ export interface ExecutableApp {
 export interface CapturedExecute {
 	readonly stdout: string;
 	readonly stderr: string;
-	/** The exit code `execute()` established (`0`, `1`, or `130` for cancellation, `143` after `SIGTERM`). */
+	/**
+	 * The exit code `execute()` resolved to: `0` or the action's `exitCode(n)`, `1` or a thrown
+	 * value's non-zero integer `exitCode`, `2` for a usage error, `130` for cancellation, `143` after `SIGTERM`.
+	 */
 	readonly exitCode: number;
 }
 

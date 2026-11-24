@@ -147,7 +147,7 @@ publishing to npm
 $ publish
 Error: Missing required flag "--token"
 $ echo $?
-1
+2
 ```
 
 `default` fills in an omitted value, like `registry` above. `required: true` fails before the action runs when the value is missing. Either way, the value is non-optional in the action.
@@ -197,7 +197,7 @@ targets=undefined runtime=node tag=undefined
 $ serve --runtime python
 Error: Invalid value for --runtime. Expected one of: bun, node
 $ echo $?
-1
+2
 ```
 
 ### Environment variables

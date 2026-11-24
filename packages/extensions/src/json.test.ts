@@ -194,7 +194,7 @@ describe("json", () => {
 		const { stdout, stderr, exitCode } = await captureExecute(app, ["--json"]);
 
 		expect(stdout).toBe("");
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		const error = JSON.parse(stderr);
 		expect(error).toMatchObject({ code: "VALIDATION" });
 		expect(error.message).toContain("target");
@@ -348,7 +348,7 @@ describe("json", () => {
 		const { stderr, exitCode } = await captureExecute(app, ["nope", "--json"]);
 
 		expect(JSON.parse(stderr)).toMatchObject({ code: "VALIDATION" });
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 	});
 
 	it.each([
@@ -360,7 +360,7 @@ describe("json", () => {
 		const { stderr, exitCode } = await captureExecute(app, argv);
 
 		expect(stderr).toMatch(/^Error: /);
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 	});
 
 	describe("commands with .output()", () => {
@@ -375,6 +375,7 @@ describe("json", () => {
 			expect(await app.run([], { flags: { json: true } })).toEqual({
 				status: "completed",
 				result: { id: 7 },
+				exitCode: 0,
 				stdout: '{"id":7}',
 				stderr: "",
 			});
@@ -487,6 +488,7 @@ describe("json", () => {
 			expect(await app.run([], { flags: { json: true } })).toEqual({
 				status: "failed",
 				error: failure,
+				exitCode: 1,
 				stdout: "",
 				stderr: "table row 1\ntable row 2",
 			});
@@ -650,7 +652,7 @@ describe("json", () => {
 					'{"type":"error","error":{"code":"PARSE","message":"bad value"}}',
 				].join("\n"),
 				stderr: "",
-				exitCode: 1,
+				exitCode: 2,
 			});
 		});
 
@@ -778,7 +780,7 @@ describe("json", () => {
 			const { stdout, stderr, exitCode } = await captureExecute(app, ["--json"]);
 
 			expect(stdout).toBe("");
-			expect(exitCode).toBe(1);
+			expect(exitCode).toBe(2);
 			expect(JSON.parse(stderr)).toMatchObject({ code: "VALIDATION" });
 		});
 
@@ -792,6 +794,7 @@ describe("json", () => {
 			expect(await app.run([], { flags: { json: true } })).toEqual({
 				status: "failed",
 				error: failure,
+				exitCode: 1,
 				events: [1],
 				stdout: '{"type":"event","data":1}',
 				stderr: "",
@@ -804,6 +807,7 @@ describe("json", () => {
 		expect(await ok.run([], { flags: { json: true } })).toEqual({
 			status: "completed",
 			result: [1, 2],
+			exitCode: 0,
 			stdout: "[1,2]",
 			stderr: "working",
 		});
@@ -815,6 +819,7 @@ describe("json", () => {
 		expect(await failing.run([], { flags: { json: true } })).toEqual({
 			status: "failed",
 			error: failure,
+			exitCode: 2,
 			stdout: "",
 			stderr: "working",
 		});

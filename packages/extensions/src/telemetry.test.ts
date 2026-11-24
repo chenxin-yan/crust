@@ -168,7 +168,7 @@ describe("telemetry", () => {
 		])("sends no event for %s, which fails before setup", async (_case, argv, stderr) => {
 			const send = recorder();
 			const result = await captureExecute(deployApp(send), argv);
-			expect(result).toMatchObject({ exitCode: 1, stderr: expect.stringContaining(stderr) });
+			expect(result).toMatchObject({ exitCode: 2, stderr: expect.stringContaining(stderr) });
 			expect(send).not.toHaveBeenCalled();
 		});
 
@@ -182,7 +182,7 @@ describe("telemetry", () => {
 		])("reports %s as failed: it is checked after setup", async (_case, argv, stderr) => {
 			const send = recorder();
 			const result = await captureExecute(deployApp(send), argv);
-			expect(result).toMatchObject({ exitCode: 1, stderr: expect.stringContaining(stderr) });
+			expect(result).toMatchObject({ exitCode: 2, stderr: expect.stringContaining(stderr) });
 			expect(send.mock.calls.map(([event]) => [event.command, event.outcome])).toEqual([
 				[["acme", "deploy"], "failed"],
 			]);

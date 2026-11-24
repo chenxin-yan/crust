@@ -23,7 +23,7 @@ describe("didYouMean", () => {
 		expect(stderr).toContain('Unknown command "buld"');
 		expect(stderr).toContain('Did you mean "build"?');
 		expect(stderr).not.toContain("broken recipe");
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 		expect(built).toEqual([]);
 	});
 
@@ -56,7 +56,7 @@ describe("didYouMean", () => {
 		expect(stderr).toContain('Unknown command "issuess"');
 		expect(stderr).toContain('Did you mean "issue"?');
 		expect(stderr).not.toContain('Did you mean "issues"?');
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 	});
 
 	it("prefers the closer canonical over a short colliding alias", async () => {
@@ -85,7 +85,7 @@ describe("didYouMean", () => {
 		expect(stdout).not.toContain('Did you mean "issues"');
 		expect(stdout).toContain("Usage:");
 		expect(stderr).toBe("");
-		expect(exitCode).toBe(1);
+		expect(exitCode).toBe(2);
 	});
 
 	it("never suggests a `meta.hidden: true` command, even on a close match", async () => {

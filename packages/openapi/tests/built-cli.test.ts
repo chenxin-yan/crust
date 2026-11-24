@@ -106,12 +106,17 @@ describe.skipIf(!which("bun"))("a URL spec in a built CLI", () => {
 			const entry = bundle(join(installed, "bin", "cli.js"), `--target=${target}`);
 			expect(readFileSync(entry, "utf8")).not.toContain("built-cli-marker");
 
-			// Without its index the CLI has no generated commands, and every invocation says why.
-			for (const argv of [["--help"], ["api", "--list"], ["list-users"]]) {
+			// Without its index the CLI has no generated commands, and every invocation says why. One
+			// that is a usage error without them (`--help` here has no `help()`) still exits 2.
+			for (const [argv, status] of [
+				[["--help"], 2],
+				[["api", "--list"], 1],
+				[["list-users"], 2],
+			] as const) {
 				expect(run(runtime, [entry, ...argv])).toMatchObject({
 					stdout: "",
 					stderr: `Error: api: the OpenAPI data was not found at "${join(installed, "openapi", "index.json")}". Run \`crust build\` first, and ship its "openapi" directory with the CLI.\n`,
-					status: 1,
+					status,
 				});
 			}
 

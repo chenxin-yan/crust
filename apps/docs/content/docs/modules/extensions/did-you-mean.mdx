@@ -14,7 +14,7 @@ $ my-cli deply
 Unknown command "deply". Did you mean "deploy"?
 
 Available commands: deploy
-# exit code: 1
+# exit code: 2
 ```
 
 `didYouMean()` presents `COMMAND_NOT_FOUND` errors in `execute()`. It suggests the visible sibling command closest to the typed name:
@@ -42,7 +42,7 @@ new Crust("my-cli").extend(didYouMean({ mode: "help" }));
 | `"error"` (default) | Message and available commands, on stderr |
 | `"help"`            | Message and the parent's help, on stdout  |
 
-The exit code stays 1 in both modes.
+The exit code stays 2 in both modes.
 
 ## Limitations
 

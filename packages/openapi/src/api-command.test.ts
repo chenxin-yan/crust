@@ -610,7 +610,7 @@ describe("api <path>", () => {
 
 		expect({ stderr, exitCode }).toEqual({
 			stderr: "Error: -X CONNECT: this runtime's fetch() cannot send it.",
-			exitCode: 1,
+			exitCode: 2,
 		});
 		expect(calls).toEqual([]);
 	});
@@ -634,7 +634,7 @@ describe("api <path>", () => {
 		expect(run("FOO")).toMatchObject({
 			stdout: "",
 			stderr: "Error: -X FOO: this runtime's fetch() would send it as GET.\n",
-			status: 1,
+			status: 2,
 		});
 		expect(run("purge")).toMatchObject({ stdout: "PURGE", stderr: "", status: 0 });
 	});
@@ -952,7 +952,7 @@ describe("api <path>", () => {
 		const calls = stubFetch();
 		const { stderr, exitCode } = await captureExecute(buildApp(), argv);
 
-		expect({ stderr, exitCode }).toEqual({ stderr: message, exitCode: 1 });
+		expect({ stderr, exitCode }).toEqual({ stderr: message, exitCode: 2 });
 		expect(calls).toEqual([]);
 	});
 
@@ -1000,7 +1000,7 @@ describe("api <path>", () => {
 				expect(await captureExecute(app, ["api", path, "-H", "Authorization: x"])).toEqual({
 					stdout: "",
 					stderr: `Error: ${message}`,
-					exitCode: 1,
+					exitCode: 2,
 				});
 			}
 			expect(calls).toEqual([]);
@@ -1183,7 +1183,7 @@ describe("api preview <path>", () => {
 				expect(preview(file)).toMatchObject({
 					stdout: "",
 					stderr: `Error: api preview: --body @${file} is not a regular file; pass the body inline or as a file\n`,
-					status: 1,
+					status: 2,
 				});
 			}
 		},

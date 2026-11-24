@@ -701,6 +701,7 @@ describe("toolResultFromOutcome", () => {
 	const completed = (result: CompletedResult) => ({
 		status: "completed" as const,
 		result,
+		exitCode: 0,
 		stdout: "out",
 		stderr: "",
 	});
@@ -713,12 +714,18 @@ describe("toolResultFromOutcome", () => {
 		],
 		[
 			"handled",
-			{ status: "handled" as const, by: defineExtensionId("test:h"), stdout: "out", stderr: "" },
+			{
+				status: "handled" as const,
+				by: defineExtensionId("test:h"),
+				exitCode: 0,
+				stdout: "out",
+				stderr: "",
+			},
 			{ content: [{ type: "text", text: "out" }] },
 		],
 		[
 			"failed",
-			{ status: "failed" as const, error: new Error("boom"), stdout: "", stderr: "" },
+			{ status: "failed" as const, error: new Error("boom"), exitCode: 1, stdout: "", stderr: "" },
 			{ content: [{ type: "text", text: "Error: boom" }], isError: true },
 		],
 	])("appends non-empty stderr after a %s result", (_label, outcome, withoutStderr) => {

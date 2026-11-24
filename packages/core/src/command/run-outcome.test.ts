@@ -29,6 +29,7 @@ describe("captured run outcomes", () => {
 			expect(result).toEqual({
 				status: "completed",
 				result: 42,
+				exitCode: 0,
 				stdout: "one\ntwo\n",
 				stderr: "diagnostic",
 			});
@@ -47,7 +48,13 @@ describe("captured run outcomes", () => {
 					throw error;
 				})
 				.run([]);
-			expect(result).toEqual({ status: "failed", error, stdout: "partial", stderr: "" });
+			expect(result).toEqual({
+				status: "failed",
+				error,
+				exitCode: 1,
+				stdout: "partial",
+				stderr: "",
+			});
 			if (result.status === "failed") expect(result.error).toBe(error);
 		},
 	);
@@ -64,7 +71,13 @@ describe("captured run outcomes", () => {
 					},
 				},
 			);
-		expect(result).toEqual({ status: "failed", error, stdout: "recorded", stderr: "" });
+		expect(result).toEqual({
+			status: "failed",
+			error,
+			exitCode: 1,
+			stdout: "recorded",
+			stderr: "",
+		});
 	});
 	it("handles the invocation before required validation and captures hook output", async () => {
 		const id = defineExtensionId("handled");
@@ -77,6 +90,7 @@ describe("captured run outcomes", () => {
 		expect(await erased.run([])).toEqual({
 			status: "handled",
 			by: id,
+			exitCode: 0,
 			stdout: "help",
 			stderr: "",
 		});
@@ -91,7 +105,13 @@ it("captures preparation output/failure while snapshot still rejects", async () 
 			throw error;
 		}),
 	);
-	expect(await app.run([])).toEqual({ status: "failed", error, stdout: "", stderr: "preparing" });
+	expect(await app.run([])).toEqual({
+		status: "failed",
+		error,
+		exitCode: 1,
+		stdout: "",
+		stderr: "preparing",
+	});
 	await expect(app.snapshot()).rejects.toBe(error);
 });
 
@@ -119,7 +139,13 @@ it("captures cleanup failure only after disposal, without presenting errors or c
 			return 1;
 		});
 	const outcome = await app.run([]);
-	expect(outcome).toEqual({ status: "failed", error, stdout: "action", stderr: "disposed" });
+	expect(outcome).toEqual({
+		status: "failed",
+		error,
+		exitCode: 1,
+		stdout: "action",
+		stderr: "disposed",
+	});
 	expect(presented).toBe(false);
 	expect(process.exitCode).toBe(status);
 });
@@ -140,6 +166,7 @@ it("captures cancellation and postRun diagnostics with original error identity",
 	expect(await app.run([])).toEqual({
 		status: "failed",
 		error,
+		exitCode: 130,
 		stdout: "partial",
 		stderr: "failed",
 	});
@@ -161,10 +188,17 @@ it("isolates nested and concurrent invocation terminal bridges", async () => {
 	expect(a).toEqual({
 		status: "completed",
 		result: undefined,
+		exitCode: 0,
 		stdout: "inner",
 		stderr: "before\nafter",
 	});
-	expect(b).toEqual({ status: "completed", result: undefined, stdout: "", stderr: "inner" });
+	expect(b).toEqual({
+		status: "completed",
+		result: undefined,
+		exitCode: 0,
+		stdout: "",
+		stderr: "inner",
+	});
 	expect(getAmbientTerminalIO()).toBeUndefined();
 });
 
@@ -244,6 +278,7 @@ it("accepts args, flags and raw sections and treats undefined unknown keys as om
 	expect(await app.run([], input)).toEqual({
 		status: "completed",
 		result: { args: { file: "file.txt" }, flags: { mode: "safe" }, rawArgs: ["--literal"] },
+		exitCode: 0,
 		stdout: "",
 		stderr: "",
 	});

@@ -33,7 +33,7 @@ $ greet --name Linus
 Error: Invalid value for --name. Expected one of: Ada, Grace
 ```
 
-Both exit with status 1 before the action runs. These declarations also drive help text and inferred types. See [Values and validation](/docs/guide/values-and-validation) for custom parsing and schemas.
+Both exit with status 2, the [usage error](#exit-status) status, before the action runs. These declarations also drive help text and inferred types. See [Values and validation](/docs/guide/values-and-validation) for custom parsing and schemas.
 
 ## Fail from anywhere
 
@@ -64,7 +64,37 @@ Error: No app.config.json found. Run `app init` to create one.
 
 - Recognize it with `instanceof`, never by message text, in [`run()` outcomes](#handle-errors-in-code), tests, and [`onError` hooks](#customize-error-output).
 - Pass the underlying failure as `{ cause }` to keep it for [debugging](#print-stack-traces). Crust renders only the message.
-- Setting `name` is optional: it labels stack traces. Crust never reads `name` or any other field of your errors to decide what to do, except `AbortError` for [cancellation](#cancellation).
+- Setting `name` is optional: it labels stack traces. Crust never reads `name` or any other field of your errors to decide what to do, except `AbortError` for [cancellation](#cancellation) and a non-zero integer `exitCode` for the [exit status](#exit-status).
+
+## Exit status
+
+`execute()` ends every invocation with one exit code, resolves to it, and sets `process.exitCode` to it once at the end:
+
+| Status        | When                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `0`           | The action completed, or an Extension handled the invocation, such as `--help`                                           |
+| `n`           | The action called `exitCode(n)` and completed                                                                            |
+| `1`           | The action, a hook, or cleanup threw; a thrown value with a non-zero integer `exitCode` property exits with that instead |
+| `2`           | A usage error: a [`CrustError`](/docs/api/errors#codes) with code `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND`          |
+| `130` / `143` | Ctrl+C or `SIGTERM` [cancelled](#cancellation) the run, whatever the action did                                          |
+
+To report an outcome without failing, as `grep` and `diff` do, call `exitCode(n)` with an integer `n` from the action's context. The action carries on, and the last call wins; `return` or `throw` to stop:
+
+<include lang="ts">../../../examples/guide/error-handling.ts#exit-code</include>
+
+```sh
+$ search b a b
+b
+$ search z a
+# exit 1
+$ search
+Error: Missing required argument "<pattern>"
+# exit 2
+```
+
+- To fail with a status of your own, throw an error that carries it, such as `Object.assign(new Error("Container exited"), { exitCode: 137 })`. An error from a child process library that sets `exitCode` passes its status through unchanged, except a multiple of 256, which a shell would read as success: it exits `1`.
+- Setting `process.exitCode` in an action or hook has no effect: `execute()` overwrites it. `onError` hooks change how a failure prints, never its status.
+- [`run()` outcomes](#handle-errors-in-code) and [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) report the same `exitCode`.
 
 ## Customize error output
 

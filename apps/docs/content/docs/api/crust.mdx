@@ -311,7 +311,7 @@ Editors complete command names, argument and flag names, and the action's result
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.
 - For genuinely dynamic paths and input, use an `AnyCrust` view; it resolves to `RunOutcome<unknown, readonly unknown[] | undefined>`, since any command may stream events.
 
-`run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult-events), with captured output and a `completed`, `handled`, or `failed` status.
+`run()` resolves after cleanup to a [`RunOutcome`](/docs/api/types#runoutcomeresult-events), with captured output, the `exitCode` `execute()` would end with, and a `completed`, `handled`, or `failed` status.
 
 - `run()` never renders errors, calls `onError`, or changes `process.exitCode`. Eager authoring checks throw at the builder call; deferred definition errors encountered during `run()` produce a `failed` outcome.
 - Captured writes are joined with `"\n"`. `stdout` and `stderr` are captured separately, so their relative order is not preserved.
@@ -339,7 +339,8 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
   ../../../examples/api/crust.ts#execute
 </include>
 
-- Exit codes are `0` on success, `1` on failure, and `130` for cancellation (`143` when `SIGTERM` cancelled it). `process.exitCode` is set on failure.
+- The exit code is `0` on success, or the code the action set with `exitCode(n)`; `1` on failure, or the thrown value's non-zero integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND` error; and `130` for cancellation (`143` when `SIGTERM` cancelled it). See [exit status](/docs/guide/error-handling#exit-status).
+- `execute()` sets `process.exitCode` once, when the invocation ends, and does not take the exit code from it: a value an action or hook assigns is overwritten.
 - A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks; if none claims it, the abort itself renders nothing, but cleanup failures that accompany it still render. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - On macOS and Linux, each default `stdout(text)` / `stderr(text)` line is written synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
 - `options.io` captures rendered output in tests, including default prompt and progress output. It does not provide prompt input. With `io` set, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running.
