@@ -86,8 +86,8 @@ Pulls a plain Crust Context inside a `handler()` program, typed by the factory's
 - It is lazy like `ctx.<name>`, and repeated pulls share one build.
 - It works only inside `handler()`: its Effect requires `HandlerInput` and `ContextService<Name, Value>`, both exported for annotating reusable programs.
 - The command's `ctx` must hold a Context of that name and exactly that value type, provided or used on its path; otherwise the `handler()` call is a compile error.
-- A `handler()` defined outside `.action()` cannot see the command's `ctx`, so annotate its input with the Contexts it pulls: `handler(function* (input: CrustCommandContext<any, any, { config: Config }>) { … })`. Passing it to a command without that Context is then a compile error. That check is assignability: a command whose Context of that name holds a wider value still compiles.
-- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A different factory with the same name compiles when its value type is the same, or for a handler defined outside `.action()` a wider one, and fails with a `CrustDefinitionError` at runtime.
+- A `handler()` defined outside `.action()` cannot see the command's `ctx`, so annotate its input with the Contexts it pulls: `handler(function* (input: CrustCommandContext<any, any, { config: Config }>) { … })`. Passing it to a command without that Context is then a compile error. That check is assignability: a command whose Context of that name holds a value with extra properties still compiles.
+- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A different factory with the same name compiles when its value type is the same, or for a handler defined outside `.action()` one with extra properties, and fails with a `CrustDefinitionError` at runtime.
 
 ## Environment variables
 
