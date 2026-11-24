@@ -206,17 +206,20 @@ describe("scaffold", () => {
 	it.each([
 		[{ A: "one", "a/b": "two" }, '"A" cannot be both a file and the directory of'],
 		[{ "README.md": "one", "readme.md": "two" }, "differ only in letter case"],
-	])("refuses paths that differ only in letter case before deleting anything: %j", async (files, message) => {
-		mkdirSync(destDir);
-		writeFileSync(join(destDir, "keep.txt"), "keep");
+	])(
+		"refuses paths that differ only in letter case before deleting anything: %j",
+		async (files, message) => {
+			mkdirSync(destDir);
+			writeFileSync(join(destDir, "keep.txt"), "keep");
 
-		for (const dryRun of [true, false]) {
-			await expect(scaffold({ dest: destDir, files, conflict: "replace", dryRun })).rejects.toThrow(
-				message,
-			);
-		}
-		expect(readdirSync(destDir)).toEqual(["keep.txt"]);
-	});
+			for (const dryRun of [true, false]) {
+				await expect(
+					scaffold({ dest: destDir, files, conflict: "replace", dryRun }),
+				).rejects.toThrow(message);
+			}
+			expect(readdirSync(destDir)).toEqual(["keep.txt"]);
+		},
+	);
 
 	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
 		"refuses an unreadable template file before deleting anything, in a dry run as well",
@@ -336,7 +339,11 @@ describe("scaffold", () => {
 		});
 
 		it("'overwrite' onto the template itself keeps every file's bytes", async () => {
-			const result = await scaffold({ template: templateDir, dest: templateDir, conflict: "overwrite" });
+			const result = await scaffold({
+				template: templateDir,
+				dest: templateDir,
+				conflict: "overwrite",
+			});
 
 			expect(result.files).toEqual(["file.txt"]);
 			expect(readFileSync(join(templateDir, "file.txt"), "utf-8")).toBe("new content");
