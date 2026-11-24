@@ -318,9 +318,9 @@ export function urlLauncher(url: string, platform: string = process.platform): [
 export async function openUrl(url: string): Promise<boolean> {
 	// oxlint-disable-next-line no-control-regex -- matching control characters is the point.
 	if (/[\x00-\x1f\x7f-\x9f]/.test(url)) return false;
-	const protocol = URL.parse(url)?.protocol;
-	if (protocol !== "https:" && protocol !== "http:") return false;
-	const [command, args] = urlLauncher(url);
+	const parsed = URL.parse(url);
+	if (parsed?.protocol !== "https:" && parsed?.protocol !== "http:") return false;
+	const [command, args] = urlLauncher(parsed.href);
 	const { spawn } = process.getBuiltinModule("node:child_process");
 	return new Promise((resolve) => {
 		try {

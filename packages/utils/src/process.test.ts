@@ -521,9 +521,18 @@ describe("openUrl", () => {
 		expect(await openUrl(url)).toBe(true);
 		expect(await openUrl("http://example.com/")).toBe(true);
 		const [command, args, options] = spawn.mock.calls[0]!;
-		expect(args).toContain(url);
+		expect(args).toContain(new URL(url).href);
 		expect(args).toHaveLength(command === "rundll32" ? 2 : 1);
 		expect(options).toMatchObject({ shell: false, detached: true });
+	});
+
+	it("passes the launcher the URL it checked, not the string as given", async () => {
+		// SAFETY: openUrl only listens for "spawn"/"error" and calls unref().
+		const spawn = vi
+			.spyOn(childProcess, "spawn")
+			.mockImplementation(() => fakeLauncher("spawn") as never);
+		expect(await openUrl(" https://example.com/")).toBe(true);
+		expect(spawn.mock.calls[0]![1]).toContain("https://example.com/");
 	});
 
 	it("resolves false when the launcher is missing or cannot spawn, and detaches when it starts", async () => {
