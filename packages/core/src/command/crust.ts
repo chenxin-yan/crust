@@ -523,7 +523,7 @@ type ExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es extends r
 ]
 	? ExtensionFlags<
 			T,
-			Acc & ExtensionOwnFlags<H> & ExtensionProvidedFlags<H> & ExtensionHookFlags<H>
+			ReplaceEntries<Acc, ExtensionOwnFlags<H> & ExtensionProvidedFlags<H> & ExtensionHookFlags<H>>
 		>
 	: Acc &
 			(keyof ExtensionOwnFlags<Es[number]> extends never
@@ -540,7 +540,7 @@ type RecursiveExtensionFlags<Es extends readonly AnyExtension[], Acc = {}> = Es 
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? RecursiveExtensionFlags<T, Acc & RecursiveFlagsOf<H> & ExtensionHookFlags<H>>
+	? RecursiveExtensionFlags<T, ReplaceEntries<Acc, RecursiveFlagsOf<H> & ExtensionHookFlags<H>>>
 	: Acc & ExtensionFlags<Es>;
 
 // Fold of `ExtensionProvidedFlags`: inline `.command()` children added after `.extend()` inherit them.
@@ -548,7 +548,7 @@ type ExtensionsProvidedFlags<Es extends readonly AnyExtension[], Acc = {}> = Es 
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? ExtensionsProvidedFlags<T, Acc & ExtensionProvidedFlags<H>>
+	? ExtensionsProvidedFlags<T, ReplaceEntries<Acc, ExtensionProvidedFlags<H>>>
 	: Acc;
 
 type UseSourceFlags<S> = ContextUseFlags<
@@ -631,6 +631,10 @@ type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extend
 	? Base & Next
 	: { [K in keyof Base as K extends LiteralKeys<Next> ? never : K]: Base[K] } & Next;
 
+type WithoutNames<Base, Names> = [Names] extends [never]
+	? Base
+	: { [K in keyof Base as K extends Names ? never : K]: Base[K] };
+
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
 // call (TS2589 at about 90 calls).
@@ -649,7 +653,14 @@ type ExtensionCommandTree<
 				Record<string, CommandShape> extends infer R extends object
 			? R
 			: never
-		: ReplaceEntries<Tree, DefinitionsTree<ExtensionCommands<Es>>> extends infer R extends object
+		: ReplaceEntries<
+					Tree,
+					// An app command an Extension collides with only survives preparation unreplaced.
+					WithoutNames<
+						DefinitionsTree<ExtensionCommands<Es>>,
+						Exclude<LiteralKeys<Tree>, ExtensionCommandSpellings>
+					>
+			  > extends infer R extends object
 			? R
 			: never;
 
@@ -1666,7 +1677,10 @@ export class Crust<
 	 * and its hooks run once, at the later position. ID deduplication is
 	 * runtime-only: a literal flag or command name the later registration
 	 * contributes again takes its type, but removed paths can remain statically
-	 * visible and reject with `COMMAND_NOT_FOUND`. An Extension with runtime-only command names makes
+	 * visible and reject with `COMMAND_NOT_FOUND`. A command both registrations
+	 * contribute in one call is typed as either one's result. An `.action()` bound
+	 * before the later registration keeps the earlier flag types, so register
+	 * Extensions before `.action()`. An Extension with runtime-only command names makes
 	 * `run()` results `unknown` for Extension commands registered up to and in that
 	 * call, since it may replace their registration; app commands keep their types.
 	 * Required root metadata keys are checked against the constructor's inferred

@@ -170,17 +170,15 @@ it("rejects dynamically named Extension commands that collide with another root 
 
 it("types a same-id Extension re-registration by the replacement's flags and commands", async () => {
 	const id = defineExtensionId("replaced");
+	const first = defineExtension(id)
+		.flags({ mode: { type: "number" } })
+		.add(defineCommand("lint", (c) => c.action(() => 1)));
+	const second = defineExtension(id)
+		.flags({ mode: { type: "string" } })
+		.add(defineCommand("lint", (c) => c.action(() => "linted")));
 	const app = new Crust("app")
-		.extend(
-			defineExtension(id)
-				.flags({ mode: { type: "number" } })
-				.add(defineCommand("lint", (c) => c.action(() => 1))),
-		)
-		.extend(
-			defineExtension(id)
-				.flags({ mode: { type: "string" } })
-				.add(defineCommand("lint", (c) => c.action(() => "linted"))),
-		)
+		.extend(first)
+		.extend(second)
 		.action(({ flags }) => flags.mode);
 	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
 	const root = await unwrap(app.run([], { flags: { mode: "fast" } }));
@@ -189,6 +187,27 @@ it("types a same-id Extension re-registration by the replacement's flags and com
 	const lint = await unwrap(app.run(["lint"]));
 	type _command = Expect<Equal<ResultOf<typeof lint>, string>>;
 	expect(lint).toMatchObject({ status: "completed", result: "linted" });
+
+	// One call: the flag is replaced too; the command is typed as either registration's result.
+	const together = new Crust("app").extend(first, second).action(({ flags }) => flags.mode);
+	const togetherRoot = await unwrap(together.run([], { flags: { mode: "fast" } }));
+	type _togetherFlag = Expect<Equal<ResultOf<typeof togetherRoot>, string | undefined>>;
+	expect(togetherRoot).toMatchObject({ status: "completed", result: "fast" });
+	const togetherLint = await unwrap(together.run(["lint"]));
+	type _togetherCommand = Expect<Equal<ResultOf<typeof togetherLint>, string | number>>;
+	expect(togetherLint).toMatchObject({ status: "completed", result: "linted" });
+});
+
+it("keeps an app command's type when the Extension command colliding with it is replaced", async () => {
+	const id = defineExtensionId("temporary");
+	const app = new Crust("app")
+		.add(defineCommand("foo", (c) => c.action(() => 123)))
+		.extend(defineExtension(id).add(defineCommand("foo", (c) => c.action(() => "text"))))
+		.extend(defineExtension(id));
+	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
+	const foo = await unwrap(app.run(["foo"]));
+	type _command = Expect<Equal<ResultOf<typeof foo>, number>>;
+	expect(foo).toMatchObject({ status: "completed", result: 123 });
 });
 
 it("owns the checked parser function instead of rereading the mutable author object", async () => {
