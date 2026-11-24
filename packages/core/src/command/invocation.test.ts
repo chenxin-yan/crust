@@ -648,6 +648,16 @@ describe("Invocation pipeline — exit status", () => {
 		expect(await app.run([])).toMatchObject({ status: "completed", result: "done", exitCode: 4 });
 	});
 
+	it("fails when the action calls exitCode(n) with a non-integer", async () => {
+		const app = new Crust("app").action(({ exitCode }) => exitCode(1.5));
+		expect(await execute(app, [])).toMatchObject({
+			exitCode: 1,
+			processExitCode: 1,
+			stderr: ["Error: exitCode(1.5): not an integer."],
+		});
+		expect(await app.run([])).toMatchObject({ status: "failed", exitCode: 1 });
+	});
+
 	it("ends with a thrown value's non-zero integer exitCode, else 1, whatever exitCode(n) set", async () => {
 		const failing = (error: unknown) =>
 			new Crust("app").action(({ exitCode }) => {
@@ -666,6 +676,12 @@ describe("Invocation pipeline — exit status", () => {
 		expect((await execute(failing({ exitCode: "2" }), [])).exitCode).toBe(1);
 		expect((await execute(failing({ exitCode: 0 }), [])).exitCode).toBe(1);
 		expect((await execute(failing({ exitCode: 1e21 }), [])).exitCode).toBe(1);
+		// A shell keeps only the low byte: 256 would read as success.
+		expect((await execute(failing({ exitCode: 256 }), [])).exitCode).toBe(1);
+		const revoked = Proxy.revocable({}, {});
+		revoked.revoke();
+		expect((await execute(failing(revoked.proxy), [])).exitCode).toBe(1);
+		expect(await failing(revoked.proxy).run([])).toMatchObject({ status: "failed", exitCode: 1 });
 		// An Extension that fails to apply goes through the same rule.
 		const broken = new Crust("app")
 			.extend(
@@ -709,6 +725,16 @@ describe("Invocation pipeline — exit status", () => {
 			throw new Error("failed");
 		});
 		expect(await execute(failing, [])).toMatchObject({ exitCode: 1, processExitCode: 1 });
+		const rewriting = new Crust("app")
+			.extend(
+				defineExtension(defineExtensionId("rewrite")).onError((error) => {
+					Object.assign(error as object, { exitCode: 5 });
+				}),
+			)
+			.action(() => {
+				throw Object.assign(new Error("failed"), { exitCode: 3 });
+			});
+		expect(await execute(rewriting, [])).toMatchObject({ exitCode: 3, processExitCode: 3 });
 	});
 });
 

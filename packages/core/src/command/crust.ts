@@ -151,8 +151,8 @@ export interface CrustCommandContext<
 	rootCommand: CommandSnapshot;
 	/**
 	 * Set the invocation's integer exit code for when the action completes; the action carries on and the
-	 * last call wins. To stop, `return` or `throw`. A throw exits `1`, or with the thrown value's
-	 * non-zero integer `exitCode`.
+	 * last call wins; anything but an integer throws. To stop, `return` or `throw`. A throw exits `1`, or
+	 * with the thrown value's non-zero integer `exitCode`.
 	 */
 	exitCode: (code: number) => void;
 }

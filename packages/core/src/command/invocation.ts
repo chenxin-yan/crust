@@ -227,12 +227,14 @@ function failureExitCode(error: CaughtError, cancelledExitCode = EXIT_CODE_CANCE
 	try {
 		// SAFETY: structural probe of an arbitrary thrown value; a throwing getter falls through to 1.
 		const code = isObjectLike(error) ? (error as { exitCode?: unknown }).exitCode : undefined;
-		// A failure never exits 0, and `process.exitCode` rejects anything but a safe integer.
-		if (typeof code === "number" && Number.isSafeInteger(code) && code !== 0) return code;
+		// A failure never exits 0 (a shell keeps only the low byte, so 256 reads as 0), and
+		// `process.exitCode` rejects anything but a safe integer.
+		if (typeof code === "number" && Number.isSafeInteger(code) && code % 256 !== 0) return code;
+		if (error instanceof CrustError && USAGE_ERROR_CODES.has(error.code)) return 2;
 	} catch {
 		// Not readable: the failure keeps the generic code.
 	}
-	return error instanceof CrustError && USAGE_ERROR_CODES.has(error.code) ? 2 : 1;
+	return 1;
 }
 
 /**
@@ -836,6 +838,8 @@ async function dispatch(
 				stdout: output.routed.stdout,
 				stderr: output.routed.stderr,
 				exitCode: (code: number) => {
+					if (!Number.isSafeInteger(code))
+						throw new RangeError(`exitCode(${code}): not an integer.`);
 					actionExitCode = code;
 				},
 			} satisfies CrustCommandContext;
@@ -1219,7 +1223,7 @@ export async function executeInvocation(
 
 		const output = createInvocationOutput(io);
 		let extensionContext: ExtensionContext | undefined;
-		let rendered: { error: CaughtError } | undefined;
+		let rendered: { error: CaughtError; exitCode: number } | undefined;
 		let exitCode = 0;
 		try {
 			({ exitCode } = await dispatch(
@@ -1232,7 +1236,8 @@ export async function executeInvocation(
 					extensionContext = context;
 				},
 				async (error, context) => {
-					rendered = { error };
+					// Recorded before the hooks run: an `onError` hook that rewrites `exitCode` changes only the output.
+					rendered = { error, exitCode: failureExitCode(error, cancelledExitCode) };
 					return renderFailure(error, argv, prepared, output, signal, env, context);
 				},
 			));
@@ -1256,7 +1261,10 @@ export async function executeInvocation(
 			if (cleanupFailure) renderCleanupFailure(cleanupFailure.error, output, "Cleanup failed");
 			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
 			// while unwinding it (callers such as shell loops must still see the interrupt).
-			exitCode = failureExitCode(error, cancelledExitCode);
+			exitCode =
+				rendered && Object.is(error, rendered.error)
+					? rendered.exitCode
+					: failureExitCode(error, cancelledExitCode);
 			if (!rendered) {
 				await renderFailure(error, argv, prepared, output, signal, env, extensionContext);
 			}
