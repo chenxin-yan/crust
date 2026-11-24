@@ -818,6 +818,22 @@ describe("Invocation pipeline — output failures", () => {
 			stderr: ["Cleanup failed: close failed"],
 		});
 		expect(postRunCause).toBe("SIGPIPE");
+
+		// The action's own `await using` fails while that cancellation unwinds.
+		postRunCause = undefined;
+		const disposing = new Crust("app").extend(leaky).action(async () => {
+			await using _resource = {
+				async [Symbol.asyncDispose]() {
+					throw new Error("own close failed");
+				},
+			};
+			throw stdoutClosed();
+		});
+		expect(await execute(disposing, stdoutClosed)).toEqual({
+			exitCode: 141,
+			stderr: ["Error: own close failed", "Cleanup failed: close failed"],
+		});
+		expect(postRunCause).toBe("SIGPIPE");
 	});
 
 	it("fails the invocation with 1 on any other stdout write error", async () => {

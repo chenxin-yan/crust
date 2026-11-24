@@ -173,13 +173,20 @@ function isAbortError(error: CaughtError): boolean {
 }
 
 /** The cancellation the process stdout writer throws once its reader is gone (`cli | head`). */
-function isStdoutClosed(error: CaughtError): error is Error {
+function stdoutClosed(error: CaughtError): Error | undefined {
 	try {
-		return isAbortError(error) && (error as Error).cause === "SIGPIPE";
+		// The action's own `await using` may have failed while unwinding it: the cancellation is the suppressed side.
+		const seen = new Set<object>();
+		let current = error;
+		while (isSuppressedError(current) && !seen.has(current)) {
+			seen.add(current);
+			current = current.suppressed;
+		}
+		if (isAbortError(current) && (current as Error).cause === "SIGPIPE") return current as Error;
 	} catch {
 		// A throwing getter on an arbitrary thrown value makes it an ordinary failure.
-		return false;
 	}
+	return undefined;
 }
 
 /**
@@ -1253,7 +1260,8 @@ export async function executeInvocation(
 
 		// The reader of stdout is gone (`cli | head`): cancel the run, as SIGPIPE ends a C program.
 		const onStdoutClosed = (error: CaughtError): void => {
-			if (!controller.signal.aborted && isStdoutClosed(error)) cancel("SIGPIPE", error);
+			const closed = controller.signal.aborted ? undefined : stdoutClosed(error);
+			if (closed) cancel("SIGPIPE", closed);
 		};
 		const output = createInvocationOutput({
 			...io,
