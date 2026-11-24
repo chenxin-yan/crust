@@ -205,8 +205,10 @@ function argToken(arg: ArgSnapshot): string {
 }
 
 /** A schema-backed definition's string `enum`, of each item for a list. */
-function schemaChoices(def: ArgSnapshot | FlagSnapshot): readonly string[] | undefined {
-	const list = "negatable" in def ? def.multiple : def.variadic;
+function schemaChoices(
+	def: ArgSnapshot | FlagSnapshot,
+	list: boolean | undefined,
+): readonly string[] | undefined {
 	const value: unknown = list ? def.inputSchema?.items : def.inputSchema;
 	if (typeof value !== "object" || value === null || !("enum" in value)) return undefined;
 	const { enum: values } = value;
@@ -269,7 +271,7 @@ function documentationFlags(
 			multiple: def.multiple === true,
 			valueName:
 				def.type === "boolean" || def.type === "count" ? undefined : (def.valueName ?? def.type),
-			choices: def.choices ?? schemaChoices(def),
+			choices: def.choices ?? schemaChoices(def, def.multiple),
 			default: def.default !== undefined ? def.default : def.inputSchema?.default,
 			env: def.env,
 			delimiter: def.delimiter,
@@ -319,7 +321,7 @@ function documentCommand(
 			token: argToken(arg),
 			required: arg.required === true,
 			variadic: arg.variadic ?? false,
-			choices: arg.choices ?? schemaChoices(arg),
+			choices: arg.choices ?? schemaChoices(arg, Boolean(arg.variadic)),
 			default: arg.default !== undefined ? arg.default : arg.inputSchema?.default,
 		}),
 	);

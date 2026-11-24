@@ -316,6 +316,21 @@ describe("buildCommandDocumentation", () => {
 		});
 	});
 
+	it("reads a list argument's schema choices from its items when it owns a key named negatable", async () => {
+		const model = await docs(
+			new Crust("app")
+				.extend(defineExtension(defineExtensionId("owner")).owns("negatable" as never))
+				.args({
+					name: "labels",
+					variadic: true,
+					schema: z.array(z.enum(["bug", "docs"])),
+					...({ negatable: false } as object),
+				})
+				.action(() => {}),
+		);
+		expect(model.args[0]?.choices).toEqual(["bug", "docs"]);
+	});
+
 	it("keeps a declared default: null", async () => {
 		const model = await docs(
 			new Crust("app")
