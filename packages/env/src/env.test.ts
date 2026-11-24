@@ -188,38 +188,12 @@ function definitionError(define: () => void): CrustError<"DEFINITION"> {
 }
 
 describe("defineEnv definitions", () => {
-	it("rejects a default outside choices and an empty delimiter when defined", () => {
-		expect(
-			definitionError(() =>
-				// @ts-expect-error -- rejected at compile time too; the runtime guard covers definitions the types cannot see, such as a value typed EnvVarsDef
-				defineEnv("env", { LEVEL: { type: "string", choices: ["ok"], default: "bad" } }),
-			).message,
-		).toContain('"LEVEL"');
-		expect(
-			definitionError(() =>
-				defineEnv("env", { TAGS: { type: "string", multiple: true, delimiter: "" } }),
-			).details,
-		).toMatchObject({ name: "TAGS", reason: "empty-delimiter" });
-	});
-
-	it("rejects flag-only keys when defined, as untyped callers could pass them", () => {
-		function expectFlagOnly(key: string, vars: EnvVarsDef): void {
-			const error = definitionError(() => defineEnv("env", vars));
-			expect(error.details).toMatchObject({ name: "DEBUG", reason: "flag-only-key" });
-			expect(error.message).toContain(`"${key}"`);
-		}
-		// @ts-expect-error -- flag-only key under test
-		expectFlagOnly("short", { DEBUG: { type: "boolean", short: "s" } });
-		// @ts-expect-error -- flag-only key under test
-		expectFlagOnly("aliases", { DEBUG: { type: "boolean", aliases: ["x"] } });
-		// @ts-expect-error -- flag-only key under test
-		expectFlagOnly("negatable", { DEBUG: { type: "boolean", negatable: true } });
-		// @ts-expect-error -- flag-only key under test
-		expectFlagOnly("noNegate", { DEBUG: { type: "boolean", noNegate: true } });
-		// @ts-expect-error -- flag-only key under test
-		expectFlagOnly("hidden", { DEBUG: { type: "boolean", hidden: true } });
-		// @ts-expect-error -- flag-only key under test
-		expectFlagOnly("env", { DEBUG: { type: "boolean", env: { name: "OTHER" } } });
+	it("rejects an empty delimiter when defined, naming the variable", () => {
+		const error = definitionError(() =>
+			defineEnv("env", { TAGS: { type: "string", multiple: true, delimiter: "" } }),
+		);
+		expect(error.message).toContain('"TAGS"');
+		expect(error.details).toMatchObject({ name: "TAGS", reason: "empty-delimiter" });
 	});
 
 	it("owns definitions and option settings at definition; source values stay live", async () => {

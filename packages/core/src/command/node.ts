@@ -132,18 +132,19 @@ export function registerFlag(
 ): void {
 	def = normalizeFlag(name, def);
 
-	const incomingSpellings = flagSpellings(name, def);
-	const existingName = Object.hasOwn(node.effectiveFlags, name)
-		? name
-		: incomingSpellings
-				.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
-				.find((existing) => existing !== undefined);
-	if (existingName !== undefined) {
-		throw new CrustError(
-			"DEFINITION",
-			`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
-			{ subject: "flag", name, reason: "flag-collision" },
-		);
+	if (process.env.CRUST_INTERNAL_BUILD !== "1") {
+		const existingName = Object.hasOwn(node.effectiveFlags, name)
+			? name
+			: flagSpellings(name, def)
+					.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
+					.find((existing) => existing !== undefined);
+		if (existingName !== undefined) {
+			throw new CrustError(
+				"DEFINITION",
+				`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
+				{ subject: "flag", name, reason: "flag-collision" },
+			);
+		}
 	}
 
 	(source === "local" ? node.localFlags : node.ownedFlags)[name] = def;

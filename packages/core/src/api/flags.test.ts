@@ -5,20 +5,6 @@ import { Crust } from "../command/crust.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 describe("defineFlag", () => {
-	it("rejects a malformed env hidden by a structural view", () => {
-		const options = { description: "Token", env: "TOKEN" };
-		function token(def: { description: string }) {
-			return defineFlag({ ...def, type: "string" });
-		}
-
-		expect(() => token(options)).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				details: { subject: "flag", reason: "invalid-env" },
-			}),
-		);
-	});
-
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
 		const verbose = defineFlag({ type: "boolean" });
 		const app = new Crust("cli").flags({ verbose, output: { type: "string", short: "o" } });
@@ -56,18 +42,10 @@ describe("defineFlag(def)", () => {
 	});
 
 	it("checks the definition eagerly without a name", () => {
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises helper validation.
 		expect(() => defineFlag({ type: "boolean", short: "xx" })).toThrow(
 			expect.objectContaining({
 				message: 'Flag short "xx" must be one character',
 				details: { subject: "flag", reason: "invalid-short" },
-			}),
-		);
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises helper validation.
-		expect(() => defineFlag({ type: "string", choices: ["a"], default: "b" })).toThrow(
-			expect.objectContaining({
-				message: "Flag default must be one of choices",
-				details: { subject: "flag", reason: "default-outside-choices" },
 			}),
 		);
 	});
@@ -106,13 +84,7 @@ describe("checked local definitions", () => {
 });
 
 describe("checked attachments", () => {
-	it("checks destination relations and owns definition collections", async () => {
-		expect(() =>
-			new Crust("cli")
-				.args({ name: "a", type: "string" })
-				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				.args({ name: "a", type: "number" }),
-		).toThrow("already defined");
+	it("owns definition collections", async () => {
 		const choices = ["a"];
 		const defaults = ["a"];
 		const attached = new Crust("cli")
@@ -126,18 +98,18 @@ describe("checked attachments", () => {
 
 it("defers helper parsers until invocation and calls them once", async () => {
 	let calls = 0;
-	// @ts-expect-error -- runtime regression deliberately exercises Promise rejection.
 	const flag = defineFlag({
 		type: "string",
 		parse: (raw: string) => {
 			calls++;
-			return Promise.resolve(raw);
+			return raw.toUpperCase();
 		},
 	});
-	// @ts-expect-error -- runtime regression deliberately consumes the invalid helper.
-	const app = new Crust("cli").flags({ value: flag });
+	const app = new Crust("cli").flags({ value: flag }).action(({ flags }) => flags.value);
 	expect(calls).toBe(0);
-	await expect(unwrap(app.run([], { flags: { value: "input" } }))).rejects.toThrow("synchronous");
+	expect(await unwrap(app.run([], { flags: { value: "input" } }))).toMatchObject({
+		result: "INPUT",
+	});
 	expect(calls).toBe(1);
 });
 

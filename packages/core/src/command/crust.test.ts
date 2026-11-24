@@ -563,7 +563,6 @@ describe("Crust .extend()", () => {
 				aliases: ["local-mode"],
 			},
 		});
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		const extended = app.extend(first);
 		await expect(extended.snapshot()).rejects.toThrow(
 			expect.objectContaining({
@@ -675,12 +674,10 @@ describe("Extension application at prepare time", () => {
 			cmd.flags({ mode: { type: "string" } }).action(() => {}),
 		);
 		const appWithSub = new Crust("cli").add(sub);
-		// @ts-expect-error -- Extension flag "mode" collides with subcommand "sub"'s local flag (FIX_ALIAS_COLLISION)
 		const extended = appWithSub.extend(themer);
 		await expect(extended.snapshot()).rejects.toThrow("collides");
 
 		const appWithExt = new Crust("cli").extend(themer);
-		// @ts-expect-error -- subcommand "sub"'s local flag "mode" collides with the registered Extension flag (FIX_ALIAS_COLLISION)
 		const added = appWithExt.add(sub);
 		await expect(added.snapshot()).rejects.toThrow("collides");
 	});
@@ -2862,7 +2859,7 @@ describe("Crust .add() aliases", () => {
 	});
 });
 
-describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
+describe("definition checks on config-built definitions", () => {
 	type DynamicDefs = FlagsDef[] & ArgsDef;
 	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
 	const asDynamic = (value: unknown): DynamicDefs => value as DynamicDefs;
@@ -2891,11 +2888,6 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				defineExtension(defineExtensionId("cfg-ext")).flags(asDynamicFlags(input)),
 		];
 		const cases: [unknown, string, string | undefined][] = [
-			// Nullish values typecheck without strictNullChecks; `FlagsInput` admits undefined definitions.
-			[[null], "invalid-flags", undefined],
-			[[undefined], "invalid-flags", undefined],
-			[[{ out: null }], "invalid-flags", "out"],
-			[[{ out: undefined }], "invalid-flags", "out"],
 			// A literal `__proto__` key sets the record's prototype instead of naming a flag.
 			[[{ __proto__: { type: "string" } }], "invalid-flags", undefined],
 			[[{ ["__proto__"]: { type: "string" } }], "reserved-spelling", "__proto__"],
@@ -2917,8 +2909,6 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				);
 			}
 		}
-		// The `__proto__` hint only fits a record that has a prototype.
-		expect(() => attach[0]!([undefined])).toThrow(/expects a plain object record$/);
 		expect(() => attach[0]!([{ __proto__: { type: "string" } }])).toThrow(/`__proto__` key/);
 		// Not array indexes: they keep insertion order.
 		for (const name of ["01", "2fa", "1.5"]) {

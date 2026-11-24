@@ -2,7 +2,6 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
-	type AnyCommandDefinitionBuilder,
 	type AnyCrust,
 	type CommandDefinition,
 	type CommandDefinitionBuilder,
@@ -62,10 +61,6 @@ function _privateCommandProof() {
 	const app = new Crust("app").add(copy);
 	const outcome = app.run(["child"], { flags: { token: "value" } });
 	type _result = Expect<Equal<typeof outcome, Promise<RunOutcome<number>>>>;
-	new Crust("app")
-		.extend(defineExtension(id).flags({ token: { type: "string" } }))
-		// @ts-expect-error Structural copies retain carried flag relations.
-		.add(copy);
 	const db = defineContext("db").setup(() => 1);
 	const demanding = defineCommand("demand", (c) => c.use(db));
 	// @ts-expect-error Structural copies retain declared demands.
@@ -146,13 +141,6 @@ function _recipeHolderProof() {
 		// @ts-expect-error A public default holder cannot erase a recipe's local flags.
 		return erase(c.flags({ token: { type: "number" } }));
 	});
-	function identity<B extends AnyCommandDefinitionBuilder>(b: B): B {
-		return b;
-	}
-	const child = defineCommand("child", (c) => identity(c.flags({ token: { type: "number" } })));
-	const owner = defineExtension(id).flags({ token: { type: "string" } });
-	// @ts-expect-error Generic identity retains the destination collision proof.
-	new Crust("app").extend(owner).add(child);
 }
 
 function _openInlineOwnedFlags() {

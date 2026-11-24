@@ -164,7 +164,7 @@ export function operationCommand(
 }
 
 function operationRecipe(
-	command: CommandDefinitionBuilder<{}, [], {}, never, never>,
+	command: CommandDefinitionBuilder<{}, []>,
 	plan: CommandPlan,
 	options: GenerateOptions,
 ) {

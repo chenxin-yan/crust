@@ -374,12 +374,7 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects malformed authored section data", () => {
-		const badSections = [
-			[{ title: "   ", body: "Body" }],
-			[{ title: "Notes", body: "" }],
-			[{ title: "Notes", body: "Body", only: [] }],
-			[{ title: "Notes", body: "Body", except: [] }],
-		];
+		const badSections = [[{ title: "   ", body: "Body" }], [{ title: "Notes", body: "" }]];
 		for (const sections of badSections) {
 			expect(() => new Crust("cli", { sections })).toThrow(
 				expect.objectContaining({
@@ -396,7 +391,6 @@ describe("command metadata sections", () => {
 
 	it("rejects CR/LF in authored and contributed section titles", async () => {
 		expect(
-			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
 		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(

@@ -60,19 +60,6 @@ describe("command definitions", () => {
 		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 	});
 
-	it("rejects Extensions registered inside command definitions", async () => {
-		const nestedExtension = defineCommand("bad", (command) => {
-			// SAFETY: deliberately escape the sealed recipe surface to verify its runtime guard.
-			return (command as unknown as Crust).extend(
-				defineExtension(defineExtensionId("nested")),
-			) as never;
-		});
-
-		await expect(new Crust("cli").add(nestedExtension).snapshot()).rejects.toThrow(
-			/Command "bad" cannot register Extensions inside command definitions/,
-		);
-	});
-
 	it("parses Context-owned flags only in definitions that use the Context", async () => {
 		const calls: string[] = [];
 		const apiKey = defineFlag({ type: "string" });
@@ -145,10 +132,7 @@ describe("command definitions", () => {
 		const cache = defineContext("cache")
 			.flags({ conn: { type: "number" } })
 			.setup(() => ({}));
-		const sub = defineCommand("sub", (cmd) =>
-			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-			cmd.use(db).provide(cache()),
-		);
+		const sub = defineCommand("sub", (cmd) => cmd.use(db).provide(cache()));
 		const app = new Crust("cli").provide(db()).add(sub);
 		await expect(app.snapshot()).rejects.toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',

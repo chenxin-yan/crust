@@ -37,7 +37,7 @@ const args = [
 
 A core variadic value is always an array. A required core variadic without a default resolves to a nonempty tuple; an omitted variadic with a scalar `default` resolves to `[default]`. `parse` runs once per element.
 
-`afterDoubleDash: true` makes the last argument take only the tokens after `--` on the command line, like clap's `Arg::last`; the other arguments then fill only from tokens before `--`, and leftover tokens after it reach `rawArgs`. It may be variadic, and so may the argument before it. Its value type is unchanged, and typed `run()` input supplies it by name. Setting it on any other argument is a TypeScript error (`FIX_AFTER_DOUBLE_DASH_POSITION`) and a `DEFINITION` error with reason `after-double-dash-position`. See [Only after `--`](/docs/guide/arguments-and-flags#only-after---).
+`afterDoubleDash: true` makes the last argument take only the tokens after `--` on the command line, like clap's `Arg::last`; the other arguments then fill only from tokens before `--`, and leftover tokens after it reach `rawArgs`. It may be variadic, and so may the argument before it. Its value type is unchanged, and typed `run()` input supplies it by name. Setting it on any other argument is a TypeScript error (`FIX_AFTER_DOUBLE_DASH_POSITION`); nothing checks it at runtime. See [Only after `--`](/docs/guide/arguments-and-flags#only-after---).
 
 ```ts
 const args = [
@@ -307,7 +307,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 - Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume; every command parses the flags they own. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`, and their flags are parsed only by the root, its inline children, and commands that `.use()` them. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
 - Lifecycle setters replace the previous callback: `.setup()`, `.renderer()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
-- Flag spellings and contributed command names are checked for collisions by TypeScript and when the method runs.
+- Flag spellings are checked for collisions when the method runs, and contributed command names when the app prepares, by the [definition checks](/docs/api/crust#definition-checks).
 
 `.factory(define)` returns an [`ExtensionFactory`](#extensionfactory).
 
@@ -321,7 +321,7 @@ When annotating a published factory, preserve literal tuples for precise typed i
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, trimmed string. TypeScript rejects a literal id that breaks this; a computed one throws a `DEFINITION` error (`empty-id`).
+A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, trimmed string; another throws a `DEFINITION` error (`empty-id`) from the [definition checks](/docs/api/crust#definition-checks).
 
 ### `RootMetaKey`
 
@@ -477,7 +477,7 @@ After an [async generator action](/docs/guide/commands#stream-events), `complete
   name="ExtensionSectionContribution"
 />
 
-One entry returned by `.sections(snapshot)`: a section plus the canonical `command` path it targets, relative to the root (`[]` is the root). Contributions append to the target's `meta.sections` in Extension registration order. The callback receives a snapshot without Extension-contributed sections. Blank or multi-line titles, blank bodies, empty audiences, both `only` and `except`, and unknown command paths fail preparation with a `DEFINITION` error.
+One entry returned by `.sections(snapshot)`: a section plus the canonical `command` path it targets, relative to the root (`[]` is the root). Contributions append to the target's `meta.sections` in Extension registration order. The callback receives a snapshot without Extension-contributed sections. Blank or multi-line titles, blank bodies, and unknown command paths fail preparation with a `DEFINITION` error from the [definition checks](/docs/api/crust#definition-checks).
 
 ### `ExtensionBuildContext`
 

@@ -129,7 +129,7 @@ Error: Expected a number for --port.
 
 `.flags()` takes one record keyed by flag name, without the `--` prefix. Use boolean flags for switches and value-taking flags for named settings.
 
-- **Names:** quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`. TypeScript rejects such a literal name; a computed one throws a `DEFINITION` error.
+- **Names:** quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`; such a name throws a `DEFINITION` error when the CLI runs from source or in `crust build` (see [definition checks](/docs/api/crust#definition-checks)).
 - **Omitted:** a flag without `required`, `default`, or an `env` binding is `undefined`.
 - **Values:** a value-taking flag needs one value, so `serve --port` fails. Built-in types convert the text and reject invalid input, including a blank number, before the action runs.
 
@@ -243,7 +243,7 @@ $ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
 publishing to npm tags=latest,beta,next
 ```
 
-- Both require `multiple: true` and a nonempty literal separator. TypeScript rejects an empty literal `env.name`, `delimiter`, or `env.delimiter`; a computed empty value throws a `DEFINITION` error.
+- Both require `multiple: true`, which TypeScript checks, and a nonempty separator. An empty `env.name`, `delimiter`, or `env.delimiter` throws a `DEFINITION` error when the CLI runs from source or in `crust build`.
 - Empty segments are dropped. Zero values after splitting follow the usual default, required, and schema rules, but an argv occurrence still wins over the environment.
 - [`run()`](/docs/api/crust#runpath-input-options) takes arrays and never splits them.
 - Boolean argv stays `--flag` / `--no-flag`. Repeated booleans can split environment text such as `true,false` with `env: { name: "FEATURES", delimiter: "," }`.

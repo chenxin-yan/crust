@@ -127,52 +127,6 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 	void spreadApp.add(foo);
 }
 
-// rejects command collisions inside one Extension's tuple
-function _typecheckRejectsCommandCollisionsInsideOneExtensionSTuple() {
-	const foo = defineCommand("foo", (command) => command.action(() => "a" as const));
-	const fooDup = defineCommand("foo", (command) => command.action(() => "b" as const));
-	const aliasA = defineCommand("alpha", { aliases: ["shared"] }, (command) =>
-		command.action(() => {}),
-	);
-	const aliasB = defineCommand("beta", { aliases: ["shared"] }, (command) =>
-		command.action(() => {}),
-	);
-
-	// @ts-expect-error -- duplicate canonical names are rejected
-	void defineExtension(defineExtensionId("dup")).add(foo, fooDup);
-	// @ts-expect-error -- a shared alias would union both shapes under one path
-	void defineExtension(defineExtensionId("alias")).add(aliasA, aliasB);
-	// Distinct spellings pass.
-	void defineExtension(defineExtensionId("ok")).add(foo, aliasA);
-}
-
-// rejects Extension flags colliding with contributed command flags
-function _typecheckRejectsExtensionFlagsCollidingWithContributedCommandFlags() {
-	const scan = defineCommand("scan", (command) =>
-		command.flags({ trace: { type: "boolean" } }).action(() => {}),
-	);
-	const extension = defineExtension(defineExtensionId("tracing"))
-		.flags({ trace: { type: "string" as const } })
-		.add(scan);
-	const clean = defineExtension(defineExtensionId("clean"))
-		.flags({ other: { type: "string" as const } })
-		.add(scan);
-
-	// @ts-expect-error -- prepare injects the flag into the contributed command and throws
-	void new Crust("cli").extend(extension);
-	// Disjoint spellings pass.
-	void new Crust("cli").extend(clean);
-
-	const dynamicFlags: Record<string, { type: "boolean" }> = {};
-	const open = defineCommand("open", (command) => command.flags(dynamicFlags));
-	const tracing = defineExtension(defineExtensionId("trace-only")).flags({
-		trace: { type: "string" as const },
-	});
-	// @ts-expect-error -- an added command with runtime-only flags does not hide a sibling's
-	void new Crust("cli").add(scan).add(open).extend(tracing);
-	void new Crust("cli").add(open).extend(tracing);
-}
-
 // keeps widened recursive flag scopes off descendant typed inputs
 function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 	const dynamicScope = (globalThis as { __never?: boolean }).__never === true;
@@ -375,7 +329,7 @@ function _typecheckBindsValidPathsOnLargeAppsWithoutTS2590() {
 			result: void;
 		};
 	};
-	const app = {} as Crust<{}, [], {}, never, never, LargeTree>;
+	const app = {} as Crust<{}, [], {}, LargeTree>;
 
 	const handle = app.at(["command-071"]);
 	type _handleResult = Expect<Equal<Awaited<ReturnType<typeof handle.run>>, RunOutcome<"leaf">>>;
@@ -395,7 +349,7 @@ function _typecheckBindsValidPathsOnLargeAppsWithoutTS2590() {
 
 // suggests continuations under an invalid segment of a tree deeper than the depth cap
 function _typecheckSuggestsContinuationsInTreesDeeperThanTheDepthCap() {
-	const app = {} as Crust<{}, [], {}, never, never, { root: Nest<30> }>;
+	const app = {} as Crust<{}, [], {}, { root: Nest<30> }>;
 
 	// @ts-expect-error -- a typo below the cap is still rejected
 	void app.at(["root", "next", "nope"]);

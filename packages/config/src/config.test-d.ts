@@ -313,21 +313,14 @@ defineConfig({ name: "acme", global: true }).flags({ $schema: { type: "string" }
 // @ts-expect-error -- also without a flag
 defineConfig({ name: "acme", global: true }).flags({ $schema: { type: "string", flag: false } });
 
-// Core's own flag-record checks apply to the settings' flags.
-defineConfig({
-	name: "acme",
-	global: true,
-}).flags(
-	// @ts-expect-error -- a short spelling is one character
-	{ port: { type: "number", short: "xx" } },
-);
-defineConfig({
-	name: "acme",
-	global: true,
-}).flags(
-	// @ts-expect-error -- two settings with the same short spelling
-	{ a: { type: "string", short: "x" }, b: { type: "string", short: "x" } },
-);
+// Settings have string keys: a symbol key would never become a setting.
+const hiddenSetting: unique symbol = Symbol("hidden");
+// @ts-expect-error -- a symbol key
+defineConfig({ name: "acme", global: true }).flags({ [hiddenSetting]: { type: "string" } });
+// @ts-expect-error -- a number key
+defineConfig({ name: "acme", global: true }).flags({ 1.5: { type: "string" } });
+
+// Spellings and collisions are checked when the CLI runs from source and by `crust build`.
 defineConfig({
 	name: "acme",
 	global: true,

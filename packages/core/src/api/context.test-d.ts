@@ -154,33 +154,6 @@ function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 	void invalidCompositions;
 }
 
-// brands inline flags that collide with registered Extension flags, matching .add()
-function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatchingAdd() {
-	const tracer = defineExtension(defineExtensionId("tracer")).flags({
-		trace: {
-			type: "boolean",
-		},
-	});
-	const nestedColliding = defineCommand("child", (cmd) =>
-		cmd.flags({ trace: { type: "boolean" } }).action(() => {}),
-	);
-
-	// Collision-free recipes compose cleanly after .extend().
-	new Crust("cli").extend(tracer).command("ok", (cmd) => cmd.action(() => {}));
-
-	const invalidCompositions = () => {
-		new Crust("cli")
-			.extend(tracer)
-			// @ts-expect-error -- nested child's "trace" collides with tracer's recursive flag (parity with .add())
-			.command("query", (cmd) => cmd.add(nestedColliding).action(() => {}));
-		new Crust("cli")
-			.extend(tracer)
-			// @ts-expect-error -- inline "trace" collides with tracer's recursive flag (parity with .add())
-			.command("query", (cmd) => cmd.flags({ trace: { type: "string" } }).action(() => {}));
-	};
-	void invalidCompositions;
-}
-
 // infers options, ctx, flags, and the value together from one fluent chain
 function _typecheckInfersOptionsCtxFlagsAndValueTogether() {
 	const logger = defineContext("logger").setup(() => ({ level: 1 }));
@@ -270,14 +243,6 @@ function _typecheckKeepsBuildersImmutableAndChecksChainedFlags() {
 		// @ts-expect-error -- sibling branch flags never leak
 		void flags.region;
 	});
-
-	const invalid = () => {
-		// @ts-expect-error -- a later .flags() call collides with an earlier canonical name
-		base.flags({ "api-key": { type: "string" } });
-		// @ts-expect-error -- a later .flags() call collides with an earlier alias
-		base.flags({ credentials: { type: "string", aliases: ["token"] } });
-	};
-	void invalid;
 }
 
 // accepts widened and empty .use() spreads with open dependency closures
@@ -312,10 +277,6 @@ function _typecheckChecksLiteralContextSections() {
 	defineContext("env")
 		.sections({ title: "Env", body: "x", only: [man] })
 		.setup(() => 1);
-	// @ts-expect-error -- section titles must be nonblank
-	defineContext("env").sections({ title: "", body: "APP_TOKEN" });
-	// @ts-expect-error -- section audiences must be nonempty
-	defineContext("env").sections({ title: "Env", body: "x", only: [] });
 	// @ts-expect-error -- only and except are mutually exclusive
 	defineContext("env").sections({ title: "Env", body: "x", only: [man], except: [man] });
 	const sections = [{ title: "Env", body: "x" }];
@@ -494,11 +455,6 @@ function _typecheckTypesContextFlagsAtUseSites() {
 		}),
 	);
 
-	// A command may provide a flag-owning Context it uses; another Context with its flags collides.
+	// A command may provide a flag-owning Context it uses.
 	defineCommand("local", (command) => command.use(config).provide(config()));
-	const other = defineContext("other")
-		.flags({ region })
-		.setup(() => 1);
-	// @ts-expect-error -- "region" collides with the used config Context's flag
-	defineCommand("other", (command) => command.use(config).provide(other()));
 }

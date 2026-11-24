@@ -322,6 +322,30 @@ const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
  */
 const providedChildren = new WeakMap<readonly ExtensionData[], WeakMap<AddedChild, CommandNode>>();
 
+function checkExtensionCommandNames(
+	entries: ReadonlyMap<string, ChildEntry>,
+	extensions: readonly ExtensionData[],
+): void {
+	const spellings = new Set<string>();
+	for (const { meta } of entries.values()) {
+		spellings.add(meta.name);
+		for (const alias of meta.aliases ?? []) spellings.add(alias);
+	}
+	for (const extension of extensions) {
+		for (const definition of extension.commands) {
+			const own = [definition.name, ...(definition[commandDefinitionInternal].meta.aliases ?? [])];
+			if (own.some((spelling) => spellings.has(spelling))) {
+				throw new CrustError(
+					"DEFINITION",
+					`Extension "${extension.id}" command "${definition.name}" collides with an existing command`,
+					{ subject: "command", name: definition.name, reason: "command-collision" },
+				);
+			}
+			for (const spelling of own) spellings.add(spelling);
+		}
+	}
+}
+
 /**
  * Clone the builder tree and apply the final Extension list: providers, commands,
  * and flags reach every command alike, whenever it was added. Nodes are built on
@@ -368,7 +392,7 @@ export function buildExtensionTree(
 		}
 		if (extension.hooks.renderer) {
 			// Two renderers could only be ranked by `.extend()` order.
-			if (renderer) {
+			if (process.env.CRUST_INTERNAL_BUILD !== "1" && renderer) {
 				throw new CrustError(
 					"DEFINITION",
 					`Extensions "${renderer.by}" and "${extension.id}" both set renderer; an application can have one`,
@@ -379,7 +403,7 @@ export function buildExtensionTree(
 		}
 		if (!extension.hooks.noAction) continue;
 		// Two fallbacks could only be ranked by `.extend()` order.
-		if (noAction) {
+		if (process.env.CRUST_INTERNAL_BUILD !== "1" && noAction) {
 			throw new CrustError(
 				"DEFINITION",
 				`Extensions "${noAction.by}" and "${extension.id}" both set noAction; an application can have one`,
@@ -447,25 +471,11 @@ export function buildExtensionTree(
 		);
 		const contributedBy = new Map<string, ExtensionId>();
 		if (isRoot) {
-			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic ones, where a
-			// collision would silently replace or shadow a command. Recipes stay unevaluated.
-			const spellings = new Set<string>();
-			for (const { meta } of entries.values()) {
-				spellings.add(meta.name);
-				for (const alias of meta.aliases ?? []) spellings.add(alias);
-			}
+			// A collision would silently replace or shadow a command. Recipes stay unevaluated.
+			if (process.env.CRUST_INTERNAL_BUILD !== "1") checkExtensionCommandNames(entries, extensions);
 			for (const extension of extensions) {
 				for (const definition of extension.commands) {
 					const meta = { name: definition.name, ...definition[commandDefinitionInternal].meta };
-					const own = [meta.name, ...(meta.aliases ?? [])];
-					if (own.some((spelling) => spellings.has(spelling))) {
-						throw new CrustError(
-							"DEFINITION",
-							`Extension "${extension.id}" command "${definition.name}" collides with an existing command`,
-							{ subject: "command", name: definition.name, reason: "command-collision" },
-						);
-					}
-					for (const spelling of own) spellings.add(spelling);
 					contributedBy.set(definition.name, extension.id);
 					let child: CommandNode | undefined;
 					entries.set(definition.name, {
@@ -506,11 +516,13 @@ export function buildExtensionTree(
 		installContextFlags(prepared, hookContexts);
 		// Its providers and flags are final only now: the recipe may `.provide()` after `.use()`,
 		// and hook-used Contexts' flags are parsed by every command.
-		checkProvidedContextFlags(prepared, [
-			...prepared.inheritedDemands,
-			...demandedFactories(prepared.demands),
-			...hookContexts,
-		]);
+		if (process.env.CRUST_INTERNAL_BUILD !== "1") {
+			checkProvidedContextFlags(prepared, [
+				...prepared.inheritedDemands,
+				...demandedFactories(prepared.demands),
+				...hookContexts,
+			]);
+		}
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
 		return prepared;

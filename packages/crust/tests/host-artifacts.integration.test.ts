@@ -269,6 +269,15 @@ describe("host artifact acceptance", () => {
 		if (process.platform !== "win32") expect(statSync(bundlePath).mode & 0o111).not.toBe(0);
 		// The marker is inlined as a literal, not read from the environment.
 		expect(bundle).not.toContain("process.env.CRUST_INTERNAL_BUILD");
+		// Definition checks ran when the build took its snapshot and are compiled out of the bundle.
+		for (const message of [
+			"collides with existing flag",
+			"is already registered on this command",
+			'must not start with "no-"',
+			"must be one character",
+		]) {
+			expect(bundle).not.toContain(message);
+		}
 		expect(bundle).not.toContain("SECRET_MESSAGE=private");
 
 		const nodeVersion = await toolVersion("node", /^v(\S+)/);

@@ -175,19 +175,16 @@ describe("defineExtension", () => {
 		expect(() =>
 			defineExtension(HELP)
 				.provide(owner())
-				// @ts-expect-error The provided Context already owns this spelling.
 				.flags({ token: { type: "boolean" } }),
 		).toThrow(CrustError);
 		expect(() =>
 			defineExtension(HELP)
 				.flags({ token: { type: "boolean" } })
-				// @ts-expect-error The declared flag already owns this spelling.
 				.provide(owner()),
 		).toThrow(CrustError);
 		expect(() =>
 			defineExtension(HELP)
 				.flags({ token: { type: "boolean" } })
-				// @ts-expect-error Repeated flag calls check earlier declarations.
 				.flags({ token: { type: "string" } }),
 		).toThrow(CrustError);
 	});

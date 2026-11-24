@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { unwrap } from "../../tests/helpers.ts";
+import { type Equal, type Expect, unwrap } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ExecuteOptions } from "../types.ts";
@@ -70,13 +70,11 @@ it("checks pending Extension flag relations at preparation", async () => {
 		},
 	});
 	const root = new Crust("app").extend(ext);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 	const withFlag = root.flags({ token: { type: "number" } });
 	await expect(withFlag.snapshot()).rejects.toThrow("collides");
 	const owner = defineContext("owner")
 		.flags({ token: { type: "number" } })
 		.setup(() => 1);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 	const withProvider = root.provide(owner());
 	await expect(withProvider.snapshot()).rejects.toThrow("collides");
 });
@@ -152,7 +150,7 @@ it("rejects dynamically named Extension commands that collide with another root 
 		new Crust("app").add(deploy).extend(contribute("alias", "ship", ["deploy"])),
 		"ship",
 	);
-	// Added after `.extend()`, as the types also reject.
+	// Added after `.extend()`.
 	await expectCollision(
 		new Crust("app").extend(contribute("before-add", "deploy")).add(deploy),
 		"deploy",
@@ -168,6 +166,79 @@ it("rejects dynamically named Extension commands that collide with another root 
 		.extend(contribute("same", "lint"))
 		.extend(contribute("same", "lint", ["l"]));
 	expect(await replaced.run(["l"])).toMatchObject({ status: "completed", result: "extension" });
+});
+
+it("types a same-id Extension re-registration by the replacement's flags and commands", async () => {
+	const id = defineExtensionId("replaced");
+	const first = defineExtension(id)
+		.flags({ mode: { type: "number" } })
+		.add(defineCommand("lint", (c) => c.action(() => 1)));
+	const second = defineExtension(id)
+		.flags({ mode: { type: "string" } })
+		.add(defineCommand("lint", (c) => c.action(() => "linted")));
+	const app = new Crust("app")
+		.extend(first)
+		.extend(second)
+		.action(({ flags }) => flags.mode);
+	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
+	const root = await unwrap(app.run([], { flags: { mode: "fast" } }));
+	type _flag = Expect<Equal<ResultOf<typeof root>, string | undefined>>;
+	expect(root).toMatchObject({ status: "completed", result: "fast" });
+	const lint = await unwrap(app.run(["lint"]));
+	type _command = Expect<Equal<ResultOf<typeof lint>, string>>;
+	expect(lint).toMatchObject({ status: "completed", result: "linted" });
+
+	// One call: the flag is replaced too; the command is typed as either registration's result.
+	const together = new Crust("app").extend(first, second).action(({ flags }) => flags.mode);
+	const togetherRoot = await unwrap(together.run([], { flags: { mode: "fast" } }));
+	type _togetherFlag = Expect<Equal<ResultOf<typeof togetherRoot>, string | undefined>>;
+	expect(togetherRoot).toMatchObject({ status: "completed", result: "fast" });
+	const togetherLint = await unwrap(together.run(["lint"]));
+	type _togetherCommand = Expect<Equal<ResultOf<typeof togetherLint>, string | number>>;
+	expect(togetherLint).toMatchObject({ status: "completed", result: "linted" });
+});
+
+it("types the recursive and Context flags of same-id Extensions in one call by the later one", async () => {
+	const id = defineExtensionId("replaced");
+	const number = defineContext("number")
+		.flags({ depth: { type: "number" } })
+		.setup(() => 1);
+	const text = defineContext("text")
+		.flags({ depth: { type: "string" } })
+		.setup(() => "");
+	const app = new Crust("app")
+		.extend(
+			defineExtension(id)
+				.flags({ level: { type: "number", recursive: true } })
+				.provide(number()),
+			defineExtension(id)
+				.flags({ level: { type: "string", recursive: true } })
+				.provide(text()),
+		)
+		.add(defineCommand("lint", (c) => c.action(() => "linted")))
+		.command("inline", (c) => c.action(({ flags }) => flags.depth));
+	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
+	expect(await app.run(["lint"], { flags: { level: "high" } })).toMatchObject({
+		status: "completed",
+		result: "linted",
+	});
+	const inline = await unwrap(app.run(["inline"], { flags: { depth: "deep" } }));
+	type _contextFlag = Expect<Equal<ResultOf<typeof inline>, string | undefined>>;
+	expect(inline).toMatchObject({ status: "completed", result: "deep" });
+});
+
+it("keeps an app command's type when the Extension command colliding with it is replaced", async () => {
+	const id = defineExtensionId("temporary");
+	const colliding = defineExtension(id).add(defineCommand("foo", (c) => c.action(() => "text")));
+	const app = new Crust("app")
+		.add(defineCommand("foo", (c) => c.action(() => 123)))
+		.extend(colliding)
+		.extend(colliding)
+		.extend(defineExtension(id));
+	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
+	const foo = await unwrap(app.run(["foo"]));
+	type _command = Expect<Equal<ResultOf<typeof foo>, number>>;
+	expect(foo).toMatchObject({ status: "completed", result: 123 });
 });
 
 it("owns the checked parser function instead of rereading the mutable author object", async () => {
@@ -199,10 +270,9 @@ it("checks Extension flag relations before trusted reuse, including each factory
 		extension.flags(flags).provide(...provided),
 	);
 	expect(() => factory()).toThrow("collides");
-	expect(() =>
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		defineExtension(defineExtensionId("peers")).provide(owner(), peer()),
-	).toThrow("collides");
+	expect(() => defineExtension(defineExtensionId("peers")).provide(owner(), peer())).toThrow(
+		"collides",
+	);
 });
 
 it("keeps same-name Context replacement order inside checked Extensions", async () => {
@@ -227,10 +297,9 @@ it("keeps same-name Context replacement order inside checked Extensions", async 
 			.action(({ ctx }) => ctx.empty)
 			.run([], {}),
 	).toMatchObject({ status: "completed", result: "new" });
-	expect(() =>
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		defineExtension(defineExtensionId("repeated-owned")).provide(old(), old()),
-	).toThrow("collides");
+	expect(() => defineExtension(defineExtensionId("repeated-owned")).provide(old(), old())).toThrow(
+		"collides",
+	);
 });
 
 it("keeps root providers' flags off contributed commands that do not use them", async () => {

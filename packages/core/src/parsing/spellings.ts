@@ -2,8 +2,8 @@ import { CrustError } from "../errors.ts";
 import type { ArgDef, FlagDef, FlagsDef } from "../types.ts";
 
 // Array-index keys (below 2 ** 32 - 1) are enumerated first, ahead of insertion order. Every
-// canonical decimal integer (`0`, or digits without a leading zero) is rejected at any length so
-// the rule matches the type-level check; `01` is not one and keeps its insertion order.
+// canonical decimal integer (`0`, or digits without a leading zero) is rejected at any length;
+// `01` is not one and keeps its insertion order.
 const INTEGER_LIKE = /^(0|[1-9]\d*)$/;
 
 /**
@@ -15,8 +15,6 @@ export function isBareToken(token: string): boolean {
 	return token !== "" && !/[ \t\n\r\v\f]/.test(token) && !token.startsWith("-");
 }
 
-// Compile-time brands (FIX_EMPTY_SPELLING, FIX_NO_PREFIX, FIX_SPELLING_SHAPE) own literal
-// definitions; this guard owns the dynamic path (config-built flag defs).
 // Empty spellings register flags no argv token can address; "no-" spellings
 // collide with boolean negation (the parser inverts every `--no-` rawName).
 function assertUsableSpelling(spelling: string, kind: "canonical" | "short" | "alias"): void {
@@ -88,40 +86,25 @@ export function isFlagNegatable(def: FlagDef): boolean {
 	return def.type === "boolean" && def.noNegate !== true;
 }
 
-function invalidFlags(message: string): CrustError {
-	return new CrustError("DEFINITION", message, { subject: "flag", reason: "invalid-flags" });
-}
-
 /**
  * Read the `[name, def]` entries of a `.flags()` call: exactly one plain-object
  * record keyed by canonical name. Only own enumerable string keys count.
  */
 export function flagRecordEntries(
-	record: unknown,
+	record: object,
 ): readonly (readonly [name: string, def: FlagDef])[] {
-	// Without strictNullChecks a nullish record typechecks. A `Record`-typed literal can hold
-	// `{ __proto__: def }`, which sets the prototype instead of adding a key.
-	const nullish = record === null || record === undefined;
-	const proto: unknown = nullish ? undefined : Object.getPrototypeOf(record);
-	if (proto !== Object.prototype && proto !== null) {
-		throw invalidFlags(
-			nullish
-				? ".flags() expects a plain object record"
-				: ".flags() expects a plain object record; a `__proto__` key sets its prototype instead of naming a flag",
-		);
-	}
-	const entries = Object.entries(record as object);
-	for (const [name, def] of entries) {
-		// `FlagsInput` admits `undefined` definitions (and `null` without strictNullChecks).
-		if (def === undefined || def === null) {
-			throw new CrustError("DEFINITION", `Flag "${name}" definition must be an object`, {
-				subject: "flag",
-				name,
-				reason: "invalid-flags",
-			});
+	// A `Record`-typed literal can hold `{ __proto__: def }`, which sets the prototype instead of adding a key.
+	if (process.env.CRUST_INTERNAL_BUILD !== "1") {
+		const proto: unknown = Object.getPrototypeOf(record);
+		if (proto !== Object.prototype && proto !== null) {
+			throw new CrustError(
+				"DEFINITION",
+				".flags() expects a plain object record; a `__proto__` key sets its prototype instead of naming a flag",
+				{ subject: "flag", reason: "invalid-flags" },
+			);
 		}
 	}
-	return entries as [string, FlagDef][];
+	return Object.entries(record) as [string, FlagDef][];
 }
 
 /** Convert flag entries to the runtime flag record, rejecting spelling collisions. */
@@ -130,10 +113,18 @@ export function toFlagsRecord(
 	initial: Readonly<FlagsDef> = {},
 ): FlagsDef {
 	const flags: FlagsDef = { ...initial };
+	for (const [name, flag] of entries) flags[name] = normalizeFlag(name, flag);
+	if (process.env.CRUST_INTERNAL_BUILD !== "1") checkSpellingCollisions(entries, initial);
+	return flags;
+}
+
+function checkSpellingCollisions(
+	entries: readonly (readonly [name: string, def: FlagDef])[],
+	initial: Readonly<FlagsDef>,
+): void {
 	const seen = new Set(Object.entries(initial).flatMap(([name, def]) => flagSpellings(name, def)));
 	for (const [name, flag] of entries) {
-		const normalized = normalizeFlag(name, flag);
-		for (const spelling of flagSpellings(name, normalized)) {
+		for (const spelling of flagSpellings(name, flag)) {
 			if (seen.has(spelling)) {
 				throw new CrustError("DEFINITION", `Flag "${name}" collides with an existing flag`, {
 					subject: "flag",
@@ -143,29 +134,11 @@ export function toFlagsRecord(
 			}
 			seen.add(spelling);
 		}
-		flags[name] = normalized;
 	}
-	return flags;
 }
 
 /** Copy only definition-owned collections, not JSON/URL/schema payloads. */
-export function ownDefinition<const D extends ArgDef | FlagDef>(
-	def: D,
-	subject: "flag" | "argument",
-	name: string | undefined,
-): D {
-	if (def.choices && def.default !== undefined) {
-		const values = "multiple" in def && def.multiple ? def.default : [def.default];
-		for (const value of values) {
-			if (!def.choices.includes(value)) {
-				throw new CrustError(
-					"DEFINITION",
-					`${subject === "flag" ? "Flag" : "Argument"}${name === undefined ? "" : ` "${name}"`} default must be one of choices`,
-					{ subject, ...(name === undefined ? {} : { name }), reason: "default-outside-choices" },
-				);
-			}
-		}
-	}
+export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
 	return Object.freeze({
 		...def,
 		...("aliases" in def && def.aliases ? { aliases: Object.freeze([...def.aliases]) } : {}),
@@ -179,21 +152,13 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(
 	});
 }
 
-function isEnvBinding(value: unknown): value is NonNullable<FlagDef["env"]> {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		!Array.isArray(value) &&
-		"name" in value &&
-		typeof value.name === "string" &&
-		(!("delimiter" in value) ||
-			value.delimiter === undefined ||
-			typeof value.delimiter === "string")
-	);
-}
-
 // `name` is undefined for a name-less `defineFlag(def)`; attachment re-normalizes under its key.
 export function normalizeFlag<const D extends FlagDef>(name: string | undefined, def: D): D {
+	if (process.env.CRUST_INTERNAL_BUILD !== "1") checkFlagStrings(name, def);
+	return ownDefinition(def);
+}
+
+function checkFlagStrings(name: string | undefined, def: FlagDef): void {
 	const label = name === undefined ? "Flag" : `Flag "${name}"`;
 	const named = name === undefined ? {} : { name };
 	if (name !== undefined) assertUsableSpelling(name, "canonical");
@@ -207,24 +172,13 @@ export function normalizeFlag<const D extends FlagDef>(name: string | undefined,
 			reason: "flag-collision",
 		});
 	}
-	// One code point, as the types count it: an astral short is two UTF-16 units.
+	// One code point: an astral short is two UTF-16 units.
 	if (def.short !== undefined && !/^.$/su.test(def.short)) {
 		throw new CrustError("DEFINITION", `${label} short "${def.short}" must be one character`, {
 			subject: "flag",
 			...named,
 			reason: "invalid-short",
 		});
-	}
-	if (def.env !== undefined && !isEnvBinding(def.env)) {
-		throw new CrustError(
-			"DEFINITION",
-			`${label} env must be an object with a string name and optional string delimiter`,
-			{
-				subject: "flag",
-				...named,
-				reason: "invalid-env",
-			},
-		);
 	}
 	if (def.env?.name === "") {
 		throw new CrustError("DEFINITION", `${label} env variable name must be non-empty`, {
@@ -237,14 +191,6 @@ export function normalizeFlag<const D extends FlagDef>(name: string | undefined,
 		["delimiter", def.delimiter],
 		["env.delimiter", def.env?.delimiter],
 	] as const) {
-		if (delimiter === undefined) continue;
-		if (!def.multiple) {
-			throw new CrustError("DEFINITION", `${label} ${field} requires multiple: true`, {
-				subject: "flag",
-				...named,
-				reason: "delimiter-without-multiple",
-			});
-		}
 		if (delimiter === "") {
 			throw new CrustError("DEFINITION", `${label} ${field} must be non-empty`, {
 				subject: "flag",
@@ -253,16 +199,15 @@ export function normalizeFlag<const D extends FlagDef>(name: string | undefined,
 			});
 		}
 	}
-	return ownDefinition(def, "flag", name);
 }
 
 export function normalizeArg<const D extends ArgDef>(def: D): D {
-	if (def.name === "") {
+	if (process.env.CRUST_INTERNAL_BUILD !== "1" && def.name === "") {
 		throw new CrustError("DEFINITION", "Argument names must be non-empty", {
 			subject: "argument",
 			name: def.name,
 			reason: "empty-name",
 		});
 	}
-	return ownDefinition(def, "argument", def.name);
+	return ownDefinition(def);
 }

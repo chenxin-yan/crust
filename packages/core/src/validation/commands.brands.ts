@@ -2,17 +2,11 @@ import type { DefiningOf } from "../api/context.ts";
 import type { CommandConfig, CommandDefinitionData } from "../command/crust.ts";
 import type { commandDefinitionInternal } from "../command/node.ts";
 import type {
-	ClosedMembers,
-	CollisionBrand,
 	DefName,
 	HasClosedNames,
 	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
-	DefNameMembers,
-	SpacedToken,
-	TrimWhitespace,
-	UnionToIntersection,
 	UnknownKeysBrand,
 } from "./shared.ts";
 
@@ -27,74 +21,19 @@ export type AliasesOf<C> = C extends { readonly aliases: infer A extends readonl
 		? readonly string[]
 		: readonly [];
 
-// Key/collision evidence: all-or-nothing, so an open member never leaks literal siblings.
+// All-or-nothing, so an open member never leaks literal siblings into the command tree.
 type NarrowAliases<A extends readonly string[]> =
 	IsClosedName<A[number]> extends true ? A[number] : never;
-
-// Spelling grammar: each literal member is independently provable.
-type AliasMembers<A extends readonly string[]> = ClosedMembers<A[number]>;
-
-type AliasShapeError<Name extends string, Alias extends string> = Alias extends ""
-	? `Subcommand "${Name}" has an invalid alias: must be a non-empty string`
-	: Alias extends SpacedToken
-		? `Subcommand "${Name}" alias "${Alias}" must not contain whitespace`
-		: Alias extends `-${string}`
-			? `Subcommand "${Name}" alias "${Alias}" must not start with "-" (reserved for flags)`
-			: never;
-
-type AliasShapeErrors<Name extends string, C> =
-	AliasMembers<AliasesOf<C>> extends infer Alias
-		? Alias extends string
-			? AliasShapeError<Name, Alias>
-			: never
-		: never;
-
-type AliasShapeBrand<Name extends string, C> = [AliasShapeErrors<Name, C>] extends [never]
-	? {}
-	: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
 
 type RootVersionBrand<C> = "version" extends keyof C
 	? { readonly FIX_ROOT_VERSION: 'Command config "version" belongs on the root Crust constructor' }
 	: {};
 
-/** Brand command config containing statically known invalid metadata. */
-export type ValidateCommandConfig<Name extends string, C> = AliasShapeBrand<Name, C> &
-	RootVersionBrand<C>;
-
-type EmptyNameError = { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" };
-
-type BlankName<Name extends string> = Name extends `${TrimWhitespace}${infer Tail}`
-	? BlankName<Tail>
-	: Name extends ""
-		? true
-		: false;
-
-/** Runtime checks own open members; every statically known member is validated, even beside an open one. */
-export type CommandNameBrand<Name extends string> =
-	true extends BlankName<ClosedMembers<Name>>
-		? EmptyNameError
-		: "__proto__" extends ClosedMembers<Name>
-			? { readonly FIX_RESERVED_NAME: 'Command name "__proto__" is reserved' }
-			: {};
-
-type NameShapeError<Name extends string> = Name extends SpacedToken
-	? `Command name "${Name}" must not contain whitespace`
-	: Name extends `-${string}`
-		? `Command name "${Name}" must not start with "-" (reserved for flags)`
-		: never;
-
 /**
- * Child names are also matched against one argv token, like aliases. The root
- * name never is, so `new Crust()` keeps {@link CommandNameBrand} alone.
+ * Command config checks. Names, aliases and sections are checked when the CLI runs from
+ * source and by `crust build`, not here.
  */
-export type ChildCommandNameBrand<Name extends string> =
-	CommandNameBrand<Name> extends infer Brand
-		? {} extends Brand
-			? [NameShapeError<ClosedMembers<Name>>] extends [never]
-				? {}
-				: { readonly FIX_NAME_SHAPE: NameShapeError<ClosedMembers<Name>> }
-			: Brand
-		: never;
+export type LocalCommandConfigBrand<C> = RootVersionBrand<C> & UnknownKeysBrand<C, CommandConfig>;
 
 type DefinitionAliases<D> =
 	CommandDefinitionData<D> extends {
@@ -116,94 +55,6 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 		: never
 	: never;
 
-// Catches `.as()` renames that land on one of the definition's own aliases
-// (config-time AliasShapeError compares aliases against the original name only).
-// Distributes over definition unions so `cond ? x : y` compares each variant's
-// name with its own aliases; the intersection keeps a `{}` variant from
-// absorbing a sibling's error brand.
-type SelfAliasBrand<D> = UnionToIntersection<
-	D extends unknown
-		? DefNameMembers<D> & AliasMembers<DefinitionAliases<D>> extends infer Dup extends string
-			? [Dup] extends [never]
-				? {}
-				: {
-						readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
-					}
-			: never
-		: never
->;
-
-export type CommandCollisionBrand<
-	Spellings extends string,
-	Existing extends string,
-> = CollisionBrand<
-	Spellings,
-	Existing,
-	"FIX_COMMAND_COLLISION",
-	"Command name or alias ",
-	" collides with a sibling command"
->;
-
-/**
- * Validate definitions against existing siblings and definitions earlier in
- * the same `.add()` call. Widened names opt out because their spellings are
- * not statically knowable; their literal aliases opt out with them
- * (see {@link CommandDefinitionSpellings}).
- *
- * Yields only the first offending definition's error brand (`{}` when valid):
- * tail recursion lets one `.add()` take 44+ definitions without TS2589, and
- * stopping early keeps two same-key `FIX_*` literals from intersecting to `never`.
- * Tuple-union variants are intersected so a valid variant cannot erase another's error.
- */
-export type ValidateCommandDefinitions<
-	Ds extends readonly unknown[],
-	Existing extends string = never,
-> = UnionToIntersection<
-	Ds extends unknown
-		? number extends Ds["length"]
-			? CommandDefinitionsErrors<Ds, Existing> &
-					ChildCommandNameBrand<DefNameMembers<Ds[number]>> &
-					SelfAliasBrand<Ds[number]>
-			: CommandInfoErrors<
-					{
-						[I in keyof Ds]: readonly [
-							CommandDefinitionSpellings<Ds[I]>,
-							ChildCommandNameBrand<DefNameMembers<Ds[I]>> & SelfAliasBrand<Ds[I]>,
-						];
-					},
-					Existing
-				>
-		: never
->;
-
-// Walks precomputed per-definition spellings and local errors: recursing over the
-// definitions themselves re-instantiates the remaining tuple on every step (O(n^2)).
-type CommandInfoErrors<Is, Existing extends string> = Is extends readonly [
-	readonly [infer S extends string, infer Own],
-	...infer T,
-]
-	? CommandCollisionBrand<S, Existing> & Own extends infer E
-		? {} extends E
-			? CommandInfoErrors<T, Existing | S>
-			: E
-		: never
-	: {};
-
-type CommandDefinitionsErrors<
-	Ds extends readonly unknown[],
-	Existing extends string,
-> = Ds extends readonly [infer Head, ...infer Tail]
-	? CommandDefinitionSpellings<Head> extends infer Spellings extends string
-		? CommandCollisionBrand<Spellings, Existing> &
-				ChildCommandNameBrand<DefNameMembers<Head>> &
-				SelfAliasBrand<Head> extends infer Errors
-			? {} extends Errors
-				? CommandDefinitionsErrors<Tail, Existing | Spellings>
-				: Errors
-			: never
-		: never
-	: {};
-
 export type ExtensionCommandDefs<E> = [E] extends [never]
 	? readonly []
 	: DefiningOf<E> extends {
@@ -220,81 +71,6 @@ export type ExtensionsCommandSpellings<Es extends readonly unknown[]> =
 		: ExtensionCommandDefs<Es[number]>[number] extends never
 			? never
 			: string;
-
-/** Collision evidence from Extensions: a runtime-only command spelling contributes none. */
-type KnownExtensionCommandSpellings<E> = KnownCommandSpellings<ExtensionCommandDefs<E>>;
-export type KnownExtensionsCommandSpellings<Es extends readonly unknown[]> =
-	IsStaticTuple<Es> extends true
-		? { [I in keyof Es]: KnownExtensionCommandSpellings<Es[I]> }[number]
-		: never;
-
-type ExtensionCommandCollisionBrand<E, Existing extends string> = CollisionBrand<
-	KnownExtensionCommandSpellings<E>,
-	Existing,
-	"FIX_COMMAND_COLLISION",
-	"Extension command ",
-	" collides with an existing command"
->;
-
-/**
- * Validate each Extension's contributed command spellings against existing
- * root commands and against Extensions earlier in the same `.extend()` call.
- * Runtime preparation rejects the same collisions as a `DEFINITION` error;
- * this brand reports statically known ones at compile time.
- */
-export type ValidateExtensionCommands<
-	Es extends readonly unknown[],
-	Existing extends string,
-	// Accumulating in tail position lets one `.extend()` take 45+ Extensions without TS2589.
-	Acc extends readonly unknown[] = readonly [],
-> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
-	? ValidateExtensionCommands<
-			T,
-			Existing | KnownExtensionCommandSpellings<H>,
-			readonly [...Acc, H & ExtensionCommandCollisionBrand<H, Existing>]
-		>
-	: Acc extends readonly []
-		? Es
-		: readonly [...Acc, ...Es];
-
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Local metadata checks; unrelated description/version/usage text has no grammar. */
-type SectionTextBrand<S> = S extends { title: infer T extends string; body: infer B extends string }
-	? true extends BlankName<T> | BlankName<B>
-		? { readonly FIX_SECTION_TEXT: "Section title/body must be nonblank" }
-		: Extract<T, `${string}\r${string}` | `${string}\n${string}`> extends never
-			? {}
-			: { readonly FIX_SECTION_TEXT: "Section title must be a single line" }
-	: {};
-
-type SectionAudienceBrand<S> = S extends { only: readonly [] } | { except: readonly [] }
-	? { readonly FIX_SECTION_AUDIENCE: "Section audience must be nonempty" }
-	: {};
-
-export type LocalSectionsBrand<C> = "sections" extends keyof C
-	? C extends { sections: infer S extends readonly unknown[] }
-		? {
-				readonly sections: {
-					[I in keyof S]: S[I] &
-						UnionToIntersection<SectionTextBrand<S[I]>> &
-						UnionToIntersection<SectionAudienceBrand<S[I]>>;
-				};
-			}
-		: {}
-	: {};
-
-export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig<N, C> &
-	LocalSectionsBrand<C> &
-	UnknownKeysBrand<C, CommandConfig>;
-
-/** Inline `.command(name, config, recipe)` aliases, checked like `.add()` checks a definition's. */
-export type InlineCommandAliasesBrand<
-	N extends string,
-	C,
-	Existing extends string,
-> = CommandCollisionBrand<NarrowAliases<AliasesOf<C>>, Existing> &
-	SelfAliasBrand<{ readonly name: N; readonly _aliases?: AliasesOf<C> }>;
 
 // Fast path for the common `.add(def)`: one definition with a closed, non-union name. A
 // conditional definition keeps the slow path even when its variants share a name.
@@ -330,21 +106,3 @@ type AttachedCommandSpellingsSlow<Ds extends readonly unknown[]> = [Ds] extends 
 				: CommandDefinitionSpellings<Ds[number]>
 			: string
 		: string;
-
-/**
- * Collision evidence from a definition tuple: the spellings it certainly registers. A
- * runtime-only name or uncertain slot contributes none instead of opening the whole set.
- */
-export type KnownCommandSpellings<Ds extends readonly unknown[]> =
-	string extends AttachedCommandSpellings<Ds>
-		? KnownSlotSpellings<Ds>
-		: AttachedCommandSpellings<Ds>;
-
-// Only fixed, non-union slots are certainly registered (see `IsStaticTuple`).
-type KnownSlotSpellings<Ds extends readonly unknown[]> = number extends Ds["length"]
-	? never
-	: IsUnion<Ds> extends true
-		? never
-		: {
-				[I in keyof Ds]: IsUnion<Ds[I]> extends true ? never : CommandDefinitionSpellings<Ds[I]>;
-			}[number];

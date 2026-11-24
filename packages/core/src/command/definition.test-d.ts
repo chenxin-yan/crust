@@ -100,21 +100,8 @@ function _typecheckInlineCommandConfig() {
 	type _Alias = Expect<Equal<Outcome<["ls"]>, Outcome<["list"]>>>;
 	type _Result = Expect<Equal<Extract<Outcome<["ls"]>, { status: "completed" }>["result"], number>>;
 
-	// @ts-expect-error -- an alias collides with a sibling (FIX_COMMAND_COLLISION)
-	app.command("other", { aliases: ["list"] }, (c) => c);
-	// @ts-expect-error -- a name collides with a sibling alias (FIX_COMMAND_COLLISION)
-	app.command("ls", { description: "Again" }, (c) => c);
-	// @ts-expect-error -- an alias repeats the name (FIX_ALIAS_SHAPE)
-	app.command("other", { aliases: ["other"] }, (c) => c);
-	// a runtime-owned name is no self-alias evidence, matching `.add(defineCommand(name, …))`
-	const runtimeName: string = "other";
-	app.command(runtimeName, { aliases: ["o"] }, (c) => c);
-	// @ts-expect-error -- an alias must not start with "-" (FIX_ALIAS_SHAPE)
-	app.command("other", { aliases: ["-o"] }, (c) => c);
 	// @ts-expect-error -- version belongs on the root constructor
 	app.command("other", { version: "1.0.0" }, (c) => c);
-	// @ts-expect-error -- section titles are nonblank (FIX_SECTION_TEXT)
-	app.command("other", { sections: [{ title: " ", body: "x" }] }, (c) => c);
 	defineCommand("group", (c) => c.command("get", { description: "Get" }, (get) => get));
 }
 
@@ -134,10 +121,6 @@ function _typecheckInlineChildContextFlags() {
 	new Crust("app")
 		.provide(home())
 		.add(group)
-		.command("child", (child) =>
-			// @ts-expect-error -- the parent's Context flag spellings stay taken (FIX_ALIAS_COLLISION)
-			child.flags({ home: { type: "string" } }),
-		)
 		.command("root-child", (child) =>
 			child.action(({ flags }) => {
 				type _Flags = Expect<Equal<typeof flags.home, string | undefined>>;

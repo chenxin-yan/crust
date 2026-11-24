@@ -1,7 +1,7 @@
 import type { CommandSnapshot } from "./command/snapshot.ts";
 import { CrustError } from "./errors.ts";
 import type { ExtensionId } from "./identity.ts";
-import type { CommandSection, RuntimeCommandSectionInput, SectionConsumer } from "./types.ts";
+import type { CommandSection, CommandSectionInput, SectionConsumer } from "./types.ts";
 
 /** Whether a command belongs in user-facing listings. */
 export function isListed(command: CommandSnapshot): boolean {
@@ -66,22 +66,18 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 }
 
 export function normalizeSection(
-	section: RuntimeCommandSectionInput,
+	section: CommandSectionInput,
 	owner: SectionOwner,
 ): CommandSection {
 	const { title, body, only, except } = section;
 	if (
-		!title.trim() ||
-		/[\r\n]/.test(title) ||
-		!body.trim() ||
-		only?.length === 0 ||
-		except?.length === 0 ||
-		(only !== undefined && except !== undefined)
+		process.env.CRUST_INTERNAL_BUILD !== "1" &&
+		(!title.trim() || /[\r\n]/.test(title) || !body.trim())
 	) {
 		throw invalidSections(owner);
 	}
 	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
-		// SAFETY: normalization establishes nonemptiness; consumers carry minted IDs.
+		// SAFETY: `CommandSectionInput` audiences are nonempty; consumers carry minted IDs.
 		return Object.freeze(
 			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
 		) as readonly [ExtensionId, ...ExtensionId[]];
@@ -95,7 +91,7 @@ export function normalizeSection(
 
 export function validateCommandSections(
 	name: string,
-	sections: readonly RuntimeCommandSectionInput[],
+	sections: readonly CommandSectionInput[],
 	subject: "command" | "context" = "command",
 ): CommandSection[] {
 	return sections.map((section) => normalizeSection(section, { subject, name }));

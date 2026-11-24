@@ -2,10 +2,9 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { type ContextBag, defineContext } from "../api/context.ts";
-import { defineExtension, type Extension } from "../api/extension.ts";
+import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { FlagDef } from "../types.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -150,65 +149,6 @@ function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
 	});
 }
 
-// rejects sibling command spelling collisions at the call site
-function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
-	const issue = defineCommand("issue", { aliases: ["issues", "i"] }, (command) => command);
-	const app = new Crust("cli").add(issue);
-
-	// @ts-expect-error -- duplicate sibling canonical name across .add() calls
-	app.add(defineCommand("issue", (command) => command));
-	// @ts-expect-error -- alias collides with a sibling canonical name
-	app.add(defineCommand("info", { aliases: ["issue"] }, (command) => command));
-	// @ts-expect-error -- canonical name collides with a sibling alias
-	app.add(defineCommand("i", (command) => command));
-	// @ts-expect-error -- .as() preserves aliases, including their collisions
-	app.add(issue.as("ticket"));
-	new Crust("cli").add(
-		// @ts-expect-error -- collisions are checked against earlier definitions in the batch
-		defineCommand("build", { aliases: ["b"] }, (command) => command),
-		defineCommand("b", (command) => command),
-	);
-
-	// a valid variant of an input tuple union must not erase a colliding variant's error
-	const build = defineCommand("build", (command) => command);
-	const defs = Math.random() > 0.5 ? ([build, build] as const) : ([build] as const);
-	// @ts-expect-error -- the [build, build] variant collides within the batch
-	new Crust("cli").add(...defs);
-	// @ts-expect-error -- Extension commands share the same batch validation
-	defineExtension(defineExtensionId("ext")).add(...defs);
-
-	const dynamicName = "dynamic" as string;
-	const dynamic = defineCommand(dynamicName, (command) => command);
-	new Crust("cli").add(dynamic).add(defineCommand("static", (command) => command));
-
-	// A runtime-only name does not hide collisions among statically known siblings.
-	const afterDynamic = new Crust("cli").add(issue).add(dynamic);
-	// @ts-expect-error -- collides with a sibling added before the runtime-only name
-	afterDynamic.add(defineCommand("issue", (command) => command));
-	// @ts-expect-error -- inline commands check the same siblings
-	afterDynamic.command("i", (command) => command);
-	new Crust("cli").add(
-		// @ts-expect-error -- known definitions in one batch are checked after a runtime-only one
-		dynamic,
-		issue,
-		defineCommand("i", (command) => command),
-	);
-	// @ts-expect-error -- a batch's known spellings stay checked beside its runtime-only name
-	new Crust("cli").add(dynamic, issue).add(defineCommand("issue", (command) => command));
-}
-
-// rejects invalid command alias shapes at defineCommand()
-function _typecheckRejectsInvalidCommandAliasShapesAtDefineCommand() {
-	// @ts-expect-error -- aliases must not contain spaces
-	defineCommand("issue", { aliases: ["my issue"] }, (command) => command);
-	// @ts-expect-error -- aliases must not contain tabs
-	defineCommand("issue", { aliases: ["my\tissue"] }, (command) => command);
-	void new Crust("app").add(
-		// @ts-expect-error -- aliases must differ from their own canonical name, checked where it is added
-		defineCommand("issue", { aliases: ["issue"] }, (command) => command),
-	);
-}
-
 // accepts a definition union whose variants alias each other's canonical name
 function _typecheckAcceptsCrossAliasedDefinitionUnion(condition: boolean) {
 	const x = defineCommand("x", { aliases: ["y"] }, (command) => command);
@@ -267,85 +207,6 @@ function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 		);
 }
 
-// brands statically known Extension command collisions at .extend()
-function _typecheckBrandsStaticallyKnownExtensionCommandCollisionsAtExtend() {
-	const build = defineCommand("build", (command) => command);
-	const collidingName = defineExtension(defineExtensionId("name-collision")).add(
-		defineCommand("build", (command) => command),
-	);
-	const collidingAlias = defineExtension(defineExtensionId("alias-collision")).add(
-		defineCommand("inspect", { aliases: ["build"] }, (command) => command),
-	);
-	const first = defineExtension(defineExtensionId("first-command")).add(
-		defineCommand("deploy", { aliases: ["d"] }, (command) => command),
-	);
-	const second = defineExtension(defineExtensionId("second-command")).add(
-		defineCommand("d", (command) => command),
-	);
-	const dynamic: Extension = collidingName;
-	const clean = defineExtension(defineExtensionId("clean-command")).add(
-		defineCommand("inspect", (command) => command),
-	);
-
-	const app = new Crust("cli").add(build);
-	// @ts-expect-error -- command name collides with an app sibling (FIX_COMMAND_COLLISION)
-	void app.extend(collidingName);
-	// @ts-expect-error -- command alias collides with an app sibling (FIX_COMMAND_COLLISION)
-	void app.extend(collidingAlias);
-	// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_COMMAND_COLLISION)
-	void new Crust("cli").extend(first).extend(second);
-	void app.extend(dynamic);
-	void app.extend(clean);
-
-	// A runtime-only Extension command name does not hide collisions among known spellings.
-	const open = defineExtension(defineExtensionId("open-command")).add(
-		defineCommand("open" as string, (command) => command),
-	);
-	const mixed = defineExtension(defineExtensionId("mixed-command")).add(
-		defineCommand("open" as string, (command) => command),
-		defineCommand("build", (command) => command),
-	);
-	// @ts-expect-error -- collides with an app sibling after a runtime-only Extension command
-	void app.extend(open, collidingName);
-	// @ts-expect-error -- collides with an earlier Extension alias in the same call
-	void new Crust("cli").extend(first, open, second);
-	// @ts-expect-error -- collides with an earlier Extension alias across calls
-	void new Crust("cli").extend(first).extend(open).extend(second);
-	// @ts-expect-error -- an Extension's known command collides beside its runtime-only one
-	void app.extend(mixed);
-	// @ts-expect-error -- app siblings added before a runtime-only one are still checked
-	void app.add(defineCommand("open" as string, (command) => command)).extend(collidingName);
-	// @ts-expect-error -- Extension commands stay checked for later .add() calls
-	void new Crust("cli").extend(collidingName).extend(open).add(build);
-}
-
-// brands duplicate command spellings within one Extension at defineExtension()
-function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExtension() {
-	void defineExtension(defineExtensionId("self-name-collision")).add(
-		// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
-		defineCommand("dup", (command) => command),
-		defineCommand("dup", (command) => command),
-	);
-	void defineExtension(defineExtensionId("self-alias-collision")).add(
-		// @ts-expect-error -- command name collides with an Extension alias (FIX_COMMAND_COLLISION)
-		defineCommand("deploy", { aliases: ["d"] }, (command) => command),
-		defineCommand("d", (command) => command),
-	);
-	void defineExtension(defineExtensionId("cross-call-collision"))
-		.add(defineCommand("deploy", { aliases: ["d"] }, (command) => command))
-		// @ts-expect-error -- repeated add() calls check earlier Extension commands (FIX_COMMAND_COLLISION)
-		.add(defineCommand("d", (command) => command));
-	void defineExtension(defineExtensionId("after-open"))
-		.add(defineCommand("deploy", { aliases: ["d"] }, (command) => command))
-		.add(defineCommand("open" as string, (command) => command))
-		// @ts-expect-error -- a runtime-only command does not hide earlier known spellings
-		.add(defineCommand("d", (command) => command));
-	void defineExtension(defineExtensionId("self-clean")).add(
-		defineCommand("build", (command) => command),
-		defineCommand("deploy", (command) => command),
-	);
-}
-
 // infers Extension-owned flags in hook contexts
 function _typecheckExtensionOwnedHookFlags() {
 	defineExtension(defineExtensionId("typed-flags"))
@@ -387,42 +248,6 @@ function _typecheckDefinedExtensionFlags() {
 		});
 }
 
-// an Extension command with dynamic flags does not hide another Extension's flag collisions
-function _typecheckExtensionFlagsBesideDynamicCommandFlags(dynamic: Record<string, FlagDef>) {
-	const open = defineExtension(defineExtensionId("open-command-flags")).add(
-		defineCommand("open-command", (command) => command.flags(dynamic)),
-	);
-	const trace = defineExtension(defineExtensionId("trace-flag")).flags({
-		trace: { type: "boolean" },
-	});
-	const child = defineCommand("child", (command) => command.flags({ trace: { type: "string" } }));
-	// @ts-expect-error -- the Extension's "trace" collides with the child's own flag
-	new Crust("app").add(child).extend(open, trace);
-}
-
-// an open Extension in one .extend() call does not erase the others' flags for later checks
-function _typecheckExtensionFlagsSurviveAnOpenExtensionInTheSameCall(
-	dynamic: Record<string, FlagDef>,
-) {
-	const open = defineExtension(defineExtensionId("open-flags")).flags(dynamic);
-	const trace = defineExtension(defineExtensionId("trace-only")).flags({
-		trace: { type: "boolean" },
-	});
-	const app = new Crust("app").extend(open, trace);
-	// @ts-expect-error -- the child's own "trace" collides with the Extension flag
-	void app.add(defineCommand("child", (command) => command.flags({ trace: { type: "string" } })));
-}
-
-// a variable-length Extension list may be empty, so its flags are not known to be installed
-function _typecheckVariableLengthExtensionListsDoNotClaimFlags(condition: boolean) {
-	const trace = defineExtension(defineExtensionId("maybe-trace")).flags({
-		trace: { type: "boolean" },
-	});
-	const extensions: (typeof trace)[] = condition ? [trace] : [];
-	const app = new Crust("app").extend(...extensions);
-	void app.add(defineCommand("child", (command) => command.flags({ trace: { type: "string" } })));
-}
-
 // recursive Extension flags reach a nested recipe child without counting as its own flags
 function _typecheckNestedRecipeChildrenDoNotOwnRecursiveExtensionFlags() {
 	const trace = defineExtension(defineExtensionId("nested-trace")).flags({
@@ -431,103 +256,4 @@ function _typecheckNestedRecipeChildrenDoNotOwnRecursiveExtensionFlags() {
 	const deep = defineCommand("deep", (command) => command);
 	const app = new Crust("app").extend(trace).command("x", (c) => c.add(deep).action(() => {}));
 	void app.run(["x", "deep"], { flags: { trace: true } });
-}
-
-// `recursive: false` Extension flags stay on the root, so commands below it may reuse them
-function _typecheckRootOnlyExtensionFlagsLeaveChildrenFree() {
-	const rootOnly = defineExtension(defineExtensionId("root-only-depth")).flags({
-		depth: { type: "string", recursive: false },
-	});
-	const child = defineCommand("child", (c) => c.flags({ depth: { type: "number" } }));
-	const withCommand = defineExtension(defineExtensionId("depth-command")).add(child);
-	new Crust("app").extend(rootOnly).add(child);
-	new Crust("app").extend(rootOnly).command("child", (c) => c.flags({ depth: { type: "number" } }));
-	new Crust("app").add(child).extend(rootOnly);
-	new Crust("app").extend(rootOnly, withCommand);
-	new Crust("app").extend(rootOnly).extend(withCommand);
-	// @ts-expect-error -- the root's own "depth" collides with the root-only Extension flag
-	new Crust("app").flags({ depth: { type: "number" } }).extend(rootOnly);
-}
-
-// an open recursive Extension flag record does not hide known inherited-flag collisions
-function _typecheckOpenRecursiveFlagsKeepKnownChildChecks(dynamic: Record<string, FlagDef>) {
-	const open = defineExtension(defineExtensionId("open-recursive")).flags(dynamic);
-	const trace = defineExtension(defineExtensionId("known-trace")).flags({
-		trace: { type: "boolean" },
-	});
-	const owner = defineContext("owner")
-		.flags({ pflag: { type: "string" } })
-		.setup(() => 1);
-	const pflagCommand = defineExtension(defineExtensionId("pflag-command")).add(
-		defineCommand("e", (c) => c.flags({ pflag: { type: "string" } })),
-	);
-	const traceCommand = defineExtension(defineExtensionId("trace-command")).add(
-		defineCommand("e", (c) => c.flags({ trace: { type: "string" } })),
-	);
-	const invalid = () => {
-		new Crust("app")
-			.provide(owner())
-			.extend(open)
-			// @ts-expect-error -- the child's "pflag" collides with the inherited Context flag
-			.command("child", (c) => c.flags({ pflag: { type: "string" } }));
-		// Extension commands parse only the Context flags they use, so "pflag" is free there
-		new Crust("app").provide(owner()).extend(open).extend(pflagCommand);
-		// @ts-expect-error -- the Extension command's "trace" collides with the recursive Extension flag
-		new Crust("app").extend(trace).extend(open).extend(traceCommand);
-	};
-	void invalid;
-}
-
-// A possibly-recursive flag or an open record in an Extension doesn't hide its other recursive flags.
-function _typecheckRecursiveFlagsBesideUncertainOnes(
-	maybe: boolean,
-	dynamic: Record<string, FlagDef>,
-) {
-	const mixed = defineExtension(defineExtensionId("mixed-recursive")).flags({
-		trace: { type: "boolean" },
-		maybe: { type: "string", recursive: maybe },
-	});
-	const traced = defineCommand("traced", (command) => command.flags({ trace: { type: "string" } }));
-	// @ts-expect-error -- "trace" is recursive, so it collides with the child's own flag
-	void new Crust("app").extend(mixed).add(traced);
-	void new Crust("app")
-		.extend(mixed)
-		// @ts-expect-error -- and with an inline command's flag
-		.command("inline", (command) => command.flags({ trace: { type: "string" } }));
-	// @ts-expect-error -- and with a child added before the Extension
-	void new Crust("app").add(traced).extend(mixed);
-
-	const owner = defineContext("owner-ctx")
-		.flags({ pflag: { type: "string" } })
-		.setup(() => 1);
-	const open = defineExtension(defineExtensionId("open-provider")).flags(dynamic).provide(owner());
-	// The provided Context's flag reaches only commands that use it, despite the open record
-	void new Crust("app")
-		.extend(open)
-		.add(defineCommand("child", (command) => command.flags({ pflag: { type: "string" } })));
-}
-
-// An optional `recursive` may be absent (recursive) or false (root-only), so it isn't certain either way.
-function _typecheckOptionalRecursiveIsUncertain(maybe: boolean) {
-	const depth: { type: "string"; recursive?: false } = { type: "string", recursive: false };
-	const ext = defineExtension(defineExtensionId("optional-recursive")).flags({
-		depth,
-		maybe: { type: "boolean", recursive: maybe },
-	});
-	const child = defineCommand("child", (command) => command.flags({ depth: { type: "number" } }));
-	void new Crust("app").extend(ext).add(child);
-	void new Crust("app").add(child).extend(ext);
-}
-
-// An open flag record on a recipe command doesn't hide a nested command's known collision.
-function _typecheckNestedRecipeFlagsBesideAnOpenParent(dynamic: Record<string, FlagDef>) {
-	const trace = defineExtension(defineExtensionId("nested-trace")).flags({
-		trace: { type: "boolean" },
-	});
-	void new Crust("app").extend(trace).command("parent", (command) =>
-		// @ts-expect-error -- the nested command's "trace" collides with the recursive Extension flag
-		command
-			.flags(dynamic)
-			.command("nested", (nested) => nested.flags({ trace: { type: "boolean" } })),
-	);
 }

@@ -173,7 +173,6 @@ describe("Crust .provide()", () => {
 			.setup(() => ({}));
 		const app = new Crust("cli").flags({ mode: { type: "string" } });
 
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => app.provide(owner())).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
@@ -206,7 +205,7 @@ describe("Context-owned sections", () => {
 
 	it("retains frozen validated sections on factory and .of() instances", () => {
 		const sections = [
-			{ title: "Environment", body: "APP_TOKEN", except: [defineExtensionId("man")] },
+			{ title: "Environment", body: "APP_TOKEN", except: [defineExtensionId("man")] as const },
 		];
 		const builder = defineContext("env").sections(...sections);
 		sections[0]!.title = "Mutated";
@@ -254,7 +253,6 @@ describe("Context-owned sections", () => {
 			{ title: " ", body: "body" },
 			{ title: "Multi\nline", body: "body" },
 			{ title: "Title", body: "" },
-			{ title: "Title", body: "body", only: [] },
 		]) {
 			expect(() => defineContext("env").sections(section)).toThrow(
 				expect.objectContaining({

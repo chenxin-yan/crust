@@ -16,15 +16,6 @@ export type DefName<T> = T extends { name: infer N extends string }
 		: never
 	: never;
 
-/**
- * Statically known `name` members of a definition (or definition union), for spelling grammar.
- * Filtered per variant: combining names first would let an open variant's `string` absorb
- * a literal sibling before {@link ClosedMembers} can see it.
- */
-export type DefNameMembers<T> = T extends { name: infer N extends string }
-	? ClosedMembers<N>
-	: never;
-
 export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
 	x: infer I,
 ) => void
@@ -74,7 +65,7 @@ type HasClosedName<D> = [D] extends [{ name: infer N extends string }]
 		: IsClosedName<N>
 	: false;
 
-/** Brand statically known spelling collisions while allowing open names. */
+/** Brand a statically known name that is already taken, while allowing open names. */
 export type CollisionBrand<
 	S extends string,
 	Existing extends string,
@@ -88,25 +79,10 @@ export type CollisionBrand<
 		: { readonly [K in Key]: `${Before}"${S & Existing}"${After}` };
 
 /**
- * A contribution to accumulated collision evidence. An open contribution is checked at
- * runtime; adding it as `string` would absorb every known spelling and skip later checks.
+ * A contribution to accumulated known spellings; adding an open one as `string` would absorb
+ * every known spelling.
  */
 export type KnownSpellings<S extends string> = string extends S ? never : S;
-
-/**
- * The statically known members of a name union; open members stay runtime-owned.
- * Only for local spelling grammar: a literal beside an open template is still
- * independently invalid, but must never become key or collision evidence.
- */
-export type ClosedMembers<N extends string> = N extends unknown
-	? IsClosedName<N> extends true
-		? N
-		: never
-	: never;
-
-/** Brand a statically known empty literal member while allowing widened and generic names. */
-export type EmptyLiteralNameBrand<Name extends string, Err> =
-	"" extends ClosedMembers<Name> ? Err : {};
 
 /**
  * Brand a definition whose custom parser can return a Promise — parse results
@@ -144,45 +120,7 @@ type DefaultWithinChoicesBrand<T> = T extends {
 				: {}
 	: {};
 
-// Whitespace that runtime `isBareToken` rejects in child command names, aliases, and flag spellings.
-export type SpacedToken =
-	| `${string} ${string}`
-	| `${string}\t${string}`
-	| `${string}\n${string}`
-	| `${string}\r${string}`
-	| `${string}\v${string}`
-	| `${string}\f${string}`;
-
-// ECMAScript String.trim whitespace, matching runtime `trim()`-based validation. Runtime calls the
-// native `trim()`, so this list cannot derive from it; `definition-parity.test.ts` pins the two.
-export type TrimWhitespace =
-	| " "
-	| "\t"
-	| "\n"
-	| "\r"
-	| "\v"
-	| "\f"
-	| "\u00a0"
-	| "\u1680"
-	| "\u2000"
-	| "\u2001"
-	| "\u2002"
-	| "\u2003"
-	| "\u2004"
-	| "\u2005"
-	| "\u2006"
-	| "\u2007"
-	| "\u2008"
-	| "\u2009"
-	| "\u200a"
-	| "\u2028"
-	| "\u2029"
-	| "\u202f"
-	| "\u205f"
-	| "\u3000"
-	| "\ufeff";
-
-/** `true` only for `any`, which brands treat as widened input owned by runtime checks. */
+/** `true` only for `any`, which brands treat as widened input they leave unchecked. */
 export type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /** Finite literal domains have required record keys; infinite templates and branded strings do not.

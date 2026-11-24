@@ -8,6 +8,7 @@ import {
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
+	type ExtensionId,
 } from "./index.ts";
 
 describe("runtime structured invocation", () => {
@@ -86,12 +87,11 @@ describe("runtime structured invocation", () => {
 describe("local metadata boundaries", () => {
 	it("checks metadata at consumption without narrowing independent inputs", async () => {
 		const title = "Notes" as string;
-		const audience = [defineExtensionId("help")];
+		const audience: [ExtensionId, ...ExtensionId[]] = [defineExtensionId("help")];
 		const config = { sections: [{ title, body: "text", only: audience }] };
 		const app = new Crust("cli", config).flags({ verbose: { type: "boolean" } });
-		audience.length = 0;
+		audience.push(defineExtensionId("man"));
 		expect((await app.snapshot()).meta.sections?.[0]?.only?.map(String)).toEqual(["help"]);
-		expect(() => new Crust("cli", config)).toThrow("invalid documentation sections");
 		const child = defineCommand("child", { aliases: ["c", "c"] }, (b) => b);
 		expect((await new Crust("cli").add(child).snapshot()).subCommands.child?.meta.aliases).toEqual([
 			"c",

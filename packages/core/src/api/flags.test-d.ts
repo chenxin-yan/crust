@@ -1,21 +1,14 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import { Crust, defineCommand } from "../command/crust.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, FlagsDef } from "../types.ts";
-import { defineContext } from "./context.ts";
-import { defineExtension } from "./extension.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 // Compile-time regression checks; intentionally never invoked.
-// rejects invalid choice defaults and reserved spellings at the builder call
-function _typecheckRejectsInvalidChoiceDefaultsAndReservedSpellingsAtTheBuilderCall() {
+// rejects invalid choice defaults at the builder call
+function _typecheckRejectsInvalidChoiceDefaultsAtTheBuilderCall() {
 	// @ts-expect-error -- default falls outside the literal choices
 	new Crust("cli").flags({ mode: { type: "string", choices: ["a", "b"], default: "z" } });
-	// @ts-expect-error -- __proto__ would mutate the plain-object flag registry
-	new Crust("cli").flags({ __proto__: { type: "boolean" } });
-	// @ts-expect-error -- aliases share the same reserved spelling rule
-	new Crust("cli").flags({ safe: { type: "boolean", aliases: ["__proto__"] } });
 }
 
 function _optionalParserDefinitions() {
@@ -42,12 +35,6 @@ function _optionalParserDefinitions() {
 }
 
 function _localDefinitions(name: string, aliases: string[], choices: string[], value: string) {
-	// @ts-expect-error -- helpers own local spelling checks, not just attachments
-	defineFlag({ type: "boolean", short: "xx" });
-	// @ts-expect-error -- scan alias tuples before extracting their union
-	defineFlag({ type: "boolean", aliases: ["b", "b"] });
-	// @ts-expect-error -- short and long aliases share one namespace
-	defineFlag({ type: "boolean", short: "b", aliases: ["b"] });
 	new Crust("cli").flags({ [name]: { type: "boolean" } });
 	defineFlag({ type: "boolean", aliases });
 	defineArg("bad", { type: "string", parse: (_raw): unknown => 1 });
@@ -143,8 +130,6 @@ function _remainingLocalProofs(
 	new Crust("cli").args(optional, { name: "last", type: "string" });
 	const prior = new Crust("cli").args(optional);
 	prior.args({ name: "last", type: "string" });
-	// @ts-expect-error -- a conditional name cannot hide an invalid member
-	defineArg(cond ? "valid" : "", { type: "string" });
 	const maybeParser = cond
 		? { type: "string" as const, parse: (_s: string): unknown => 1 }
 		: { type: "string" as const };
@@ -172,12 +157,6 @@ function _mixedCheckedNamespaces(
 	app.flags({ later: { type: "boolean" } });
 	const args = new Crust("cli").args({ name: "first", type: "string" }, maybe);
 	args.args({ name: "last", type: "string" });
-	// @ts-expect-error -- every possible short spelling must be one character
-	defineFlag({ type: "boolean", short: cond ? "f" : "ff" });
-	// One character is one code point, as the runtime counts it.
-	defineFlag({ type: "boolean", short: "😀" });
-	// @ts-expect-error -- two code points
-	defineFlag({ type: "boolean", short: "😀f" });
 }
 
 function _broadFlagHolders(
@@ -203,36 +182,8 @@ function _conditionalCanonicalIdentity(cond: boolean) {
 	void args.run([], { args: { a: "a", b: "b" } });
 }
 
-function _mixedDefinitions(condition: boolean) {
-	const mixed = condition
-		? { type: "string" as const, short: "long" as const }
-		: { type: "string" as const };
-	// @ts-expect-error -- an uncertain definition cannot hide a known invalid short spelling
-	defineFlag(mixed);
-	// @ts-expect-error -- overlapping collision diagnostics must not cancel each other out
-	defineFlag({ type: "string", short: "v", aliases: ["value", "v"] });
-}
-
 function _openInvalidDefinitions() {
 	const args: { name: string; type: "string"; choices: readonly ["ok"]; default: "bad" }[] = [];
 	// @ts-expect-error -- an open collection must retain independently invalid default membership
 	new Crust("app").args(...args);
-	// @ts-expect-error -- multiple reserved-prefix diagnostics must not cancel each other out
-	new Crust("app").flags({ "no-value": { type: "string", aliases: ["no-alias"] } });
-}
-
-function _otherFlagSpellingEntryPoints() {
-	defineContext("context")
-		// @ts-expect-error -- Context flags use the same local spelling contract
-		.flags({ flag: { type: "boolean", aliases: ["f", "f"] } })
-		.setup(() => true);
-	defineExtension(defineExtensionId("extension"))
-		// @ts-expect-error -- Extension flags use the same local spelling contract
-		.flags({ flag: { type: "boolean", short: "ff" } });
-	defineCommand("child", (command) =>
-		command
-			// @ts-expect-error -- recipe flags use the same local spelling contract
-			.flags({ flag: { type: "boolean", aliases: ["f", "f"] } }),
-	);
-	new Crust("cli").flags({ flag: { type: "boolean", short: "f", aliases: ["again"] } });
 }

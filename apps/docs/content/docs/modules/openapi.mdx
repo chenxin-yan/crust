@@ -70,7 +70,7 @@ spec: new URL("./acme.openapi.jsonc", import.meta.url),
 
 A plain object, such as a small inline spec or one in a test, works too: it is kept in memory, bundled with the CLI, and the build writes nothing.
 
-Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs.
+Specs are pinned, never fetched: any other `spec`, such as a loader function, an `https:` URL, or a path string, is a `DEFINITION` [`CrustError`](/docs/api/errors) when `defineApi()` runs from source or in `crust build`.
 
 ## Which to use
 

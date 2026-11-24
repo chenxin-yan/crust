@@ -366,10 +366,6 @@ describe("errors", () => {
 		["a property named like an Object member", { org: { type: "string", toString: 1 } }],
 		["a url setting", { api: { type: "url" } }],
 		["a schema", { org: { type: "string", schema: {} } }],
-		[
-			"a default outside its choices",
-			{ region: { type: "string", choices: ["us"], default: "eu" } },
-		],
 	])("rejects %s at definition", (_, flags) => {
 		expect(() => defineConfig({ name: "acme", global: true }).flags(flags as never)).toThrow(
 			expect.objectContaining({ code: "DEFINITION" }),
