@@ -83,6 +83,25 @@ function _typedInput() {
 	void withEnv.run(["deploy"], { flags: {} });
 }
 
+function _conditionalMember(toggle: boolean) {
+	const target = toggle ? { type: "boolean" as const } : { type: "string" as const };
+	const app = new Crust("cli")
+		.flags({
+			scope: { type: "exclusive", required: true, flags: { target, all: { type: "boolean" } } },
+		})
+		.action(({ flags }) => {
+			type _scope = Expect<
+				Equal<
+					typeof flags.scope,
+					{ flag: "target" } | { flag: "target"; value: string } | { flag: "all" }
+				>
+			>;
+		});
+	void app.run([], { flags: { scope: { flag: "all" } } });
+	// @ts-expect-error -- a conditional member cannot certify supplied input
+	void app.run([], { flags: { scope: { flag: "target" } } });
+}
+
 function _definitionErrors() {
 	new Crust("cli").flags({
 		scope: {

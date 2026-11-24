@@ -787,11 +787,19 @@ type InferArgsTuple<A extends readonly ArgDef[]> = number extends A["length"]
  */
 export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Record<string, never>;
 
-/** An exclusive group's value: the member given, with its value unless it is a boolean. */
-type ExclusiveValue<M, Values extends { [K in keyof M]: unknown }> = {
-	[K in keyof M & string]: M[K] extends { type: "boolean" }
-		? { flag: K }
-		: { flag: K; value: Values[K] };
+/** One member's value; `D` is bare so a conditional member definition distributes. */
+type ExclusiveMember<K, D, Input extends boolean> = D extends { type: "boolean" }
+	? { flag: K }
+	: { flag: K; value: Input extends true ? InputBaseValue<D> : ResolveBaseType<D> };
+
+/**
+ * An exclusive group's value: the member given, with its value unless it is a boolean. Typed input
+ * cannot supply a conditional member, as for other conditional definitions.
+ */
+type ExclusiveValue<M, Input extends boolean> = {
+	[K in keyof M & string]: [Input, IsUnion<M[K]>] extends [true, true]
+		? never
+		: ExclusiveMember<K, M[K], Input>;
 }[keyof M & string];
 
 /**
@@ -806,8 +814,7 @@ type InferFlagValue<F extends FlagDef> = F extends {
 }
 	? InferOutput<S>
 	: F extends { type: "exclusive"; flags: infer M }
-		? | ExclusiveValue<M, { [K in keyof M]: ResolveBaseType<M[K]> }>
-			| (F extends { required: true } ? never : undefined)
+		? ExclusiveValue<M, false> | (F extends { required: true } ? never : undefined)
 		: F extends { type: "count" }
 			? number
 			: F extends { multiple: true }
@@ -868,7 +875,7 @@ export interface RunInputPayload {
 type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
 	? never
 	: D extends { type: "exclusive"; flags: infer M }
-		? ExclusiveValue<M, { [K in keyof M]: InputBaseValue<M[K]> }>
+		? ExclusiveValue<M, true>
 		: D extends { type: "boolean" }
 			? boolean
 			: D extends { type: "count" }
