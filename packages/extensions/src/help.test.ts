@@ -481,6 +481,21 @@ describe("help", () => {
 		expect(plain).toContain('--save <string>              [default: "prod"] [choices: prod, dev]');
 	});
 
+	it("renderHelp marks a required flag and a schema-required flag [required]", async () => {
+		const snapshot = await new Crust("app")
+			.flags({
+				token: { type: "string", required: true, description: "Token" },
+				tag: { type: "string", schema: stringSchema() },
+				opt: { type: "string", description: "Optional" },
+			})
+			.action(() => {})
+			.snapshot();
+		const plain = stripAnsi(await renderHelp(snapshot, ["app"]));
+		expect(plain).toMatch(/ --token <string> +Token \[required\]$/m);
+		expect(plain).toMatch(/ --tag <string> +\[required\]$/m);
+		expect(plain).toMatch(/ --opt <string> +Optional$/m);
+	});
+
 	it("renderHelp lists .group() headings in code order, then Additional commands, Options, and Global options", async () => {
 		const leaf = (name: string) =>
 			defineCommand(name, { description: `The ${name} command` }, (cmd) => cmd.action(() => {}));

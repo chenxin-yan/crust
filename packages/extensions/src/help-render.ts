@@ -175,14 +175,19 @@ export function renderHelpText(
 					[
 						flag.inherited ? "Global options" : (flag.heading ?? "Options"),
 						formatFlagLabel(flag),
-						formatDescription(
-							flag.description,
-							flag.default,
-							flag.choices,
-							dim,
-							flag.env,
-							flag.deprecated,
-						),
+						[
+							formatDescription(
+								flag.description,
+								flag.default,
+								flag.choices,
+								dim,
+								flag.env,
+								flag.deprecated,
+							),
+							flag.required && dim("[required]"),
+						]
+							.filter(Boolean)
+							.join(" "),
 					] as const,
 			),
 			columns,
