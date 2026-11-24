@@ -122,6 +122,17 @@ describe("keyring backends", () => {
 			plaintextRecords: 2,
 		});
 	});
+
+	it("a plaintext write through a store without onWarning leaves the warning to a later store of the app", async () => {
+		noKeyring();
+		const warnings: AuthWarning[] = [];
+		const w = world();
+		await login(w.source());
+		const late = reopen(w, { onWarning: (warning) => warnings.push(warning) });
+		await login(w.source({ store: late, identity: { ...w.identity, profile: "work" } }));
+		await login(w.source({ store: late, identity: { ...w.identity, profile: "home" } }));
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+	});
 });
 
 describe("the file key", () => {

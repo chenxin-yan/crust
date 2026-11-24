@@ -428,9 +428,9 @@ export function fileKeys(
 		}
 		if (found.state === "unavailable") {
 			if (options?.strict) throw new CredentialKeyError("unavailable");
-			if (!warned.has(app)) {
+			if (options?.onWarning && !warned.has(app)) {
 				warned.add(app);
-				options?.onWarning?.({ code: "plaintext-storage" });
+				options.onWarning({ code: "plaintext-storage" });
 			}
 			return PLAINTEXT;
 		}
