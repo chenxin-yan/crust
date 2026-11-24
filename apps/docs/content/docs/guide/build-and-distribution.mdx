@@ -101,7 +101,7 @@ npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
 npm run build -- --target host
 ```
 
-[`crust publish`](#publish-with-crust-publish) refuses binaries that miss a release target: every target in `crust.targets`, or every target of the compiler without it. See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
+[`crust publish`](#publish-with-crust-publish) refuses binaries that miss a release target: every target in `crust.targets` except `host`, or every target of the compiler without it. See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
 
 ### Binary runtime version
 
