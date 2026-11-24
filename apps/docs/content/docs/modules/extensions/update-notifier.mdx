@@ -98,7 +98,7 @@ updateNotifier({
 });
 ```
 
-The default adapter stores state in `update-notifier.json` under the package's platform [state directory](/docs/modules/store#storage-paths), and ignores state cached for a different `registryUrl`. An unreadable cache counts as empty. Set `cache: false` to skip all cache reads and writes and check on every run.
+The default adapter stores state in `update-notifier.json` under the package's platform [state directory](/docs/modules/store#storage-paths), and ignores state cached from another version source: a different `registryUrl`, or `latestVersion` in place of the registry and the other way round. An unreadable cache counts as empty. Set `cache: false` to skip all cache reads and writes and check on every run.
 
 <auto-type-table
   path="../../../../../../packages/extensions/src/update-notifier.ts"

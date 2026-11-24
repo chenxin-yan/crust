@@ -128,8 +128,13 @@ export async function lookUpLatestVersion(
 	timeoutMs: number,
 	signal?: AbortSignal,
 ): Promise<string | null> {
-	const timeout = AbortSignal.timeout(timeoutMs);
-	const bound = signal ? AbortSignal.any([signal, timeout]) : timeout;
+	const timeout = new AbortController();
+	// A referenced timer: AbortSignal.timeout() does not hold Node's event loop, so a lookup that never settles would end the process with exit 13.
+	const timer = setTimeout(
+		() => timeout.abort(new DOMException("timed out", "TimeoutError")),
+		timeoutMs,
+	);
+	const bound = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
 	try {
 		bound.throwIfAborted();
 		const aborted = new Promise<never>((_resolve, reject) =>
@@ -140,6 +145,8 @@ export async function lookUpLatestVersion(
 		return typeof latest === "string" && latest.length > 0 ? latest : null;
 	} catch {
 		return null;
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
@@ -287,7 +294,11 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 			if (cache?.adapter) {
 				cacheAdapter = cache.adapter;
 			} else {
-				cacheAdapter = await createStoreCacheAdapter(packageName, registryUrl);
+				// The stored `registryUrl` names the version source, so a custom lookup never reads the registry's state.
+				cacheAdapter = await createStoreCacheAdapter(
+					packageName,
+					lookup ? "latestVersion" : registryUrl,
+				);
 			}
 		}
 

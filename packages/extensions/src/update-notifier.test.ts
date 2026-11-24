@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
@@ -184,6 +186,25 @@ describe("lookUpLatestVersion", () => {
 		expect(seen[0]?.aborted).toBe(true);
 	});
 
+	it("keeps Node running until the timeout when the lookup never settles", () => {
+		// Vitest holds the event loop open itself, so only a separate process can see it end early.
+		const check = JSON.stringify(
+			pathToFileURL(join(import.meta.dirname, "update-notifier-check.ts")).href,
+		);
+		const script = `
+			import { lookUpLatestVersion } from ${check};
+			console.log(await lookUpLatestVersion(() => new Promise(() => {}), 20));
+		`;
+		const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stdout).toBe("null\n");
+		expect(run.status).toBe(0);
+	});
+
 	it("leaves no pending rejection after a sync throw", async () => {
 		const lookup = () => {
 			throw new Error("offline");
@@ -311,6 +332,18 @@ describe("updateNotifier post-run hook", () => {
 				"https://registry.example.com",
 			);
 			expect(await privateRegistry.read()).toBeNull();
+		});
+
+		it("keeps a custom lookup's state apart from the registry's", async () => {
+			const fetchFn = mockRegistryResponse("2.0.0");
+			const lookup = vi.fn(async () => "3.0.0");
+
+			await runNotifier({ cache: undefined });
+			await runNotifier({ cache: undefined, latestVersion: lookup });
+			await runNotifier({ cache: undefined });
+
+			expect(lookup).toHaveBeenCalledTimes(1);
+			expect(fetchFn).toHaveBeenCalledTimes(2);
 		});
 	});
 
