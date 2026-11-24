@@ -111,8 +111,10 @@ export interface ExecuteOptions {
 	/**
 	 * Streams that replace the process's, such as in in-process tests; each one omitted stays the
 	 * process's. `stdin` takes any async iterable of text or bytes, such as a Node.js readable
-	 * stream; its `isTTY` answers `stdin.isTTY`. Setting any of them, `stdin` alone included, runs
-	 * the invocation in process: a cancelling signal only sets the exit code and never re-raises.
+	 * stream; its `isTTY` answers `stdin.isTTY`. An iterable the action did not read to its end is
+	 * closed when the invocation ends (its `return()` is called); a Node.js readable is left open
+	 * and paused. Setting any of them, `stdin` alone included, runs the invocation in process: a
+	 * cancelling signal only sets the exit code and never re-raises.
 	 * On macOS and Linux, the process's stdout and stderr are written synchronously to file
 	 * descriptor 1 or 2, so patching `process.stdout.write` does not capture them. Windows writes
 	 * through `process.stdout` / `process.stderr`.

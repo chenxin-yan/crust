@@ -94,25 +94,39 @@ function outputStream(
 
 type InputSource = NonNullable<NonNullable<ExecuteOptions["io"]>["stdin"]>;
 
-/** The process's stdin when `input` is omitted. Each read continues where the last one stopped. */
-function inputStream(input: InputSource | undefined, signal: AbortSignal): InputStream {
+/**
+ * The process's stdin when `input` is omitted. Each read continues where the last one stopped.
+ * `close` ends an injected iterable the reads left unfinished, as leaving a `for await` loop
+ * does: a generator runs its `finally`, and a Web stream is unlocked.
+ */
+function inputStream(
+	input: InputSource | undefined,
+	signal: AbortSignal,
+): { stdin: InputStream; close(): Promise<void> } {
 	let iterator: AsyncIterator<string | Uint8Array> | undefined;
 	let pulling = false;
+	/** No pull is waiting on the source. */
+	let idle = true;
 	// One item per chunk a read asks for, copied before the next pull: a wrapping stream reads
 	// ahead, so a failing or buffer-reusing source would act before the action asked.
 	async function* pull(source: InputSource): AsyncGenerator<Uint8Array, void, undefined> {
 		signal.throwIfAborted();
 		if (pulling) throw new Error("stdin is in use by another reader");
 		pulling = true;
-		let stop!: (reason: unknown) => void;
-		const aborted = new Promise<never>((_, reject) => (stop = reject));
-		aborted.catch(() => {});
-		const onAbort = () => stop(signal.reason);
+		// The rejecter of the pull in flight: racing every pull against one promise that lives for
+		// the whole read keeps each settled pull, and under Bun its chunk, until the read ends.
+		let stop: ((reason: unknown) => void) | undefined;
+		const onAbort = () => stop?.(signal.reason);
 		signal.addEventListener("abort", onAbort);
 		try {
-			iterator ??= source[Symbol.asyncIterator]();
+			const reader = (iterator ??= source[Symbol.asyncIterator]());
 			for (;;) {
-				const next = await Promise.race([iterator.next(), aborted]);
+				const next = await new Promise<IteratorResult<string | Uint8Array>>((resolve, reject) => {
+					stop = reject;
+					idle = false;
+					reader.next().then(resolve, reject);
+				});
+				idle = true;
 				if (next.done) return;
 				yield Buffer.from(next.value);
 				signal.throwIfAborted();
@@ -128,14 +142,23 @@ function inputStream(input: InputSource | undefined, signal: AbortSignal): Input
 			? pull(input)
 			: readInput(input ?? process.stdin, signal);
 	return {
-		get isTTY() {
-			return input ? input.isTTY === true : process.getBuiltinModule("node:tty").isatty(0);
+		stdin: {
+			get isTTY() {
+				return input ? input.isTTY === true : process.getBuiltinModule("node:tty").isatty(0);
+			},
+			stream,
+			async text() {
+				const chunks: Uint8Array[] = [];
+				for await (const chunk of stream()) chunks.push(chunk);
+				return Buffer.concat(chunks).toString("utf8");
+			},
 		},
-		stream,
-		async text() {
-			const chunks: Uint8Array[] = [];
-			for await (const chunk of stream()) chunks.push(chunk);
-			return Buffer.concat(chunks).toString("utf8");
+		async close() {
+			// shortcut: a throwing `return()` is swallowed, as the source is the caller's; report it
+			// through the cleanup-failure path if a host needs to see it.
+			const closing = (async () => iterator?.return?.())().catch(() => {});
+			// Behind a pull that cancellation abandoned, `return()` settles only when that pull does.
+			if (idle) await closing;
 		},
 	};
 }
@@ -1215,7 +1238,7 @@ export async function runInvocation(
 		const { signal = new AbortController().signal, env, ...live } = options ?? {};
 		// Captured output is no terminal; input stays the process's.
 		const resolvedIO: InvocationIO = {
-			stdin: inputStream(undefined, signal),
+			stdin: inputStream(undefined, signal).stdin,
 			stdout: outputStream({
 				write(chunk) {
 					stdout.push(Buffer.from(chunk));
@@ -1359,8 +1382,9 @@ export async function executeInvocation(
 			const closed = controller.signal.aborted ? undefined : stdoutClosed(error);
 			if (closed) cancel("SIGPIPE", closed);
 		};
+		const input = inputStream(options?.io?.stdin, signal);
 		const output = createInvocationOutput({
-			stdin: inputStream(options?.io?.stdin, signal),
+			stdin: input.stdin,
 			stdout: outputStream(stdoutSink, (chunk) => {
 				try {
 					stdoutSink.write(chunk);
@@ -1422,6 +1446,7 @@ export async function executeInvocation(
 				await renderFailure(error, argv, prepared, output, signal, env, extensionContext);
 			}
 		} finally {
+			await input.close();
 			// A signal that arrived while synchronous work blocked the event loop is still pending,
 			// and Node and Bun drop it once no listener remains: one macrotask turn delivers it.
 			// The module's timer, not the global: a test's fake `setImmediate` never fires.

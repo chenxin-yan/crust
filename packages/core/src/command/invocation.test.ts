@@ -1028,6 +1028,33 @@ describe("Invocation pipeline — streams", () => {
 		expect(lines).toEqual(["a,b", "ab"]);
 	});
 
+	it("closes an injected iterable the action left unfinished when the invocation ends", async () => {
+		const readOne = new Crust("app").action(async ({ stdin }) => {
+			for await (const _ of stdin.stream()) break;
+		});
+		const quiet = { stdout: { write() {} }, stderr: { write() {} } };
+		const web = new ReadableStream<string>({
+			start(controller) {
+				controller.enqueue("one");
+				controller.enqueue("two");
+			},
+		});
+		expect(await readOne.execute({ argv: [], io: { stdin: web, ...quiet } })).toBe(0);
+		expect(web.locked).toBe(false);
+
+		let cleanedUp = false;
+		async function* holdsAResource() {
+			try {
+				yield "one";
+				yield "two";
+			} finally {
+				cleanedUp = true;
+			}
+		}
+		expect(await readOne.execute({ argv: [], io: { stdin: holdsAResource(), ...quiet } })).toBe(0);
+		expect(cleanedUp).toBe(true);
+	});
+
 	it("refuses to read an injected Node.js readable another listener consumes", async () => {
 		const source = new PassThrough();
 		const owner: string[] = [];
@@ -1047,6 +1074,24 @@ describe("Invocation pipeline — streams", () => {
 			exitCode: 1,
 			errors: ["Error: stdin is in use by another reader"],
 			owner: ["payload"],
+		});
+	});
+
+	it("fails a read of an injected Node.js readable destroyed before it ended", async () => {
+		const source = new PassThrough();
+		const errors: string[] = [];
+		const app = new Crust("app").action(async ({ stdin }) => {
+			const text = stdin.text();
+			setTimeout(() => source.destroy(), 10);
+			await text;
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: source, stdout: { write() {} }, stderr: lineSink(errors) },
+		});
+		expect({ exitCode, errors }).toEqual({
+			exitCode: 1,
+			errors: ["Error: stdin closed before it ended"],
 		});
 	});
 
@@ -1092,6 +1137,26 @@ describe("Invocation pipeline — streams", () => {
 		});
 		expect(exitCode).toBe(130);
 		expect(read).toEqual(["first"]);
+	});
+
+	it("cancels a read of an injected iterable whose pull never settles", async () => {
+		const controller = new AbortController();
+		// A generator queues `return()` behind the pull that never settles.
+		async function* neverSettles() {
+			await new Promise(() => {});
+			yield "never";
+		}
+		const app = new Crust("app").action(async ({ stdin }) => {
+			const text = stdin.text();
+			controller.abort();
+			await text;
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: neverSettles(), stdout: { write() {} }, stderr: { write() {} } },
+			signal: controller.signal,
+		});
+		expect(exitCode).toBe(130);
 	});
 });
 
