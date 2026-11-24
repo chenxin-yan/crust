@@ -21,7 +21,8 @@ describe("createPromptIO screen", () => {
 		harness.resize(10, 5);
 		harness.io.output.write("a".repeat(15));
 
-		expect(harness.io.output).toMatchObject({ columns: 10, rows: 5 });
+		expect(harness.io.output.columns).toBe(10);
+		expect(harness.io.output.rows).toBe(5);
 		expect(resized).toBe(1);
 		expect(harness.screen()).toBe(`${"a".repeat(10)}\n${"a".repeat(5)}`);
 	});

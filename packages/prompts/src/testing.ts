@@ -3,7 +3,7 @@ import { stripVTControlCharacters } from "node:util";
 
 import { stringWidth } from "@crustjs/style";
 
-import type { TerminalIO } from "./core/renderer.ts";
+import type { TerminalIO, TerminalOutput } from "./core/renderer.ts";
 
 const namedKeys = {
 	return: "\r",
@@ -167,7 +167,9 @@ class FakeTerminal {
 }
 
 export interface PromptTestIO {
-	readonly io: Required<Pick<TerminalIO, "input" | "output">>;
+	readonly io: Required<Pick<TerminalIO, "input">> & {
+		readonly output: TerminalOutput & { readonly rows: number };
+	};
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	/**
