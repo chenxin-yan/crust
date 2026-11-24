@@ -226,7 +226,7 @@ describe("json", () => {
 		expect(await captureExecute(app, ["--json"])).toMatchObject({
 			stderr: 'working\n{"message":"NotFound"}\n',
 		});
-		expect(await captureExecute(app)).toMatchObject({ stderr: "Error: NotFound\n" });
+		expect(await captureExecute(app, [])).toMatchObject({ stderr: "Error: NotFound\n" });
 	});
 
 	it.each([
