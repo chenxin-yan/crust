@@ -380,6 +380,8 @@ describe("validateParsed — requires", () => {
 			web: { type: "boolean", requires: ["scope"] },
 			region: { type: "string", default: "us", requires: ["json"] },
 			scope: { type: "exclusive", flags: { all: { type: "boolean" }, mine: { type: "boolean" } } },
+			payload: { type: "json", requires: ["json"] },
+			filter: { type: "string", requires: ["payload"] },
 		},
 	});
 
@@ -402,6 +404,11 @@ describe("validateParsed — requires", () => {
 		expect(() => validateParsed(cmd, parseStructured(cmd, { flags: { jq: "." } }, {}))).toThrow(
 			'Flag "--jq" requires "--json"',
 		);
+		// Only a boolean's false is "not given": a json flag's false is a value.
+		expect(() => parseAndValidate(cmd, ["--payload", "false"], {})).toThrow(
+			'Flag "--payload" requires "--json"',
+		);
+		parseAndValidate(cmd, ["--filter", "x", "--payload", "false", "--json"], {});
 	});
 });
 

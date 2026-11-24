@@ -461,7 +461,8 @@ function validateRequires(flagsDef: FlagsDef, parsed: ArgvParseResult): void {
 	const given = (name: string) => {
 		const source = parsed.sources.flags[name];
 		const value = parsed.flags[name];
-		return source !== undefined && source !== "default" && value !== undefined && value !== false;
+		const unsetBoolean = flagsDef[name]?.type === "boolean" && value === false;
+		return source !== undefined && source !== "default" && value !== undefined && !unsetBoolean;
 	};
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (!def.requires || !given(name)) continue;
