@@ -3,7 +3,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import * as readline from "node:readline";
-import { stripVTControlCharacters } from "node:util";
 
 import { stringWidth } from "@crustjs/style";
 import {
@@ -166,9 +165,15 @@ function physicalLineCount(content: string, columns: number): number {
 	let count = 0;
 	for (const line of content.split("\n")) {
 		count++;
+		// `stringWidth` decides what an escape sequence is; a line that fits needs no walk.
+		if (stringWidth(line) <= columns) continue;
 		let column = 0;
-		for (const { segment } of graphemes.segment(stripVTControlCharacters(line))) {
-			const width = stringWidth(segment);
+		let measured = 0;
+		for (const { segment, index } of graphemes.segment(line)) {
+			// The growth of the measured prefix, so the bytes of an escape sequence add nothing.
+			const total = stringWidth(line.slice(0, index + segment.length));
+			const width = total - measured;
+			measured = total;
 			// A wide character that does not fit in the last column starts the next row.
 			if (column > 0 && column + width > columns) {
 				count++;

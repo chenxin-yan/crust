@@ -423,6 +423,28 @@ describe("runPrompt", () => {
 		await promise;
 	});
 
+	it("counts an escape sequence's bytes as no columns when wrapping", async () => {
+		const harness = createPromptIO();
+		let written = "";
+		const output = {
+			isTTY: true,
+			columns: 4,
+			write: (chunk: string) => ((written += chunk), true),
+			on: () => output,
+		};
+		// A DCS sequence, then the two visible columns "OK": one row on a 4-column output.
+		const promise = runPrompt(
+			{ ...submitOnKey, render: () => "\x1bP$qm\x1b\\OK", renderSubmitted: () => "OK" },
+			{ input: harness.io.input, output },
+		);
+		await tick();
+		written = "";
+		harness.keys("return");
+		await promise;
+
+		expect(written).not.toContain("\x1b[1A");
+	});
+
 	it("finishes on an output with on() but no removeListener(), and can run again", async () => {
 		const harness = createPromptIO();
 		const output = { isTTY: true, columns: 80, write: () => true, on: () => output };
