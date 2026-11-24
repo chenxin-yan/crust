@@ -1,8 +1,8 @@
-const TEXT_JSON_SCHEMA: { type: string } = { type: "string" };
-
 /**
- * `.output()` of the `completion` command, whose product is the script it prints and returns:
+ * `.output()` of the `completion` command, whose product is the script it prints and may return:
  * under `--json` that text prints once, as a JSON string, and nothing reaches stderr.
+ * It has no JSON Schema, so MCP does not require a string from `completion --output-dir`,
+ * which returns nothing.
  */
 export const textOutput = {
 	"~standard": {
@@ -12,9 +12,5 @@ export const textOutput = {
 		validate: (value: unknown): { value: string | undefined } => ({
 			value: value as string | undefined,
 		}),
-		jsonSchema: {
-			input: (): { type: string } => TEXT_JSON_SCHEMA,
-			output: (): { type: string } => TEXT_JSON_SCHEMA,
-		},
 	},
 } as const;
