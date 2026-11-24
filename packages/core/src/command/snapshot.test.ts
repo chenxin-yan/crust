@@ -4,6 +4,7 @@ import { z } from "zod";
 import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import { commandInputSchema } from "./command-input.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
@@ -244,6 +245,33 @@ describe("keys packages add", () => {
 		expect(snapshot.subCommands.serve?.meta).toMatchObject({ mcp: false });
 		await app.run([]);
 		expect(seen).toEqual([false, complete]);
+	});
+
+	it("leaves an argument's key alone when a flag field has its name", async () => {
+		const env = { hint: "local" };
+		const app = new Crust("cli")
+			.extend(defineExtension(defineExtensionId("owner")).owns(...(["env", "aliases"] as never[])))
+			.args({ name: "file", type: "string", env, aliases: "abc" } as {
+				name: "file";
+				type: "string";
+			})
+			.action(() => {});
+		const snapshot = await app.snapshot();
+		expect(snapshot.args[0]).toEqual({ name: "file", type: "string", env, aliases: "abc" });
+		expect(commandInputSchema(snapshot, []).properties.file).toEqual({ type: "string" });
+	});
+
+	it("keeps a key named `__proto__` as a field, not the prototype", () => {
+		const root = createCommandNode("cli");
+		const extra: object = JSON.parse('{"__proto__": {"injected": true}}');
+		root.args = [{ name: "file", type: "string", ...extra }];
+		registerFlag(root, "mode", { type: "string", ...extra }, "local");
+		const snapshot = snapshotCommand(root);
+		for (const def of [snapshot.args[0]!, snapshot.flags.mode!]) {
+			expect(Object.getPrototypeOf(def)).toBe(Object.prototype);
+			expect(Object.hasOwn(def, "__proto__")).toBe(true);
+			expect("injected" in def).toBe(false);
+		}
 	});
 });
 

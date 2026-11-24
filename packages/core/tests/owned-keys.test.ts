@@ -14,7 +14,12 @@ const repoRoot = resolve(import.meta.dirname, "../../..");
 const corePkg = resolve(import.meta.dirname, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
-const STAND_IN = `import { defineExtension, defineExtensionId } from "@crustjs/core";
+const STAND_IN = `import {
+	defineExtension,
+	defineExtensionId,
+	type ArgSnapshot,
+	type FlagSnapshot,
+} from "@crustjs/core";
 
 declare module "@crustjs/core" {
 	interface ArgExtras {
@@ -38,6 +43,14 @@ export const standIn = () =>
 			const flags = Object.entries(command.flags).map(([name, flag]) => [name, flag.hint]);
 			stdout(JSON.stringify({ tool, args, flags }));
 		});
+
+// A snapshot is frozen, so the keys are read-only too.
+export function rewrite(arg: ArgSnapshot, flag: FlagSnapshot) {
+	// @ts-expect-error -- read-only
+	arg.hint = "other";
+	// @ts-expect-error -- read-only
+	flag.hint = "other";
+}
 `;
 
 // A command file that never imports the package: the key is known in every file of the project.

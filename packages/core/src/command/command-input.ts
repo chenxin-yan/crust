@@ -155,7 +155,8 @@ function propertySchema(
 			// Advisory metadata must not break discovery; run() still owns the actual default.
 		}
 	}
-	const env = "env" in def && def.env ? [def.env].flat().map((variable) => `$${variable}`) : [];
+	const env =
+		"negatable" in def && def.env ? [def.env].flat().map((variable) => `$${variable}`) : [];
 	const declared = "description" in schema ? schema.description : def.description;
 	const description =
 		env.length === 0

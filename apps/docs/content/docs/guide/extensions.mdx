@@ -137,6 +137,7 @@ deploying to the default region
 
 - The app changes no `tsconfig`. Once any file in the project imports the package, the key is typed on every definition, in every file, inline `.command()` children and `defineCommand()` files included. Without the package, the key is an unknown-key compile error.
 - Core never reads the key. Snapshots pass it through unchanged, so the Extension reads `flag.hint` typed, without a cast.
+- The value must be JSON data or a function. `crust build` leaves a function out of the snapshot file it writes, and fails on anything else JSON refuses, such as a BigInt or a cyclic object.
 - A definition that sets a key no installed Extension owns is a `DEFINITION` error (`unowned-key`) from source and in `crust build`: the type exists whenever the package is in the project, even if the app never calls `.extend()` with its Extension.
 
 Two rules keep an owned key safe for every app that uses it:

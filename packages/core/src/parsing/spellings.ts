@@ -151,7 +151,7 @@ function checkSpellingCollisions(
 }
 
 /** Copy only definition-owned collections, not JSON/URL/schema payloads. */
-export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
+export function ownDefinition<const D extends FlagDef>(def: D): D {
 	return Object.freeze({
 		...def,
 		...("aliases" in def && def.aliases ? { aliases: Object.freeze([...def.aliases]) } : {}),
@@ -228,5 +228,9 @@ export function normalizeArg<const D extends ArgDef>(def: D): D {
 			reason: "empty-name",
 		});
 	}
-	return ownDefinition(def);
+	// Not ownDefinition: it reads flag fields, which an argument's package-owned keys may share.
+	return Object.freeze({
+		...def,
+		...(def.choices ? { choices: Object.freeze([...def.choices]) } : {}),
+	});
 }

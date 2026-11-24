@@ -41,7 +41,8 @@ import { builtChildOf, builtChildrenOf, childMetaOf, type CommandNode } from "./
  * // `required`/`variadic` keys absent — not declared on the def
  * ```
  */
-export interface ArgSnapshot extends ArgExtras {
+// oxlint-disable-next-line no-generated-empty-object-type -- empty until a package augments ArgExtras.
+export interface ArgSnapshot extends Readonly<ArgExtras> {
 	/** Argument name as defined, e.g. `"file"`. */
 	readonly name: string;
 	/** Value type (`"string"`, `"number"`, …); absent for schema-backed args. */
@@ -81,7 +82,8 @@ export interface ArgSnapshot extends ArgExtras {
  * // => { type: "boolean", short: "v", default: false, negatable: true }
  * ```
  */
-export interface FlagSnapshot extends FlagExtras {
+// oxlint-disable-next-line no-generated-empty-object-type -- empty until a package augments FlagExtras.
+export interface FlagSnapshot extends Readonly<FlagExtras> {
 	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`. */
 	readonly type: FlagDef["type"];
 	/** Human-readable description for help text. */
@@ -194,11 +196,10 @@ export interface CommandSnapshot {
 /** Drop keys with `undefined` values so snapshots serialize cleanly, then freeze. */
 function freezeCompact<T extends object>(obj: T): T {
 	// Copy instead of `delete`: deleting keys drops V8 objects into slow dictionary mode.
-	const compact: Partial<T> = {};
-	// SAFETY: Object.keys returns exactly the enumerable string keys of T.
-	for (const key of Object.keys(obj) as (keyof T)[]) {
-		if (obj[key] !== undefined) compact[key] = obj[key];
-	}
+	// fromEntries defines own properties, so a package-owned key named `__proto__` stays a key.
+	const compact = Object.fromEntries(
+		Object.entries(obj).filter(([, value]) => value !== undefined),
+	);
 	// SAFETY: only keys whose value is `undefined` were left out, matching T's optional fields.
 	return Object.freeze(compact as T);
 }
