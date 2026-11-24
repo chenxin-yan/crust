@@ -70,13 +70,14 @@ Error: No app.config.json found. Run `app init` to create one.
 
 `execute()` ends every invocation with one exit code, resolves to it, and sets `process.exitCode` to it once at the end:
 
-| Status        | When                                                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `0`           | The action completed, or an Extension handled the invocation, such as `--help`                                           |
-| `n`           | The action called `exitCode(n)` and completed                                                                            |
-| `1`           | The action, a hook, or cleanup threw; a thrown value with a non-zero integer `exitCode` property exits with that instead |
-| `2`           | A usage error: a [`CrustError`](/docs/api/errors#codes) with code `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND`          |
-| `130` / `143` | Ctrl+C or `SIGTERM` [cancelled](#cancellation) the run, whatever the action did                                          |
+| Status        | When                                                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`           | The action completed, or an Extension handled the invocation, such as `--help`                                                                                            |
+| `n`           | The action called `exitCode(n)` and completed                                                                                                                             |
+| `1`           | The action, a hook, or cleanup threw, or a write to stdout failed (`app > /dev/full`); a thrown value with a non-zero integer `exitCode` property exits with that instead |
+| `2`           | A usage error: a [`CrustError`](/docs/api/errors#codes) with code `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND`                                                           |
+| `130` / `143` | Ctrl+C or `SIGTERM` [cancelled](#cancellation) the run, whatever the action did                                                                                           |
+| `141`         | The reader of stdout went away, as in `app \| head -1`: the run is [cancelled](#cancellation), whatever the action did                                                    |
 
 To report an outcome without failing, as `grep` and `diff` do, call `exitCode(n)` with an integer `n` from the action's context. The action carries on, and the last call wins; `return` or `throw` to stop:
 
@@ -153,6 +154,8 @@ Keep side effects after prompts so cancelling leaves nothing to undo.
 - The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running.
 - Cleanup still runs. If it fails, its failure prints and the exit code stays 130.
 - `SIGTERM`, sent by `docker stop`, Kubernetes, `timeout`, and CI cancellation, cancels the same way and exits 143.
+- When the reader of stdout goes away, as in `app | head -1`, the next `stdout(text)` throws an `AbortError` and aborts the `signal` the same way: nothing prints and the exit code is 141 (128 + `SIGPIPE`, which Node.js and Bun ignore, so the process never dies by it). Any other failed write to stdout, such as a full disk, throws the system error and exits 1. A failed write to stderr is ignored. Windows keeps the stream writer, which never throws.
+- `signal.reason.cause` names what cancelled the run: `"SIGINT"`, `"SIGTERM"`, or `"SIGPIPE"`. A caller's own `execute({ signal })` abort keeps the caller's reason. Read it, not the message, to pass the signal on to a child process.
 - After a Ctrl+C or `SIGTERM`, `execute()` resolves 130 or 143 once cleanup finishes, even when the action ignored the `signal` and completed. Code after it still runs; then the process ends by that signal, so shells see 130 or 143 and a Ctrl+C stops a shell loop. Call `process.exit(code)` after `execute()` to exit with a code instead.
 
 See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated signals.

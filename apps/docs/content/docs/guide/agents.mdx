@@ -90,7 +90,7 @@ $ my-cli status prod --json
 {"type":"result","data":{"target":"prod","healthy":true}}
 ```
 
-A cancelled invocation (exit code 130, or 143 after `SIGTERM`), or a failure another Extension's `onError` hook claims, ends the stream without that last line ([`json()` limitations](/docs/modules/extensions/json#limitations)). Check the exit status rather than waiting for it.
+A cancelled invocation (exit code 130, 143 after `SIGTERM`, or 141 after a closed stdout), or a failure another Extension's `onError` hook claims, ends the stream without that last line ([`json()` limitations](/docs/modules/extensions/json#limitations)). Check the exit status rather than waiting for it.
 
 The same events reach `run()`'s `onEvent` callback. Under MCP, each yield sends a [progress notification](/docs/modules/mcp#progress) when the client asks for progress: it carries a count, and a string event becomes its message.
 

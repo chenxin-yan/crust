@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import { closeSync, openSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 
@@ -10,9 +11,9 @@ import { ensureDist } from "./helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Default IO through a pipe — a payload larger than the 64 KiB pipe buffer must
-// arrive intact even when the action exits the process right after writing, must
-// stay ordered with the user's own `console.log`, and the default IO must keep
-// `console.log`'s tolerance for a consumer that closes the pipe early. Bun flips
+// arrive intact even when the action exits the process right after writing, and must
+// stay ordered with the user's own `console.log`. A consumer that closes stdout early
+// cancels the run (exit 141); one that closes stderr is ignored. Bun flips
 // fd 1 to non-blocking once anything touches `process.stdout` (a platform layer,
 // a color library probing `isTTY`), so several cases probe it first.
 // ────────────────────────────────────────────────────────────────────────────
@@ -66,6 +67,9 @@ const runtimes = [bun, ...(which("node") ? ["node"] : [])];
 
 // The fd writer and its guarantees apply outside Windows; Windows keeps the stream writer.
 const fdWriter = process.platform !== "win32";
+
+// The spawn timeout kills `bash`, not the writer in its pipeline: a regressed fixture must end itself.
+const PIPELINE_DEADLINE = "setTimeout(() => process.exit(9), 4_000).unref();\n";
 
 const run = (runtime: string, source: string) =>
 	spawnSync(runtime, ["--input-type=module", "--eval", source], {
@@ -166,12 +170,136 @@ await new Crust("pipe-cli")
 			},
 		);
 
-		for (const closed of ["stdout", "stderr"] as const) {
-			it(`survives a consumer closing ${closed} early (${runtime})`, async () => {
-				const { exitCode, other } = await runWithEarlyClose(runtime, closed);
-				expect(exitCode).toBe(0);
-				expect(other).toBe("first\nsecond\n");
-			});
+		it(`survives a consumer closing stderr early (${runtime})`, async () => {
+			const { exitCode, other } = await runWithEarlyClose(runtime, "stderr");
+			expect(exitCode).toBe(0);
+			expect(other).toBe("first\nsecond\n");
+		});
+
+		it.runIf(fdWriter)(
+			`stops a streaming action piped to head -1 and aborts its signal (${runtime})`,
+			() => {
+				const source = `${importCore("dist/index.js")}${PIPELINE_DEADLINE}await new Crust("follow")
+	.action(async ({ stdout, signal }) => {
+		try {
+			for (let n = 0; !signal.aborted; n++) {
+				stdout(\`line \${n}\`);
+				await new Promise((resolve) => setTimeout(resolve, 1));
+			}
+		} finally {
+			console.error(\`cause \${signal.reason?.cause}\`);
 		}
+	})
+	.execute({ argv: [] });
+`;
+				const { stdout, stderr, status } = spawnSync(
+					"bash",
+					[
+						"-c",
+						'"$0" --input-type=module --eval "$1" | head -1; echo "${PIPESTATUS[*]}"',
+						runtime,
+						source,
+					],
+					{ encoding: "utf8", timeout: 5_000 },
+				);
+				expect({ stdout, stderr, status }).toEqual({
+					stdout: "line 0\n141 0\n",
+					stderr: "cause SIGPIPE\n",
+					status: 0,
+				});
+			},
+		);
+
+		it.runIf(fdWriter)(
+			`dies by a SIGINT that arrives right after stdout closed (${runtime})`,
+			() => {
+				const source = `${importCore("dist/index.js")}${PIPELINE_DEADLINE}await new Crust("follow")
+	.action(async ({ stdout }) => {
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+		for (;;) {
+			try {
+				stdout("x");
+			} catch {
+				break;
+			}
+			await sleep(5);
+		}
+		process.kill(process.pid, "SIGINT");
+		await sleep(500);
+	})
+	.execute({ argv: [] });
+`;
+				const { stdout, status } = spawnSync(
+					"bash",
+					[
+						"-c",
+						'"$0" --input-type=module --eval "$1" | true; echo "${PIPESTATUS[*]}"',
+						runtime,
+						source,
+					],
+					{ encoding: "utf8", timeout: 5_000 },
+				);
+				expect({ stdout, status }).toEqual({ stdout: "130 0\n", status: 0 });
+			},
+		);
+
+		it.runIf(fdWriter)(
+			`keeps an in-process host alive through a SIGINT after stdout closed (${runtime})`,
+			() => {
+				const source = `${importCore("dist/index.js")}${PIPELINE_DEADLINE}const code = await new Crust("follow")
+	.action(async ({ stdout }) => {
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+		for (;;) {
+			try {
+				stdout("x");
+			} catch {
+				break;
+			}
+			await sleep(5);
+		}
+		process.kill(process.pid, "SIGINT");
+		await sleep(500);
+	})
+	.execute({ argv: [], io: { stderr: (text) => console.error(text) } });
+console.error(\`resolved \${code}\`);
+process.exitCode = 0;
+`;
+				const { stdout, stderr, status } = spawnSync(
+					"bash",
+					[
+						"-c",
+						'"$0" --input-type=module --eval "$1" | true; echo "${PIPESTATUS[*]}"',
+						runtime,
+						source,
+					],
+					{ encoding: "utf8", timeout: 5_000 },
+				);
+				expect({ stdout, stderr, status }).toEqual({
+					stdout: "0 0\n",
+					stderr: "resolved 141\n",
+					status: 0,
+				});
+			},
+		);
+
+		it.runIf(process.platform === "linux")(
+			`fails with the system error and exit 1 on a full disk (${runtime})`,
+			() => {
+				const full = openSync("/dev/full", "w");
+				try {
+					const { stderr, status } = spawnSync(
+						runtime,
+						["--input-type=module", "--eval", EARLY_CLOSE_SOURCE],
+						{ stdio: ["ignore", full, "pipe"], encoding: "utf8", timeout: 5_000 },
+					);
+					expect({ stderr, status }).toEqual({
+						stderr: "Error: ENOSPC: no space left on device, write\n",
+						status: 1,
+					});
+				} finally {
+					closeSync(full);
+				}
+			},
+		);
 	}
 });

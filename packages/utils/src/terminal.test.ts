@@ -184,4 +184,33 @@ describe("writeProcessOutput", () => {
 			expect(written).toEqual(["kept\n"]);
 		},
 	);
+
+	it.skipIf(process.platform === "win32")(
+		"throws a failed stdout write: a closed reader as SIGPIPE cancellation, else the error",
+		() => {
+			const fs = process.getBuiltinModule("node:fs");
+			let code = "EPIPE";
+			const failure = () => Object.assign(new Error(code), { code });
+			vi.spyOn(fs, "writeSync").mockImplementation(() => {
+				throw failure();
+			});
+
+			let thrown: unknown;
+			try {
+				writeProcessOutput(1, "line\n");
+			} catch (error) {
+				thrown = error;
+			}
+			expect(thrown).toBeInstanceOf(DOMException);
+			expect(thrown).toMatchObject({ name: "AbortError", cause: "SIGPIPE" });
+
+			code = "ENOSPC";
+			expect(() => writeProcessOutput(1, "line\n")).toThrow(
+				expect.objectContaining({ code: "ENOSPC" }),
+			);
+			for (code of ["EPIPE", "ENOSPC"]) {
+				expect(() => writeProcessOutput(2, "line\n")).not.toThrow();
+			}
+		},
+	);
 });

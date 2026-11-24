@@ -139,6 +139,8 @@ export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 /** A signal this soon after the first is the same one relayed by a parent process or a group kill. */
 const RELAYED_SIGNAL_WINDOW_MS = 50;
 const EXIT_CODE_CANCELLED = 130;
+/** 128 + SIGPIPE: what a process killed by the signal reports. Node and Bun ignore SIGPIPE, so none dies by it. */
+const EXIT_CODE_STDOUT_CLOSED = 141;
 /** Signals `execute()` turns into cancellation: the abort message and the 128+n exit code. */
 const CANCELLING_SIGNALS = {
 	SIGINT: { message: "Interrupted by SIGINT.", exitCode: EXIT_CODE_CANCELLED },
@@ -168,6 +170,23 @@ function exitBySignal(): void {
 function isAbortError(error: CaughtError): boolean {
 	if (!(error instanceof Error)) return false;
 	return error.name === "AbortError";
+}
+
+/** The cancellation the process stdout writer throws once its reader is gone (`cli | head`). */
+function stdoutClosed(error: CaughtError): Error | undefined {
+	try {
+		// The action's own `await using` may have failed while unwinding it: the cancellation is the suppressed side.
+		const seen = new Set<object>();
+		let current = error;
+		while (isSuppressedError(current) && !seen.has(current)) {
+			seen.add(current);
+			current = current.suppressed;
+		}
+		if (isAbortError(current) && (current as Error).cause === "SIGPIPE") return current as Error;
+	} catch {
+		// A throwing getter on an arbitrary thrown value makes it an ordinary failure.
+	}
+	return undefined;
 }
 
 /**
@@ -1205,21 +1224,32 @@ export async function executeInvocation(
 		let interruptedAt = Number.NEGATIVE_INFINITY;
 		// A caller's `options.signal` abort keeps 130 even when a signal arrives after it.
 		let cancelledExitCode: number = EXIT_CODE_CANCELLED;
-		let cancelledBy: CancellingSignal | undefined;
+		let cancelledBy: CancellingSignal | "SIGPIPE" | undefined;
+		const cancel = (name: CancellingSignal | "SIGPIPE", reason: Error): void => {
+			if (!signal.aborted) {
+				cancelledBy = name;
+				cancelledExitCode =
+					name === "SIGPIPE" ? EXIT_CODE_STDOUT_CLOSED : CANCELLING_SIGNALS[name].exitCode;
+			}
+			controller.abort(reason);
+		};
 		const onSignal = (name: CancellingSignal): void => {
 			if (!controller.signal.aborted) {
+				// Only a real signal opens the relay window: a Ctrl-C right after a closed stdout is not a duplicate.
 				interruptedAt = performance.now();
-				if (!signal.aborted) {
-					cancelledBy = name;
-					cancelledExitCode = CANCELLING_SIGNALS[name].exitCode;
-				}
-				controller.abort(new DOMException(CANCELLING_SIGNALS[name].message, "AbortError"));
+				const { message } = CANCELLING_SIGNALS[name];
+				cancel(name, Object.assign(new DOMException(message, "AbortError"), { cause: name }));
 				return;
 			}
 			// `npm run`, `npx`, `bun run`, and pnpm relay the terminal's SIGINT to their child as well
 			// (npm/cli#8164), and a forwarded SIGTERM can meet a process-group kill, so one signal
 			// arrives twice within a millisecond; a person pressing twice takes far longer.
 			if (performance.now() - interruptedAt < RELAYED_SIGNAL_WINDOW_MS) return;
+			// An in-process host survives its first real signal, also after a closed stdout cancelled the run.
+			if (inProcess && interruptedAt === Number.NEGATIVE_INFINITY) {
+				interruptedAt = performance.now();
+				return;
+			}
 			process.removeListener(name, onSignal);
 			if (process.listenerCount(name) === 0) process.kill(process.pid, name);
 		};
@@ -1228,7 +1258,22 @@ export async function executeInvocation(
 			if (!isSignalIgnored(name)) process.on(name, onSignal);
 		}
 
-		const output = createInvocationOutput(io);
+		// The reader of stdout is gone (`cli | head`): cancel the run, as SIGPIPE ends a C program.
+		const onStdoutClosed = (error: CaughtError): void => {
+			const closed = controller.signal.aborted ? undefined : stdoutClosed(error);
+			if (closed) cancel("SIGPIPE", closed);
+		};
+		const output = createInvocationOutput({
+			...io,
+			stdout(text) {
+				try {
+					io.stdout(text);
+				} catch (error) {
+					onStdoutClosed(error);
+					throw error;
+				}
+			},
+		});
 		let extensionContext: ExtensionContext | undefined;
 		let rendered: { error: CaughtError; exitCode: number } | undefined;
 		let exitCode = 0;
@@ -1243,12 +1288,16 @@ export async function executeInvocation(
 					extensionContext = context;
 				},
 				async (error, context) => {
+					// A writer that bypasses `stdout()` (raw bytes to fd 1): cancel before hooks and cleanup run.
+					onStdoutClosed(error);
 					// Recorded before the hooks run: an `onError` hook that rewrites `exitCode` changes only the output.
 					rendered = { error, exitCode: failureExitCode(error, cancelledExitCode) };
 					return renderFailure(error, argv, prepared, output, signal, env, context);
 				},
 			));
 		} catch (error) {
+			// A writer that bypasses `stdout()`, such as raw bytes to the process's stdout.
+			onStdoutClosed(error);
 			// Disposal wraps the failure rendered above as `suppressed` (Object.is: the
 			// body may have thrown NaN or any primitive). Render only the cleanup side;
 			// onError hooks and the Renderer's `error` already ran and never see it.
@@ -1266,7 +1315,7 @@ export async function executeInvocation(
 				// A throwing getter on an arbitrary thrown value must not replace the failure.
 			}
 			if (cleanupFailure) renderCleanupFailure(cleanupFailure.error, output, "Cleanup failed");
-			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
+			// Cancellation keeps its exit code (130, 143 after SIGTERM, 141 after a closed stdout) even when cleanup failed
 			// while unwinding it (callers such as shell loops must still see the interrupt).
 			exitCode =
 				rendered && Object.is(error, rendered.error)
@@ -1293,7 +1342,7 @@ export async function executeInvocation(
 		// for the event loop to drain, so `execute()` still resolves 130/143 to the caller. The exit
 		// code stays as the fallback when the re-raise can't kill: another listener owns the signal,
 		// or Windows, where `process.kill` on self is a forced kill without the 128+n status.
-		if (!inProcess && process.platform !== "win32") {
+		if (cancelledBy !== "SIGPIPE" && !inProcess && process.platform !== "win32") {
 			pendingSignalExit = { name: cancelledBy, exitCode: cancelledExitCode };
 			process.once("beforeExit", exitBySignal);
 		}
