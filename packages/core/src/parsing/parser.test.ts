@@ -1429,6 +1429,21 @@ describe("parseFlagValues", () => {
 		).rejects.toMatchObject({ code: "VALIDATION" });
 	});
 
+	it("checks requires against the variables given", async () => {
+		const flags = {
+			query: { type: "string", env: "QUERY", requires: ["json"] },
+			json: { type: "boolean", env: "JSON" },
+		} as const;
+		await expect(parseFlagValues(flags, { QUERY: "x" })).rejects.toMatchObject({
+			code: "VALIDATION",
+			message: 'Flag "--query" requires "--json"',
+		});
+		await expect(parseFlagValues(flags, { QUERY: "x", JSON: "1" })).resolves.toEqual({
+			query: "x",
+			json: true,
+		});
+	});
+
 	it("rejects a definition core normalization rejects, such as a __proto__ key", async () => {
 		const reserved = Object.defineProperty({}, "__proto__", {
 			value: { type: "string", env: "X" },

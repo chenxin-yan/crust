@@ -457,10 +457,14 @@ function quoteFlags(names: readonly string[]): string {
  * Check each given flag's `requires`. A flag counts as given with a value from any source
  * but its default, other than a boolean's `false`.
  */
-function validateRequires(flagsDef: FlagsDef, parsed: ArgvParseResult): void {
+function validateRequires(
+	flagsDef: FlagsDef,
+	flags: Readonly<Record<string, unknown>>,
+	sources: Readonly<Record<string, ValueSource>>,
+): void {
 	const given = (name: string) => {
-		const source = parsed.sources.flags[name];
-		const value = parsed.flags[name];
+		const source = sources[name];
+		const value = flags[name];
 		const unsetBoolean = flagsDef[name]?.type === "boolean" && value === false;
 		return source !== undefined && source !== "default" && value !== undefined && !unsetBoolean;
 	};
@@ -985,7 +989,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 /**
  * Resolve flags from their `env` bindings alone, as {@link parseArgs} does for an
  * empty argv: `delimiter` splitting, `choices`, `parse`, built-in coercion,
- * defaults, requiredness, then Standard Schemas. Flags without `env` resolve
+ * defaults, requiredness, `requires`, then Standard Schemas. Flags without `env` resolve
  * to their defaults.
  *
  * @param flags - Flag definitions keyed by result name; each `env` names its variables
@@ -1001,8 +1005,16 @@ export async function parseFlagValues<const F extends FlagsDef>(
 ): Promise<InferFlags<F>> {
 	// defineFlag's checks, run for the throw: a `__proto__` key would swap the result record's prototype.
 	for (const [name, def] of Object.entries(flags)) normalizeFlag(name, def);
-	const resolved = resolveFlags(flags, applyEnvAndDelimiter(flags, {}, env), coerceFlagValue);
+	const input = applyEnvAndDelimiter(flags, {}, env);
+	const resolved = resolveFlags(flags, input, coerceFlagValue);
 	validateRequiredFlags(flags, resolved);
+	validateRequires(
+		flags,
+		resolved,
+		valueSources(Object.entries(flags), (name) =>
+			Object.hasOwn(input, name) && input[name] !== undefined ? "env" : undefined,
+		),
+	);
 	const validated = await applySchemas(
 		{ args: [], effectiveFlags: flags },
 		{ args: {}, flags: resolved },
@@ -1253,5 +1265,5 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 
 	validateRequiredArgs(command.args, parsed.args);
 	validateRequiredFlags(command.effectiveFlags, parsed.flags);
-	validateRequires(command.effectiveFlags, parsed);
+	validateRequires(command.effectiveFlags, parsed.flags, parsed.sources.flags);
 }

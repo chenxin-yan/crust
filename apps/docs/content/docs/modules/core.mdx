@@ -103,7 +103,7 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 
 ### Flag values without argv
 
-`parseFlagValues(flags, env)` runs the flag pipeline on environment values only: delimiter splitting, choices, `parse` or built-in coercion, defaults, requiredness, and Standard Schemas.
+`parseFlagValues(flags, env)` runs the flag pipeline on environment values only: delimiter splitting, choices, `parse` or built-in coercion, defaults, requiredness, `requires`, and Standard Schemas.
 
 - Invalid definitions reject with `DEFINITION`; bad values reject with `PARSE` or `VALIDATION`.
 - Core's messages name the variable, never its value. Standard Schema issue messages are the validator's own and may quote it.
