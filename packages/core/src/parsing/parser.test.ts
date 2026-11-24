@@ -341,6 +341,10 @@ describe("parseArgs — exclusive groups", () => {
 		expect(() => parseStructured(cmd, { flags: { scope: { flag: "project-id" } } })).toThrow(
 			'Expected { flag: "project-id", value } for --scope',
 		);
+		// A second member's key is refused, not ignored.
+		expect(() =>
+			parseStructured(cmd, { flags: { scope: { flag: "org-id", value: "acme", all: true } } }),
+		).toThrow('Expected { flag: "org-id", value } for --scope');
 		expect(() =>
 			parseStructured(cmd, { flags: { scope: { flag: "project-id", value: 1.5 } } }),
 		).toThrow("Expected an integer for --project-id.");

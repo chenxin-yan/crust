@@ -276,7 +276,7 @@ function groupInput(
 	const { flag, value } = given;
 	if (typeof flag !== "string" || typeof value !== "string") return given;
 	if (!Object.hasOwn(members, flag) || members[flag]!.type !== "url") return given;
-	return { flag, value: coerceUrl(value, `--${flag}`) };
+	return { ...given, value: coerceUrl(value, `--${flag}`) };
 }
 
 /**

@@ -835,7 +835,8 @@ function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue):
 			);
 		}
 		const boolean = def.flags[flag]!.type === "boolean";
-		if (boolean !== (memberInput === undefined)) {
+		const otherKey = Object.keys(value as object).some((key) => key !== "flag" && key !== "value");
+		if (otherKey || boolean !== (memberInput === undefined)) {
 			throw new CrustError(
 				"PARSE",
 				`Expected ${boolean ? `{ flag: "${flag}" }` : `{ flag: "${flag}", value }`} for ${label}`,

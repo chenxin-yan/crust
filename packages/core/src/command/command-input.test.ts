@@ -440,6 +440,12 @@ describe("commandInputSchema", () => {
 			target: { flag: "host", value: new URL("https://example.com/") },
 			scope: { flag: "all" },
 		});
+		// Another key stays, so `run()` refuses it as it does for every member.
+		expect(
+			parseCommandInput(await app.snapshot(), {
+				target: { flag: "host", value: "https://example.com/", local: true },
+			}).flags.target,
+		).toEqual({ flag: "host", value: new URL("https://example.com/"), local: true });
 	});
 
 	it("leaves out a group with no listed member", async () => {
