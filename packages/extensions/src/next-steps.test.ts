@@ -570,7 +570,8 @@ describe("nextSteps", () => {
 					next.add(scoped, { flags: { scope: { flag: "org-id", value: "acme" } } });
 					next.add(scoped, { flags: { scope: { flag: "all" } } });
 					next.add(scoped, { flags: { scope: { flag: "data", value: null } } });
-					next.add(scoped, { flags: { scope: { flag: "org-id" } } });
+					// Untyped input: `RunInputPayload` allows a member without its value.
+					next.add(scoped, { flags: { scope: { flag: "org-id" } as never } });
 				}),
 			);
 
