@@ -1283,7 +1283,6 @@ export function bindStructuredInput(
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
 		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));
-	// Supplied keys take parseStructured's sources as bound, so an empty array reports its fallback.
 	const rebound = (
 		original: Readonly<Record<string, ValueSource>>,
 		names: Record<string, unknown>,
@@ -1291,10 +1290,7 @@ export function bindStructuredInput(
 	): Readonly<Record<string, ValueSource>> =>
 		sourceRecord([
 			...Object.entries(original).filter(([name]) => !Object.hasOwn(names, name)),
-			...Object.entries(structuredSources).map(([name, source]): [string, ValueSource] => [
-				name,
-				source === "run" ? "bound" : source,
-			]),
+			...Object.keys(structuredSources).map((name): [string, ValueSource] => [name, "bound"]),
 		]);
 	// A replaced flag's environment value error no longer applies.
 	const replaced = new Set(Object.keys(inputFlags).map((name) => `--${name}`));
