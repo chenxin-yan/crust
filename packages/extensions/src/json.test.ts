@@ -270,7 +270,7 @@ describe("json", () => {
 		expect(JSON.parse(lines[1]!).message).toMatch(/^--json: the command result is not JSON data/);
 
 		const ran = await app.run([], { flags: { json: true } });
-		expect(ran).toMatchObject({ status: "failed", stdout: "", stderr: "working" });
+		expect(ran).toMatchObject({ status: "failed", stdout: "", stderr: "working\n" });
 		expect(ran.status === "failed" && (ran.error as Error).message).toMatch(
 			/^--json: the command result is not JSON data/,
 		);
@@ -349,7 +349,7 @@ describe("json", () => {
 		});
 		expect(await app.run([], { flags: { json: true } })).toMatchObject({
 			status: "failed",
-			stdout: '{"ok":true}',
+			stdout: '{"ok":true}\n',
 			stderr: "",
 		});
 	});
@@ -449,7 +449,7 @@ describe("json", () => {
 				status: "completed",
 				result: { id: 7 },
 				exitCode: 0,
-				stdout: '{"id":7}',
+				stdout: '{"id":7}\n',
 				stderr: "",
 			});
 		});
@@ -587,7 +587,7 @@ describe("json", () => {
 				error: failure,
 				exitCode: 1,
 				stdout: "",
-				stderr: "table row 1\ntable row 2",
+				stderr: "table row 1\ntable row 2\n",
 			});
 		});
 
@@ -904,7 +904,7 @@ describe("json", () => {
 				error: failure,
 				exitCode: 1,
 				events: [1],
-				stdout: '{"type":"event","data":1}',
+				stdout: '{"type":"event","data":1}\n',
 				stderr: "",
 			});
 		});
@@ -916,8 +916,8 @@ describe("json", () => {
 			status: "completed",
 			result: [1, 2],
 			exitCode: 0,
-			stdout: "[1,2]",
-			stderr: "working",
+			stdout: "[1,2]\n",
+			stderr: "working\n",
 		});
 
 		const failure = new CrustError("PARSE", "bad value");
@@ -929,7 +929,7 @@ describe("json", () => {
 			error: failure,
 			exitCode: 2,
 			stdout: "",
-			stderr: "working",
+			stderr: "working\n",
 		});
 	});
 });

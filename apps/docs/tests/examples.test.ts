@@ -38,8 +38,10 @@ it("the disposable Context example cleans up after success and failure", async (
 		});
 		const outcome = await app.run([]);
 		expect(outcome.status).toBe(fail ? "failed" : "completed");
-		expect(outcome.stdout.trim()).toBe(
-			fail ? "database opened\ndatabase closed" : "database opened\nselect 1: ok\ndatabase closed",
+		expect(outcome.stdout).toBe(
+			fail
+				? "database opened\ndatabase closed\n"
+				: "database opened\nselect 1: ok\ndatabase closed\n",
 		);
 	}
 });
@@ -52,7 +54,7 @@ it("the audited confirmation example reads its Context only after a completed ru
 	});
 	const outcome = await app.run(["list"], { flags: { yes: true } });
 	expect(outcome.status).toBe("completed");
-	expect(outcome.stdout.trim()).toBe("a b");
+	expect(outcome.stdout).toBe("a b\n");
 	expect(outcome.stderr).toContain("confirmation skipped with --yes");
 });
 
@@ -96,7 +98,7 @@ it("completion example prints the branches that start with the typed word", asyn
 it("extensions example prints the version for `--version` on the actionless root", async () => {
 	const outcome = await extensionsExample.run([], { flags: { version: true } });
 	expect(outcome).toMatchObject({ status: "handled", by: "crust:version" });
-	expect(outcome.stdout.trim()).toBe("my-cli v0.2.0");
+	expect(outcome.stdout).toBe("my-cli v0.2.0\n");
 });
 
 it.each([

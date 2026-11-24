@@ -275,7 +275,7 @@ describe("createMcpServer", () => {
 		expect(await client.callTool({ name: "deploy" })).toEqual({
 			content: [
 				{ type: "text", text: JSON.stringify({ ok: true }, null, 2) },
-				{ type: "text", text: "Next steps:\n  Check the deployment:\n    cli status" },
+				{ type: "text", text: "Next steps:\n  Check the deployment:\n    cli status\n" },
 			],
 			structuredContent: { ok: true },
 		});
@@ -284,7 +284,7 @@ describe("createMcpServer", () => {
 				{ type: "text", text: "Error: not logged in" },
 				{
 					type: "text",
-					text: "Next steps:\n  Log in:\n    cli login\n  Check the deployment:\n    cli status",
+					text: "Next steps:\n  Log in:\n    cli login\n  Check the deployment:\n    cli status\n",
 				},
 			],
 			isError: true,
@@ -541,7 +541,7 @@ describe("createMcpServer", () => {
 		});
 		// With isError set, a text-only result needs no structuredContent, so it is not reworded.
 		expect(await client.callTool({ name: "count" })).toEqual({
-			content: [{ type: "text", text: "no count" }],
+			content: [{ type: "text", text: "no count\n" }],
 			isError: true,
 		});
 		expect(await client.callTool({ name: "ok" })).not.toHaveProperty("isError");

@@ -10,11 +10,11 @@ export const outcomes = defineExtension(defineExtensionId("acme:outcomes"))
 	});
 
 const completed = new Crust("app").extend(outcomes).action(() => {});
-console.log((await completed.run([])).stdout); // => "outcome: completed"
+console.log((await completed.run([])).stdout); // => "outcome: completed\n"
 console.log((await completed.run([], { flags: { skip: true } })).stdout);
-// => "outcome: handled"
+// => "outcome: handled\n"
 
 const failed = new Crust("app").extend(outcomes).action(() => {
 	throw new Error("boom");
 });
-console.log((await failed.run([])).stdout); // => "outcome: failed"
+console.log((await failed.run([])).stdout); // => "outcome: failed\n"

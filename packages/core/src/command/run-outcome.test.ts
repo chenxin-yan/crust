@@ -30,8 +30,8 @@ describe("captured run outcomes", () => {
 				status: "completed",
 				result: 42,
 				exitCode: 0,
-				stdout: "one\ntwo\n",
-				stderr: "diagnostic",
+				stdout: "one\ntwo\n\n",
+				stderr: "diagnostic\n",
 			});
 			expect(writeSync.mock.calls.filter(([fd]) => fd === 1 || fd === 2)).toEqual([]);
 			for (const write of streamWrites) expect(write).not.toHaveBeenCalled();
@@ -52,7 +52,7 @@ describe("captured run outcomes", () => {
 				status: "failed",
 				error,
 				exitCode: 1,
-				stdout: "partial",
+				stdout: "partial\n",
 				stderr: "",
 			});
 			if (result.status === "failed") expect(result.error).toBe(error);
@@ -75,7 +75,7 @@ describe("captured run outcomes", () => {
 			status: "failed",
 			error,
 			exitCode: 1,
-			stdout: "recorded",
+			stdout: "recorded\n",
 			stderr: "",
 		});
 	});
@@ -96,7 +96,7 @@ describe("captured run outcomes", () => {
 			status: "handled",
 			by: id,
 			exitCode: 0,
-			stdout: "help",
+			stdout: "help\n",
 			stderr: "",
 		});
 	});
@@ -115,7 +115,7 @@ it("captures preparation output/failure while snapshot still rejects", async () 
 		error,
 		exitCode: 1,
 		stdout: "",
-		stderr: "preparing",
+		stderr: "preparing\n",
 	});
 	await expect(app.snapshot()).rejects.toBe(error);
 });
@@ -148,8 +148,8 @@ it("captures cleanup failure only after disposal, without presenting errors or c
 		status: "failed",
 		error,
 		exitCode: 1,
-		stdout: "action",
-		stderr: "disposed",
+		stdout: "action\n",
+		stderr: "disposed\n",
 	});
 	expect(presented).toBe(false);
 	expect(process.exitCode).toBe(status);
@@ -172,8 +172,8 @@ it("captures cancellation and postRun diagnostics with original error identity",
 		status: "failed",
 		error,
 		exitCode: 130,
-		stdout: "partial",
-		stderr: "failed",
+		stdout: "partial\n",
+		stderr: "failed\n",
 	});
 });
 
@@ -194,15 +194,15 @@ it("isolates nested and concurrent invocation terminal bridges", async () => {
 		status: "completed",
 		result: undefined,
 		exitCode: 0,
-		stdout: "inner",
-		stderr: "before\nafter",
+		stdout: "inner\n\n",
+		stderr: "before\nafter\n",
 	});
 	expect(b).toEqual({
 		status: "completed",
 		result: undefined,
 		exitCode: 0,
 		stdout: "",
-		stderr: "inner",
+		stderr: "inner\n",
 	});
 	expect(getAmbientTerminalIO()).toBeUndefined();
 });
@@ -224,7 +224,7 @@ it("preserves explicit terminal streams without claiming to capture their writes
 		() => app.run([]),
 	);
 	expect(outcome.status).toBe("completed");
-	expect(outcome.stdout).toBe("captured");
+	expect(outcome.stdout).toBe("captured\n");
 	expect(outcome.stderr).toBe("");
 	expect(writes).toEqual(["explicit"]);
 });

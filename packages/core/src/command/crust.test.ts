@@ -1646,14 +1646,14 @@ describe("Extension setup, flag handlers, and noAction", () => {
 				)
 				.action(({ stdout }) => stdout("action"));
 		const repeatable = handled({ mode: { type: "boolean", multiple: true } });
-		expect((await repeatable.run([], { flags: { mode: [false] } })).stdout).toBe("action");
+		expect((await repeatable.run([], { flags: { mode: [false] } })).stdout).toBe("action\n");
 		const defaulted = handled({ mode: { type: "boolean", default: true } });
-		expect((await defaulted.run([], { flags: { mode: undefined } })).stdout).toBe("action");
+		expect((await defaulted.run([], { flags: { mode: undefined } })).stdout).toBe("action\n");
 		const listed = handled({
 			mode: { type: "string", multiple: true, delimiter: ",", default: ["a"] },
 		});
 		// `[]` and `--mode ""` are given: an empty list, not an omission.
-		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("handled");
+		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("handled\n");
 		const lines: string[] = [];
 		await listed.execute({
 			argv: ["--mode", ""],
@@ -1671,7 +1671,9 @@ describe("Extension setup, flag handlers, and noAction", () => {
 			)
 			.action(({ stdout }) => stdout("action"));
 		for (const mode of [[], [false], false]) {
-			expect((await app.run([], { flags: { mode } })).stdout, JSON.stringify(mode)).toBe("handled");
+			expect((await app.run([], { flags: { mode } })).stdout, JSON.stringify(mode)).toBe(
+				"handled\n",
+			);
 		}
 		const lines: string[] = [];
 		await app.execute({
@@ -1693,9 +1695,9 @@ describe("Extension setup, flag handlers, and noAction", () => {
 					.action(({ flags, stdout }) => stdout(`publishing ${flags.version}`)),
 			)
 			.action(() => {});
-		expect((await app.run([], { flags: { version: true } })).stdout).toBe("cli v1");
+		expect((await app.run([], { flags: { version: true } })).stdout).toBe("cli v1\n");
 		expect((await app.run(["publish"], { flags: { version: true } })).stdout).toBe(
-			"publishing true",
+			"publishing true\n",
 		);
 		const lines: string[] = [];
 		await app.execute({
@@ -2066,7 +2068,7 @@ describe("Extension renderer", () => {
 		expect(await execute(app, [], lines)).toBe(0);
 		expect(lines).toEqual(["stdout:initializing", "pulled", "stdout:ready"]);
 		const outcome = await app.run([]);
-		expect(outcome.stdout).toBe("initializing\nready");
+		expect(outcome.stdout).toBe("initializing\nready\n");
 	});
 
 	it("keeps the bytes of Context output waiting for the renderer as they were written", async () => {
@@ -2539,8 +2541,8 @@ describe("Crust .run()", () => {
 
 		expect(out).toEqual(["ambient out"]);
 		expect(err).toEqual(["ambient err"]);
-		expect(result.stdout).toBe("ambient out");
-		expect(result.stderr).toBe("ambient err");
+		expect(result.stdout).toBe("ambient out\n");
+		expect(result.stderr).toBe("ambient err\n");
 		expect(getAmbientTerminalIO()).toBeUndefined();
 	});
 });

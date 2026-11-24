@@ -395,6 +395,6 @@ describe("prompts()", () => {
 
 	it("never asks under typed run(), even inside a terminal scope", async () => {
 		const outcome = await withTerminalIO(createPromptIO().io, () => app.run(["db", "reset"]));
-		expect(outcome).toMatchObject({ status: "completed", stdout: "db reset confirm=false" });
+		expect(outcome).toMatchObject({ status: "completed", stdout: "db reset confirm=false\n" });
 	});
 });

@@ -57,7 +57,7 @@ describe("async generator actions", () => {
 		]);
 		expect(outcome).toMatchObject({ status: "completed", result: "done", events: [1, 2] });
 		// Events are never printed; only stdout() writes are.
-		expect(outcome.stdout).toBe("human");
+		expect(outcome.stdout).toBe("human\n");
 		expect(outcomes).toEqual([{ status: "completed", result: "done", events: [1, 2] }]);
 		expect(Object.isFrozen(outcomes[0]!.status === "completed" && outcomes[0]!.events)).toBe(true);
 	});
