@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
@@ -2263,6 +2263,12 @@ describe("Context replacements", () => {
 		await expect(unwrap(app.run(["read"], {}, { provide: [number()] }))).rejects.toThrow(
 			'Context "a" given to the provide option does not own the same flags',
 		);
+		// `crust build` never sees a `provide` option, so a built CLI checks it too.
+		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
+		await expect(unwrap(app.run(["read"], {}, { provide: [number()] }))).rejects.toThrow(
+			'Context "a" given to the provide option does not own the same flags',
+		);
+		vi.unstubAllEnvs();
 		expect(await app.run(["read"], {}, { provide: [text.of(99)] })).toMatchObject({
 			status: "completed",
 			result: 99,

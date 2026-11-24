@@ -46,8 +46,7 @@ export type ParseErrorReason =
  * the marker drops it. The Context reasons (`missing-context`, `context-*`,
  * `flags-before-validation`), `extension-defer-after-setup`, and `missing-extension` are raised
  * wherever the CLI runs, except `context-flags-not-parsed` when preparation throws it for a
- * same-name Context or provider whose flags differ from the declared Context's, or an invocation
- * for a `provide` replacement whose flags differ from the Context it replaces, which is a
+ * same-name Context or provider whose flags differ from the declared Context's, which is a
  * definition check.
  */
 export type DefinitionErrorReason =

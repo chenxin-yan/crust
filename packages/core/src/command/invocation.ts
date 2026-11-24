@@ -917,11 +917,7 @@ async function dispatch(
 	for (const replacement of (provide ?? []).map(definingOf)) {
 		const replaced = contexts.findLast(({ name }) => name === replacement.name);
 		// Its setup receives the flags parsed for the Context it replaces.
-		if (
-			process.env.CRUST_INTERNAL_BUILD !== "1" &&
-			replaced &&
-			!sameFlags(replaced.ownedFlags, replacement.ownedFlags)
-		) {
+		if (replaced && !sameFlags(replaced.ownedFlags, replacement.ownedFlags)) {
 			throw new CrustError(
 				"DEFINITION",
 				`Context "${replacement.name}" given to the provide option does not own the same flags as the Context "${replacement.name}" it replaces: pass the same factory (for example its .of()).`,
