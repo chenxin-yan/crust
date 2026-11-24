@@ -189,7 +189,8 @@ describe("didYouMean", () => {
 				cmd
 					.flags({
 						template: { type: "string", aliases: ["tpl"] },
-						color: { type: "boolean", default: true },
+						color: { type: "boolean", default: true, aliases: ["ansi"] },
+						ok: { type: "boolean" },
 						secret: { type: "string", hidden: true },
 					})
 					.action(() => {}),
@@ -204,9 +205,11 @@ describe("didYouMean", () => {
 		});
 		expect(await stderrOf("create", "--tpll")).toContain('Did you mean "--template"?');
 		expect(await stderrOf("create", "--no-colr")).toContain('Did you mean "--no-color"?');
+		expect(await stderrOf("create", "--no-ansii")).toContain('Did you mean "--no-color"?');
 		expect(await stderrOf("create", "--secrt")).toBe('Error: Unknown flag "--secrt"\n');
 		expect(await stderrOf("create", "--zzz")).toBe('Error: Unknown flag "--zzz"\n');
 		expect(await stderrOf("create", "-t")).toBe('Error: Unknown flag "-t"\n');
+		expect(await stderrOf("create", "-🟦")).toBe('Error: Unknown flag "-🟦"\n');
 	});
 
 	it("never suggests the flag the error already names", async () => {

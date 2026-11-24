@@ -87,8 +87,9 @@ function* flagCandidates(
 			yield* flagCandidates(flag.flags);
 			continue;
 		}
-		yield [name, [name, ...(flag.aliases ?? []).filter((alias) => alias.length > 1)]];
-		if (flag.negatable) yield [`no-${name}`, [`no-${name}`]];
+		const longs = [name, ...(flag.aliases ?? []).filter((alias) => alias.length > 1)];
+		yield [name, longs];
+		if (flag.negatable) yield [`no-${name}`, longs.map((long) => `no-${long}`)];
 	}
 }
 
@@ -99,7 +100,7 @@ function* flagCandidates(
 export function suggestFlag(error: CrustError<"PARSE">, command: CommandSnapshot): void {
 	const flag = error.details?.flag;
 	// A one-letter name may be a short flag, and any short name is within two edits of it.
-	if (flag === undefined || flag.length < 2) return;
+	if (flag === undefined || Array.from(flag).length < 2) return;
 	const suggestion = findSuggestion(flag, flagCandidates(command.flags));
 	// Core also reports a known flag as `unknown-flag` (e.g. one given as `--input` JSON).
 	if (suggestion !== undefined && suggestion !== flag)
