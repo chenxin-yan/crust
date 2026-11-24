@@ -14,9 +14,12 @@ type Frozen<T> = {
 		| (T extends { multiple: true } ? "default" : never)
 		? Readonly<T[K]>
 		: K extends "flags"
-			? { readonly [M in keyof T[K]]: Frozen<T[K][M]> }
+			? FrozenMembers<T[K]>
 			: T[K];
 };
+
+// Homomorphic over a bare parameter, so an absent `flags` (`undefined`) maps to itself.
+type FrozenMembers<M> = { readonly [N in keyof M]: Frozen<M[N]> };
 
 // Preserve conditional fields before mapping the normalized readonly definition.
 type Owned<D> = D extends unknown ? Frozen<D> : never;
