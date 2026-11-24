@@ -442,6 +442,22 @@ describe("commandInputSchema", () => {
 		});
 	});
 
+	it("leaves out a group with no listed member", async () => {
+		const app = new Crust("cli").flags({
+			scope: { type: "exclusive", flags: { legacy: { type: "boolean", hidden: true } } },
+			target: {
+				type: "exclusive",
+				required: true,
+				flags: { old: { type: "string", hidden: true } },
+			},
+			name: { type: "string" },
+		});
+		expect(commandInputSchema(await app.snapshot(), [])).toEqual({
+			type: "object",
+			properties: { name: { type: "string" } },
+		});
+	});
+
 	it("rejects an arg and flag sharing a name, naming the path", async () => {
 		const snapshot = await new Crust("cli")
 			.add(
@@ -452,10 +468,22 @@ describe("commandInputSchema", () => {
 						.action(noop),
 				),
 			)
+			.add(
+				defineCommand("y", (c) =>
+					c
+						.args({ name: "out", type: "string" })
+						.flags({ out: { type: "url", hidden: true } })
+						.action(noop),
+				),
+			)
 			.flags({ raw: { type: "string" } })
 			.snapshot();
 		expect(() => commandInputSchema(snapshot.subCommands.x!, ["x"])).toThrow(
 			'Command "x" declares "name" more than once across args and flags; command input is one flat object',
+		);
+		// A hidden flag is unpublished but still input.
+		expect(() => commandInputSchema(snapshot.subCommands.y!, ["y"])).toThrow(
+			'Command "y" declares "out" more than once across args and flags',
 		);
 		// `raw` is an ordinary name.
 		expect(commandInputSchema(snapshot, []).properties).toEqual({ raw: { type: "string" } });

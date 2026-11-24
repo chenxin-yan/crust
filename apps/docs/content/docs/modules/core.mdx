@@ -130,7 +130,7 @@ It throws, naming `path`, when an arg and a flag share a name.
 | Standard Schema                    | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args)          |
 | custom `parse`                     | The declared token type; the command validates and transforms when it runs                                                   |
 | `type: "exclusive"`                | `{ oneOf }` with one object per listed member: `{ flag: { const }, value }`, or only `flag` for a boolean member             |
-| flag `hidden`                      | Left out                                                                                                                     |
+| flag `hidden`; all-hidden group    | Left out; a hidden flag's name still collides with an arg's                                                                  |
 | `deprecated`                       | `deprecated: true`                                                                                                           |
 
 Standard Schema definitions:

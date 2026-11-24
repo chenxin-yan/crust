@@ -208,18 +208,25 @@ export function commandInputSchema(
 	// which `in` and plain assignment would confuse with Object.prototype.
 	const properties: Record<string, CommandInputPropertySchema> = Object.create(null);
 	const required: string[] = [];
-	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean) => {
+	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean, listed: boolean) => {
 		if (Object.hasOwn(properties, name)) {
 			throw new Error(
 				`Command "${formatPath(path)}" declares "${name}" more than once across args and flags; command input is one flat object`,
 			);
 		}
+		if (!listed) return;
 		properties[name] = propertySchema(def, list);
 		if (def.required === true && !hasEnv(def)) required.push(name);
 	};
-	for (const arg of command.args) claim(arg.name, arg, arg.variadic !== undefined);
+	for (const arg of command.args) claim(arg.name, arg, arg.variadic !== undefined, true);
 	for (const [name, flag] of commandInputFlags(command)) {
-		if (flag.hidden !== true) claim(name, flag, flag.multiple === true);
+		// A hidden flag is still input, so it collides with an argument; it is only left unpublished,
+		// as is a group with no listed member (`oneOf: []` is not a valid schema).
+		const listed =
+			flag.hidden !== true &&
+			(flag.flags === undefined ||
+				Object.values(flag.flags).some((member) => member.hidden !== true));
+		claim(name, flag, flag.multiple === true, listed);
 	}
 	return required.length === 0
 		? { type: "object", properties }
