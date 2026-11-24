@@ -58,6 +58,7 @@ export const upper = new Crust("upper").action(async ({ stdin, stdout }) => {
 	for await (const chunk of stdin.stream()) {
 		stdout.write(decoder.decode(chunk, { stream: true }).toUpperCase());
 	}
+	stdout.write(decoder.decode());
 });
 //#endregion
 

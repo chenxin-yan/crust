@@ -78,6 +78,10 @@ it("the terminal I/O examples write bytes, answer for the terminal, and read std
 		exitCode: 2,
 	});
 	expect((await captureExecute(terminalIO.upper, [], { stdin: "shout" })).stdout).toBe("SHOUT");
+	const truncated = Uint8Array.of(0x63, 0x61, 0x66, 0xc3);
+	expect((await captureExecute(terminalIO.upper, [], { stdin: truncated })).stdout).toBe(
+		"CAF\uFFFD",
+	);
 	expect((await captureExecute(terminalIO.log, [])).stdout).toMatch(/^line 1\n[^]*line 500$/);
 });
 
