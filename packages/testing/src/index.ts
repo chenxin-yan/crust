@@ -54,12 +54,12 @@ export async function captureExecute(
 	argv: readonly string[],
 	options?: CaptureExecuteOptions,
 ): Promise<CapturedExecute> {
-	const stdoutChunks: (string | Uint8Array)[] = [];
-	const stderrChunks: (string | Uint8Array)[] = [];
+	const stdoutChunks: Buffer[] = [];
+	const stderrChunks: Buffer[] = [];
 	const isTTY = options?.isTTY === true;
 	const columns = isTTY ? (options.columns ?? 80) : undefined;
-	const sink = (chunks: (string | Uint8Array)[]): OutputSink => ({
-		write: (chunk) => void chunks.push(chunk),
+	const sink = (chunks: Buffer[]): OutputSink => ({
+		write: (chunk) => void chunks.push(Buffer.from(chunk)),
 		isTTY,
 		columns,
 	});

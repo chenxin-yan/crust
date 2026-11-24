@@ -402,6 +402,28 @@ describe("json", () => {
 			).toEqual({ stdout: "", stderr: "table row 1\ntable row 2", exitCode: 0 });
 		});
 
+		it("keeps held bytes as they were written", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.output(anything)
+				.action(({ stdout }) => {
+					const reused = Buffer.from("a");
+					stdout.write(reused);
+					reused[0] = 0x62;
+					stdout.write(reused);
+				});
+			// Sinks that decode each write at once, so only json()'s own held list is under test.
+			const stderr: string[] = [];
+			await app.execute({
+				argv: ["--json"],
+				io: {
+					stdout: { write() {} },
+					stderr: { write: (chunk) => void stderr.push(String(chunk)) },
+				},
+			});
+			expect(stderr).toEqual(["a", "b"]);
+		});
+
 		it("writes held text to stderr before the error JSON", async () => {
 			const app = outputAppReturning(() => {
 				throw new Error("boom");

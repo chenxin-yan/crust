@@ -927,11 +927,15 @@ describe("Invocation pipeline — streams", () => {
 		const app = new Crust("app").action(({ stdout, stderr }) => {
 			stdout.write(new TextEncoder().encode("é".repeat(2)).subarray(0, 3));
 			stdout.write(new TextEncoder().encode("é").subarray(1));
+			const reused = Buffer.from("a");
+			stdout.write(reused);
+			reused[0] = 0x62;
+			stdout.write(reused);
 			stdout(` ${stdout.isTTY} ${stdout.columns} ${stderr.isTTY}`);
 		});
 		const outcome = await app.run([], undefined, { stdout: (chunk) => void live.push(chunk) });
-		expect(outcome.stdout).toBe("éé false undefined false");
-		expect(live).toHaveLength(3);
+		expect(outcome.stdout).toBe("ééab false undefined false");
+		expect(live).toHaveLength(5);
 	});
 
 	it("gives Contexts and Extension hooks the invocation's streams", async () => {
@@ -980,6 +984,70 @@ describe("Invocation pipeline — streams", () => {
 		});
 		expect(exitCode).toBe(0);
 		expect(lines).toEqual(["a", "bc", "[]"]);
+	});
+
+	it("pulls an injected iterable only as a read asks, copying each item", async () => {
+		let pulls = 0;
+		async function* failsOnSecondPull() {
+			pulls++;
+			yield "one";
+			pulls++;
+			throw new Error("second pull failed");
+		}
+		const first: string[] = [];
+		const once = new Crust("app").action(async ({ stdin }) => {
+			for await (const chunk of stdin.stream()) {
+				first.push(new TextDecoder().decode(chunk));
+				break;
+			}
+		});
+		const quiet = { stdout: { write() {} }, stderr: { write() {} } };
+		expect(await once.execute({ argv: [], io: { stdin: failsOnSecondPull(), ...quiet } })).toBe(0);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect({ first, pulls }).toEqual({ first: ["one"], pulls: 1 });
+
+		async function* reusesItsBuffer() {
+			const buffer = Buffer.from("a");
+			yield buffer;
+			buffer[0] = 0x62;
+			yield buffer;
+		}
+		const lines: string[] = [];
+		const read = new Crust("app").action(async ({ stdin, stdout }) => {
+			const chunks: string[] = [];
+			for await (const chunk of stdin.stream()) chunks.push(new TextDecoder().decode(chunk));
+			stdout(chunks.join(","));
+		});
+		const text = new Crust("app").action(async ({ stdin, stdout }) => stdout(await stdin.text()));
+		for (const app of [read, text]) {
+			await app.execute({
+				argv: [],
+				io: { stdin: reusesItsBuffer(), stdout: lineSink(lines), stderr: { write() {} } },
+			});
+		}
+		expect(lines).toEqual(["a,b", "ab"]);
+	});
+
+	it("refuses to read an injected Node.js readable another listener consumes", async () => {
+		const source = new PassThrough();
+		const owner: string[] = [];
+		source.on("data", (chunk: Buffer) => owner.push(chunk.toString()));
+		source.write("payload");
+		const errors: string[] = [];
+		const app = new Crust("app").action(async ({ stdin }) => {
+			const text = stdin.text();
+			source.end();
+			await text;
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: source, stdout: { write() {} }, stderr: lineSink(errors) },
+		});
+		expect({ exitCode, errors, owner }).toEqual({
+			exitCode: 1,
+			errors: ["Error: stdin is in use by another reader"],
+			owner: ["payload"],
+		});
 	});
 
 	it("refuses a stdin read started inside another read", async () => {

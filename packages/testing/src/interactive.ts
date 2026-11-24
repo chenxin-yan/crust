@@ -55,20 +55,29 @@ export function runInteractive<
 	const input = args[0];
 	// SAFETY: the rest tuple puts CaptureOptions second; its generic input element hides that here.
 	const options = args[1] as CaptureOptions | undefined;
-	const stdoutChunks: (string | Uint8Array)[] = [];
+	const stdoutChunks: Buffer[] = [];
+	// One decoder across stderr writes, so a character split between two writes reaches the screen whole.
+	const stderrDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
 	const done = withTerminalIO(harness.io, () =>
 		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
 		app
 			.run(path as never, input as never, {
 				env: options?.env,
 				stdout: (chunk) => {
-					stdoutChunks.push(chunk);
+					stdoutChunks.push(Buffer.from(chunk));
 				},
 				stderr: (chunk) => {
-					output.write(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+					// A string starts on a character boundary, so bytes still waiting are an incomplete character.
+					output.write(
+						typeof chunk === "string"
+							? stderrDecoder.decode() + chunk
+							: stderrDecoder.decode(chunk, { stream: true }),
+					);
 				},
 			})
 			.then((outcome) => {
+				const rest = stderrDecoder.decode();
+				if (rest) output.write(rest);
 				if (outcome.status === "failed") throw outcome.error;
 				const captured = {
 					...outcome,

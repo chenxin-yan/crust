@@ -22,8 +22,6 @@ export function captureText(text: string, options: CaptureOptions | undefined): 
 }
 
 /** Every chunk written, as UTF-8 text without the final newline a last `stdout(text)` adds, like `run()`. */
-export function joinChunks(chunks: readonly (string | Uint8Array)[]): string {
-	return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
-		.toString("utf8")
-		.replace(/\n$/, "");
+export function joinChunks(chunks: readonly Buffer[]): string {
+	return Buffer.concat(chunks).toString("utf8").replace(/\n$/, "");
 }

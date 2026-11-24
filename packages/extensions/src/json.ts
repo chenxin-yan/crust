@@ -108,7 +108,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			flushHeld.set(ctx, flush);
 			return {
 				text(chunk) {
-					if (held) held.push(chunk);
+					if (held) held.push(typeof chunk === "string" ? chunk : Buffer.from(chunk));
 					else if (!dropped) ctx.stderr.write(chunk);
 				},
 				diag: ctx.stderr.write,

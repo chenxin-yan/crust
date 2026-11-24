@@ -1883,6 +1883,26 @@ describe("Extension renderer", () => {
 		expect(outcome.stdout).toBe("initializing\nready");
 	});
 
+	it("keeps the bytes of Context output waiting for the renderer as they were written", async () => {
+		const lines: string[] = [];
+		const logger = defineContext("logger").setup(({ stdout }) => {
+			const reused = Buffer.from("a");
+			stdout.write(reused);
+			reused[0] = 0x62;
+			stdout.write(reused);
+			return stdout;
+		});
+		const early = defineExtension(defineExtensionId("early"))
+			.provide(logger())
+			.use(logger)
+			.setup(async ({ ctx }) => void (await ctx.logger));
+		const render = defineExtension(defineExtensionId("render")).renderer(() => tagging(lines));
+		const app = new Crust("cli").extend(render, early).action(() => {});
+
+		expect(await execute(app, [], lines)).toBe(0);
+		expect(lines).toEqual(["text:a", "text:b", "result:undefined"]);
+	});
+
 	it("renders routing and selector failures by default", async () => {
 		const lines: string[] = [];
 		let selected = false;

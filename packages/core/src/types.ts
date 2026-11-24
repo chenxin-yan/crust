@@ -49,7 +49,10 @@ export interface InvocationIO {
 
 /** An output stream an `execute()` caller passes instead of the process's. A Node.js writable stream fits. */
 export interface OutputSink {
-	/** Receives each write as it was made: `stdout(text)` arrives as one chunk, `text` and a newline. */
+	/**
+	 * Receives each write as it was made: `stdout(text)` arrives as one chunk, `text` and a newline.
+	 * A sink that keeps a byte chunk must copy it, since the writer may reuse its buffer.
+	 */
 	readonly write: (chunk: string | Uint8Array) => void;
 	/** Read on each `isTTY` access; absent means no terminal. */
 	readonly isTTY?: boolean | undefined;

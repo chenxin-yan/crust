@@ -78,6 +78,19 @@ describe("captureExecute", () => {
 		});
 	});
 
+	it("captures bytes as they were written when the writer reuses its buffer", async () => {
+		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+			const reused = Buffer.from("a");
+			for (const stream of [stdout, stderr]) {
+				reused[0] = 0x61;
+				stream.write(reused);
+				reused[0] = 0x62;
+				stream.write(reused);
+			}
+		});
+		expect(await captureExecute(app, [])).toEqual({ stdout: "ab", stderr: "ab", exitCode: 0 });
+	});
+
 	it("captures exit code 1 without leaking it to the process", async () => {
 		process.exitCode = 7;
 		const app = new Crust("test-cli").action(() => {

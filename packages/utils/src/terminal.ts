@@ -44,8 +44,10 @@ export async function* readInput(
 	signal: AbortSignal,
 ): AsyncGenerator<Uint8Array, void, undefined> {
 	signal.throwIfAborted();
+	// Before the end check: the outer read may have taken the last chunk, and the stream ended.
+	if (reading.has(input)) throw new Error("stdin is in use by another reader");
 	if (input.readableEnded || input.destroyed) return;
-	if (reading.has(input) || (input.readableFlowing === true && input.listenerCount("data") > 0)) {
+	if (input.readableFlowing === true && input.listenerCount("data") > 0) {
 		throw new Error("stdin is in use by another reader");
 	}
 	const chunks: Uint8Array[] = [];

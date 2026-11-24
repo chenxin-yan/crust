@@ -4,7 +4,6 @@ import {
 	withAmbientTerminalIO,
 	withProcessTerminalSignal,
 	writeProcessOutput,
-	type TerminalInput,
 } from "@crustjs/utils/terminal";
 
 import { validateContextAvailability } from "../api/context.ts";
@@ -95,17 +94,39 @@ function outputStream(
 
 type InputSource = NonNullable<NonNullable<ExecuteOptions["io"]>["stdin"]>;
 
-/** The process's stdin when `input` is omitted. Neither stream is created until the first read. */
+/** The process's stdin when `input` is omitted. Each read continues where the last one stopped. */
 function inputStream(input: InputSource | undefined, signal: AbortSignal): InputStream {
-	let readable: TerminalInput | undefined;
-	// One stream for every read, so each read continues where the last one stopped.
+	let iterator: AsyncIterator<string | Uint8Array> | undefined;
+	let pulling = false;
+	// One item per chunk a read asks for, copied before the next pull: a wrapping stream reads
+	// ahead, so a failing or buffer-reusing source would act before the action asked.
+	async function* pull(source: InputSource): AsyncGenerator<Uint8Array, void, undefined> {
+		signal.throwIfAborted();
+		if (pulling) throw new Error("stdin is in use by another reader");
+		pulling = true;
+		let stop!: (reason: unknown) => void;
+		const aborted = new Promise<never>((_, reject) => (stop = reject));
+		aborted.catch(() => {});
+		const onAbort = () => stop(signal.reason);
+		signal.addEventListener("abort", onAbort);
+		try {
+			iterator ??= source[Symbol.asyncIterator]();
+			for (;;) {
+				const next = await Promise.race([iterator.next(), aborted]);
+				if (next.done) return;
+				yield Buffer.from(next.value);
+				signal.throwIfAborted();
+			}
+		} finally {
+			signal.removeEventListener("abort", onAbort);
+			pulling = false;
+		}
+	}
+	// A Node.js readable is read as it is, so the "in use" check sees its other consumers.
 	const stream = () =>
-		readInput(
-			(readable ??= input
-				? process.getBuiltinModule("node:stream").Readable.from(input)
-				: process.stdin),
-			signal,
-		);
+		input && !(input instanceof process.getBuiltinModule("node:stream").Readable)
+			? pull(input)
+			: readInput(input ?? process.stdin, signal);
 	return {
 		get isTTY() {
 			return input ? input.isTTY === true : process.getBuiltinModule("node:tty").isatty(0);
@@ -161,7 +182,7 @@ function createInvocationOutput(io: InvocationIO): InvocationOutput {
 	let renderer: Renderer | undefined;
 	const write = (kind: "text" | "diag", chunk: string | Uint8Array) => {
 		if (renderer) renderer[kind](chunk);
-		else waiting.push([kind, chunk]);
+		else waiting.push([kind, typeof chunk === "string" ? chunk : Buffer.from(chunk)]);
 	};
 	return {
 		io,
@@ -1174,10 +1195,8 @@ function hasInjectedIO(io: ExecuteOptions["io"]): boolean {
 }
 
 /** `run()`'s captured text: every chunk as UTF-8, without the final newline a last `stdout(text)` adds. */
-function capturedText(chunks: readonly (string | Uint8Array)[]): string {
-	return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
-		.toString("utf8")
-		.replace(/\n$/, "");
+function capturedText(chunks: readonly Buffer[]): string {
+	return Buffer.concat(chunks).toString("utf8").replace(/\n$/, "");
 }
 
 /** Quiet programmatic boundary: capture output and the failure escaping the complete lifecycle. */
@@ -1187,8 +1206,8 @@ export async function runInvocation(
 	options: InvocationOptions | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<ShapeRunOutcome<CommandShape>> {
-	const stdout: (string | Uint8Array)[] = [];
-	const stderr: (string | Uint8Array)[] = [];
+	const stdout: Buffer[] = [];
+	const stderr: Buffer[] = [];
 	const stream: ActionEventStream = { onEvent: options?.onEvent };
 	let failed: { error: CaughtError; exitCode: number } | undefined;
 	try {
@@ -1199,13 +1218,13 @@ export async function runInvocation(
 			stdin: inputStream(undefined, signal),
 			stdout: outputStream({
 				write(chunk) {
-					stdout.push(chunk);
+					stdout.push(Buffer.from(chunk));
 					live.stdout?.(chunk);
 				},
 			}),
 			stderr: outputStream({
 				write(chunk) {
-					stderr.push(chunk);
+					stderr.push(Buffer.from(chunk));
 					live.stderr?.(chunk);
 				},
 			}),
