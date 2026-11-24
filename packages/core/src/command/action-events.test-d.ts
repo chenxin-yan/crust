@@ -94,6 +94,25 @@ function _aPromiseOfAGeneratorIsTheResult() {
 	>;
 }
 
+function _aGeneratorOnOneBranchStreamsOnThatBranch() {
+	async function* count() {
+		yield "a";
+		return 2;
+	}
+	const streaming = Math.random() > 0.5;
+	const app = new Crust("cli").action(() => (streaming ? count() : "skipped"));
+	type _result = Expect<
+		Equal<Completed<ReturnType<typeof app.run<[]>>>["result"], number | "skipped">
+	>;
+	type _events = Expect<
+		Equal<Completed<ReturnType<typeof app.run<[]>>>["events"], readonly string[] | undefined>
+	>;
+	void app.run([], {}, { onEvent: (event) => void (event satisfies string) });
+	void app.output(z.union([z.number(), z.string()]));
+	// @ts-expect-error the other branch completes with a string
+	void app.output(z.number());
+}
+
 function _subcommandsAndHandlesKeepEvents() {
 	const watch = defineCommand("watch", (cmd) =>
 		cmd.action(async function* () {

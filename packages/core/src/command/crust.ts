@@ -948,15 +948,16 @@ type AnyActionCompletion = readonly [result: unknown, events: readonly unknown[]
 /**
  * What an action returning `R` completes with: its awaited return and no events, or, when it
  * returns an async generator (an `async function*`), the generator's `return` value and the
- * values it yields. A promise of a generator is an ordinary result, as at runtime. Not
- * distributed, so `any` and `never` stay whole.
+ * values it yields. A promise of a generator is an ordinary result, as at runtime. `any` and
+ * `never` stay whole; a union is taken member by member, since the runtime drains whichever
+ * generator a call returns.
  */
 type ActionCompletion<R> =
 	IsAny<R> extends true
 		? readonly [result: any, events: readonly unknown[] | undefined]
 		: [R] extends [never]
 			? readonly [result: never, events: never]
-			: [R] extends [AsyncGenerator<infer Event, infer Returned>]
+			: R extends AsyncGenerator<infer Event, infer Returned>
 				? readonly [result: Awaited<Returned>, events: readonly Event[]]
 				: readonly [result: Awaited<R>, events: undefined];
 
