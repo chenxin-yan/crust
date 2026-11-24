@@ -306,6 +306,25 @@ describe("prompts()", () => {
 		expect(await run.done).toMatchObject({ stdout: "jobs=3\n", exitCode: 0 });
 	});
 
+	it("binds an empty list for an empty pick, even over the default", async () => {
+		const run = runInteractive(app, [
+			"new",
+			"app",
+			"out",
+			"--template",
+			"vue",
+			"--git",
+			"--description",
+			"d",
+		]);
+		// The cursor starts on "test", the preselected default.
+		const result = await answer(run, [/Features/, "", "space"]);
+		expect(result).toMatchObject({
+			stdout: "name=app dir=out template=vue features= git=true description=d\n",
+			exitCode: 0,
+		});
+	});
+
 	it("asks for no positional after an omitted one", async () => {
 		const run = runInteractive(app, ["copy"]);
 		expect(await run.done).toEqual({
