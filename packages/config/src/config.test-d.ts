@@ -10,6 +10,7 @@ const config = defineConfig({
 	name: "acme",
 	user: {
 		org: { type: "string", env: "ACME_ORG", required: true },
+		replicas: { type: "integer", min: 1 },
 		timeout: { type: "string", parse: (raw) => Number(raw), default: "30" },
 		tags: { type: "string", multiple: true, delimiter: "," },
 		yes: { type: "boolean" },
@@ -17,7 +18,7 @@ const config = defineConfig({
 	project: { entry: { type: "string" } },
 	both: {
 		region: { type: "string", choices: ["us", "eu"], default: "us" },
-		port: { type: "integer", min: 1 },
+		port: { type: "number", min: 1 },
 	},
 	command: true,
 });
@@ -30,11 +31,20 @@ void (async () => {
 				Awaited<ReturnType<typeof config.get<"org">>>,
 				Awaited<ReturnType<typeof config.get<"region">>>,
 				Awaited<ReturnType<typeof config.get<"port">>>,
+				Awaited<ReturnType<typeof config.get<"replicas">>>,
 				Awaited<ReturnType<typeof config.get<"timeout">>>,
 				Awaited<ReturnType<typeof config.get<"tags">>>,
 				Awaited<ReturnType<typeof config.get<"yes">>>,
 			],
-			[string, "us" | "eu", number | undefined, number, string[] | undefined, boolean | undefined]
+			[
+				string,
+				"us" | "eu",
+				number | undefined,
+				number | undefined,
+				number,
+				string[] | undefined,
+				boolean | undefined,
+			]
 		>
 	>;
 	const region: "us" | "eu" = await config.get("region");
@@ -51,13 +61,13 @@ void (async () => {
 	type _Listed = Expect<
 		Equal<
 			(typeof listed)[number]["key"],
-			"org" | "region" | "port" | "timeout" | "tags" | "yes" | "entry"
+			"org" | "region" | "port" | "replicas" | "timeout" | "tags" | "yes" | "entry"
 		>
 	>;
 })();
 
 // set(): keys and values as a file holds them; each file takes only the settings it may hold.
-void config.set({ region: "eu", timeout: "45", tags: ["a"], org: undefined });
+void config.set({ region: "eu", timeout: "45", tags: ["a"], org: undefined, replicas: 3 });
 void config.set({ region: "eu", port: 8080, entry: "src/main.ts" }, { project: true });
 // @ts-expect-error -- only the project file may set entry
 void config.set({ entry: "src/main.ts" });
@@ -101,7 +111,7 @@ const _key: SettingKey = config.flag("org").config;
 // @ts-expect-error -- only config.flag() writes the config key
 void defineCommand("x", (command) => command.flags({ org: { type: "string", config: "org" } }));
 
-// Definitions: a setting is a string, number or boolean flag definition, and nothing else.
+// Definitions: a setting is a string, number, integer or boolean flag definition, and nothing else.
 defineConfig({
 	name: "acme",
 	// @ts-expect-error -- no such property

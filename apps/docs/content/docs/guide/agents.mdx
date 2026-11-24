@@ -223,4 +223,4 @@ Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/
 - Commands that change things call [`confirmation()`](/docs/modules/extensions/confirmation)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
-- Optionally: an MCP server, a packaged skill, and an `api` command. Set [`mcp: false`](/docs/modules/mcp#the-mcp-key) on commands an agent should not run unattended (generated API commands that write and delete are tools too; an [override](/docs/modules/openapi#overrides) sets `mcp: false` on them too), and set secrets through `env` bindings rather than tool arguments.
+- Optionally: an MCP server, a packaged skill, and an `api` command. Set [`mcp: false`](/docs/modules/mcp#the-mcp-key) on commands an agent should not run unattended (generated API commands that write and delete are tools too, and an [override](/docs/modules/openapi#overrides) sets `mcp: false` on them), and set secrets through `env` bindings rather than tool arguments.
