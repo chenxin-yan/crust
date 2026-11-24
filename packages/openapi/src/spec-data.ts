@@ -385,11 +385,12 @@ function holds(node: CommandSnapshot, plan: CommandPlan): boolean {
 
 /**
  * Whether `command` is the planned command: it declares `.output()` and has the plan's description,
- * hidden state, package keys and arguments, and at least its flags.
+ * hidden state, package keys and arguments, and at least its flags. Its `sections` may differ: an
+ * Extension can document a generated command.
  */
 export function isPlannedCommand(command: CommandSnapshot, plan: CommandPlan): boolean {
 	const args = plan.inputs.filter(({ kind }) => kind === "arg").map(({ name }) => name);
-	const { name: _name, description, hidden, ...extras } = command.meta;
+	const { name: _name, description, hidden, sections: _sections, ...extras } = command.meta;
 	const meta = operationMeta(plan);
 	return (
 		command.output === true &&

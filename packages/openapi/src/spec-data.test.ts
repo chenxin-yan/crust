@@ -717,6 +717,14 @@ describe("spec data files", () => {
 				).error,
 			).toContain('missing or different "status"');
 		}
+		// An Extension's section on a generated command is no difference.
+		const notes = defineExtension(defineExtensionId("notes")).sections(() => [
+			{ command: ["status"], title: "Notes", body: "Read the status page first." },
+		]);
+		expect(
+			(await runBuildHooks(new Crust("acme").extend(acme.extension, notes).add(...acme.commands)))
+				.error,
+		).toBeUndefined();
 	});
 
 	it("fail the build when the app holds another handle's commands and none of this one's", async () => {
