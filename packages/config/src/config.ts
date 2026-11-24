@@ -165,7 +165,7 @@ export interface Config<
 	set(values: ConfigValues<S, keyof S>): Promise<void>;
 	/**
 	 * Save settings in the project file, the nearest, or a new one in the working directory. Throws
-	 * for a linked project file.
+	 * for a value the setting's rules refuse or a linked project file, before anything is saved.
 	 */
 	set(
 		values: [P] extends [never] ? never : ConfigValues<S, P>,
