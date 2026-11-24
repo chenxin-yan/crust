@@ -107,7 +107,7 @@ interface TokenSourceInternals {
 	}): Promise<LoginTicket>;
 }
 
-/** A call's own receiver of a plaintext write, instead of the store's `keyring.onWarning`. */
+/** A call's own receiver of a plaintext write, told once the write succeeded. */
 type OnWarning = (warning: AuthWarning) => void;
 
 const sourceInternals = new WeakMap<TokenSource, TokenSourceInternals>();
