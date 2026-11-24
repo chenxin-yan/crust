@@ -321,19 +321,24 @@ describe("nextSteps", () => {
 		});
 	});
 
-	it("skips false on a boolean flag that is not negatable but reads an environment variable", async () => {
+	it("skips false on a boolean flag that is not negatable but reads an environment variable or is required", async () => {
 		const go = defineCommand("go", (cmd) =>
 			cmd
 				.flags({ cache: { type: "boolean", env: "CACHE" }, quiet: { type: "boolean" } })
 				.action(() => {}),
 		);
+		const ship = defineCommand("ship", (cmd) =>
+			cmd.flags({ sign: { type: "boolean", required: true } }).action(() => {}),
+		);
 		const app = new Crust("app")
 			.extend(nextSteps())
 			.add(go)
+			.add(ship)
 			.command("suggest", (cmd) =>
 				cmd.use(nextSteps).action(async ({ ctx }) => {
 					const next = await ctx.nextSteps;
 					next.add(go, { flags: { cache: false } });
+					next.add(ship, { flags: { sign: false } });
 					next.add(go, { flags: { quiet: false } });
 				}),
 			);
@@ -341,6 +346,7 @@ describe("nextSteps", () => {
 		expect((await captureExecute(app, ["suggest"])).stderr).toBe(
 			[
 				'nextSteps(): skipped "app go": "--cache" false has no spelling, and its environment variable may set it',
+				'nextSteps(): skipped "app ship": "--sign" false has no spelling, and the flag is required',
 				"Next steps:",
 				"  app go",
 				"",

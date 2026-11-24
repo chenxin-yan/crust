@@ -74,13 +74,13 @@ A step is skipped, with a `nextSteps():` note on stderr, when:
 - a number value is not finite, a fraction for an `integer`, or outside `min`/`max` (argv rejects it);
 - a `json` value would change through JSON: a non-finite number, `-0`, `undefined`, or anything else that is not plain JSON data;
 - a boolean flag value is not a boolean;
-- a boolean flag that is not negatable but has an `env` binding is given `false` (the variable may turn it on).
+- a boolean flag that is not negatable but has an `env` binding or is `required` is given `false` (the variable may turn it on, or the command fails without the flag).
 
 A throwing `onError` is reported the same way. Printing never changes the invocation's exit code or result.
 
 ## Limitations
 
 - Steps print after failures in the action, in validation, and in Context setup. Routing failures (an unknown command), argv syntax errors (a missing flag value), and invalid typed `run()` input fail earlier, so no steps print for them; [`didYouMean()`](/docs/modules/extensions/did-you-mean) covers unknown commands.
-- A `false` value for a boolean flag that is not negatable has no command-line spelling and is left out; with an `env` binding the step is skipped instead. Make the flag `negatable: true` to print `--no-<name>`.
+- A `false` value for a boolean flag that is not negatable has no command-line spelling and is left out; with an `env` binding, or on a `required` flag, the step is skipped instead. Make the flag `negatable: true` to print `--no-<name>`.
 - The root command has no definition, so it cannot be a step.
 - Looking a definition up builds the commands it searches; if one's recipe throws, the step is skipped with that error as the note.
