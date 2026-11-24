@@ -1,5 +1,5 @@
 ---
-"@crustjs/core": patch
+"@crustjs/core": minor
 ---
 
-A repeatable flag with a `delimiter` given only empty text on the command line, such as `--filter ""`, is now an empty list (`[]`) instead of counting as omitted. It used to fall back to the flag's environment variable or its `default`, so "filter to nothing" meant "filter to everything". A required flag still needs a value, and an environment variable left with no value after splitting still counts as unset.
+**Breaking:** a repeatable flag with a `delimiter` given only empty text on the command line, such as `--filter ""`, is now an empty list (`[]`) instead of counting as omitted. It used to fall back to the flag's environment variable or its `default`, so "filter to nothing" meant "filter to everything". A required flag still needs a value, and an environment variable left with no value after splitting still counts as unset. An empty array given to `run()` also still counts as not given.

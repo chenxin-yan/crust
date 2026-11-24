@@ -346,8 +346,9 @@ function envVariable(def: FlagDef, env: FlagEnvironment): [string, string] | und
  *
  * Source selection looks at explicit argv presence *before* delimiter
  * splitting, so `--tags ""` stays an argv value (an empty list) instead of
- * letting a stale environment variable or the default override an explicit request. Structured `run()` input never reaches this
- * function as `argvValues`; {@link parseStructured} passes only its omitted flags.
+ * letting a stale environment variable or the default override an explicit
+ * request. Structured `run()` input never reaches this function as
+ * `argvValues`; {@link parseStructured} passes only its omitted flags.
  */
 function applyEnvAndDelimiter(
 	flagsDef: FlagsDef,
