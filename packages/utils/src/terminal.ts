@@ -32,7 +32,8 @@ const reading = new WeakSet<TerminalInput>();
  * The chunks `input` delivers from now until it ends. Read asynchronously: a synchronous read
  * would block the event loop, so Ctrl-C could not cancel a read waiting on an open pipe or
  * terminal. Throws `signal.reason` once `signal` aborts. Input an earlier consumer already read
- * to its end yields nothing, since its `end` event cannot fire again. Throws while another
+ * to its end yields nothing, since its `end` event cannot fire again. Throws when `input` is
+ * destroyed during the read before it ends, as Node's own iteration does. Throws while another
  * reader consumes `input`: a flowing stream with a `data` listener, such as an MCP stdio
  * transport whose protocol frames arrive there (reading would steal them, and the read would
  * end only when that reader's peer hangs up), or an unfinished earlier `readInput` of `input`
@@ -69,7 +70,12 @@ export async function* readInput(
 		failure = { error };
 		notify();
 	};
-	input.on("data", onData).once("end", onEnd).once("error", onError);
+	// `destroy()` without an error emits neither `end` nor `error`.
+	const onClose = () => {
+		if (!ended) failure ??= { error: new Error("stdin closed before it ended") };
+		notify();
+	};
+	input.on("data", onData).once("end", onEnd).once("error", onError).once("close", onClose);
 	signal.addEventListener("abort", notify);
 	reading.add(input);
 	try {
@@ -90,7 +96,7 @@ export async function* readInput(
 	} finally {
 		signal.removeEventListener("abort", notify);
 		reading.delete(input);
-		input.off("data", onData).off("end", onEnd).off("error", onError);
+		input.off("data", onData).off("end", onEnd).off("error", onError).off("close", onClose);
 		// Node's `process.stdin` stops its handle on a `pause` event, which an already-paused stream
 		// does not emit; after a pause inside `onData` the handle may still be reading.
 		input.resume();
