@@ -198,6 +198,35 @@ it("types a same-id Extension re-registration by the replacement's flags and com
 	expect(togetherLint).toMatchObject({ status: "completed", result: "linted" });
 });
 
+it("types the recursive and Context flags of same-id Extensions in one call by the later one", async () => {
+	const id = defineExtensionId("replaced");
+	const number = defineContext("number")
+		.flags({ depth: { type: "number" } })
+		.setup(() => 1);
+	const text = defineContext("text")
+		.flags({ depth: { type: "string" } })
+		.setup(() => "");
+	const app = new Crust("app")
+		.extend(
+			defineExtension(id)
+				.flags({ level: { type: "number", recursive: true } })
+				.provide(number()),
+			defineExtension(id)
+				.flags({ level: { type: "string", recursive: true } })
+				.provide(text()),
+		)
+		.add(defineCommand("lint", (c) => c.action(() => "linted")))
+		.command("inline", (c) => c.action(({ flags }) => flags.depth));
+	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
+	expect(await app.run(["lint"], { flags: { level: "high" } })).toMatchObject({
+		status: "completed",
+		result: "linted",
+	});
+	const inline = await unwrap(app.run(["inline"], { flags: { depth: "deep" } }));
+	type _contextFlag = Expect<Equal<ResultOf<typeof inline>, string | undefined>>;
+	expect(inline).toMatchObject({ status: "completed", result: "deep" });
+});
+
 it("keeps an app command's type when the Extension command colliding with it is replaced", async () => {
 	const id = defineExtensionId("temporary");
 	const app = new Crust("app")
