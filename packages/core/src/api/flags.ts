@@ -10,9 +10,12 @@ type Frozen<T> = {
 		| "aliases"
 		| "choices"
 		| "env"
+		| "requires"
 		| (T extends { multiple: true } ? "default" : never)
 		? Readonly<T[K]>
-		: T[K];
+		: K extends "flags"
+			? { readonly [M in keyof T[K]]: Frozen<T[K][M]> }
+			: T[K];
 };
 
 // Preserve conditional fields before mapping the normalized readonly definition.

@@ -154,6 +154,14 @@ function _remainingLocalProofs(
 	owned.choices.push("b");
 	// @ts-expect-error -- occurrence default arrays are readonly (contained JSON/URLs are not frozen)
 	owned.default.push("b");
+	const requires: "json"[] = ["json"];
+	const needs = defineFlag({ type: "string", requires });
+	// @ts-expect-error -- `requires` is frozen
+	needs.requires.push("json");
+	const aliases: string[] = ["a"];
+	const group = defineFlag({ type: "exclusive", flags: { all: { type: "boolean", aliases } } });
+	// @ts-expect-error -- each member is frozen as defineFlag() freezes it
+	group.flags.all.aliases.push("b");
 }
 
 function _mixedCheckedNamespaces(
