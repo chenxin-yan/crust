@@ -57,7 +57,8 @@ async function ask(
 		const preselected = def.default === undefined ? undefined : [def.default].flat().map(String);
 		const picked = await multiselect({
 			message,
-			choices: def.choices,
+			// One row per value: a pick then repeats nothing, so `kept` below compares sets exactly.
+			choices: [...new Set(def.choices)],
 			default: preselected,
 			required: def.required,
 		});

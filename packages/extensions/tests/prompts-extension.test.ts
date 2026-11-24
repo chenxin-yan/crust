@@ -145,6 +145,19 @@ const app = new Crust("acme")
 			)
 			.action(({ args, stdout }) => stdout(`rename prefix=${args.prefix} name=${args.name}`)),
 	)
+	.command("label", (c) =>
+		c
+			.flags({
+				labels: {
+					type: "string",
+					multiple: true,
+					choices: ["a", "a", "b"],
+					default: ["b", "a"],
+					prompt: "Labels",
+				},
+			})
+			.action(({ flags, stdout }) => stdout(`labels=${String(flags.labels)}`)),
+	)
 	.add(deploy)
 	.add(db);
 
@@ -286,6 +299,15 @@ describe("prompts()", () => {
 			stdout: "exec  -- lint\n",
 			exitCode: 0,
 		});
+	});
+
+	it("offers a choice listed twice once, so the action gets the pick on screen", async () => {
+		const run = runInteractive(app, ["label"]);
+		await run.waitFor(/Labels/);
+		expect(run.screen()).toContain("  ● a\n› ● b");
+		run.keys("space", "return");
+		expect(await run.done).toMatchObject({ stdout: "labels=a\n", exitCode: 0 });
+		expect(run.screen()).toContain("✓ Labels a");
 	});
 
 	it("refuses an empty pick for a required list and asks again", async () => {
