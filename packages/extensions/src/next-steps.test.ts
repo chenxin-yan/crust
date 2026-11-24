@@ -552,7 +552,11 @@ describe("nextSteps", () => {
 					scope: {
 						type: "exclusive",
 						required: true,
-						flags: { "org-id": { type: "string" }, all: { type: "boolean" } },
+						flags: {
+							"org-id": { type: "string" },
+							all: { type: "boolean" },
+							data: { type: "json" },
+						},
 					},
 				})
 				.action(({ flags }) => void seen.push(flags.scope)),
@@ -565,14 +569,26 @@ describe("nextSteps", () => {
 					const next = await ctx.nextSteps;
 					next.add(scoped, { flags: { scope: { flag: "org-id", value: "acme" } } });
 					next.add(scoped, { flags: { scope: { flag: "all" } } });
+					next.add(scoped, { flags: { scope: { flag: "data", value: null } } });
+					next.add(scoped, { flags: { scope: { flag: "org-id" } } });
 				}),
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		const lines = stderr.split("\n").slice(1, -1);
-		expect(lines).toEqual(["  app scoped --org-id acme", "  app scoped --all"]);
-		await replay(app, lines);
-		expect(seen).toEqual([{ flag: "org-id", value: "acme" }, { flag: "all" }]);
+		const lines = stderr.split("\n").slice(0, -1);
+		expect(lines).toEqual([
+			'nextSteps(): skipped "app scoped": "--org-id" value is missing',
+			"Next steps:",
+			"  app scoped --org-id acme",
+			"  app scoped --all",
+			"  app scoped --data null",
+		]);
+		await replay(app, lines.slice(2));
+		expect(seen).toEqual([
+			{ flag: "org-id", value: "acme" },
+			{ flag: "all" },
+			{ flag: "data", value: null },
+		]);
 	});
 
 	it("skips json values JSON would change and replays the rest", async () => {

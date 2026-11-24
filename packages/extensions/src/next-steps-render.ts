@@ -55,7 +55,10 @@ function stepArgv(
 			const member = typeof value === "object" && value !== null && "flag" in value ? value : {};
 			if (typeof member.flag !== "string" || !Object.hasOwn(flag.flags, member.flag))
 				throw new Error(`"--${key}" value names none of its flags`);
-			[name, flag, value] = [member.flag, flag.flags[member.flag]!, member.value ?? true];
+			const memberDef = flag.flags[member.flag]!;
+			if (memberDef.type !== "boolean" && member.value === undefined)
+				throw new Error(`"--${member.flag}" value is missing`);
+			[name, flag, value] = [member.flag, memberDef, memberDef.type === "boolean" ? true : member.value];
 		}
 		for (const item of flag.multiple && Array.isArray(value) ? value : [value]) {
 			if (flag.type === "boolean") {
