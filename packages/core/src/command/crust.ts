@@ -646,11 +646,11 @@ type ExtensionFlagNamesOf<S extends AnyBuilderFacts> = Exclude<S["extensionFlagN
 
 /** An Extension's literal id; `never` for a runtime-only one, which the types cannot follow. */
 type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
-	? string extends Id
+	? IsUnion<Id> extends true
 		? never
-		: IsUnion<Id> extends true
-			? never
-			: Id
+		: IsClosedName<Id> extends true
+			? Id
+			: never
 	: never;
 
 // Only a registration that certainly happens retires an id: not a conditional or open list.

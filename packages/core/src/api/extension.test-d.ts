@@ -486,6 +486,10 @@ function _onlyACertainRegistrationRetiresAnId() {
 	const rest: (typeof same)[] = [];
 	// @ts-expect-error -- a union id may be the other one: q stays required
 	void new Crust("x").extend(old).extend(maybe).run([]);
+	const name: string = "old";
+	const template = defineExtension(defineExtensionId(`test:${name}`));
+	// @ts-expect-error -- a template id may be another one: q stays required
+	void new Crust("x").extend(old).extend(template).run([]);
 	// @ts-expect-error -- a conditional list
 	void new Crust("x")
 		.extend(old)
