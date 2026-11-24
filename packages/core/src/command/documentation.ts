@@ -270,7 +270,7 @@ function documentationFlags(
 			valueName:
 				def.type === "boolean" || def.type === "count" ? undefined : (def.valueName ?? def.type),
 			choices: def.choices ?? schemaChoices(def),
-			default: def.default ?? def.inputSchema?.default,
+			default: def.default !== undefined ? def.default : def.inputSchema?.default,
 			env: def.env,
 			delimiter: def.delimiter,
 			deprecated: def.deprecated,
@@ -320,7 +320,7 @@ function documentCommand(
 			required: arg.required === true,
 			variadic: arg.variadic ?? false,
 			choices: arg.choices ?? schemaChoices(arg),
-			default: arg.default ?? arg.inputSchema?.default,
+			default: arg.default !== undefined ? arg.default : arg.inputSchema?.default,
 		}),
 	);
 	// Options cannot follow `--`, nor any positional of a command with a passthrough argument,

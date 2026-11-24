@@ -315,4 +315,18 @@ describe("buildCommandDocumentation", () => {
 			choices: ["bug", "docs"],
 		});
 	});
+
+	it("keeps a declared default: null", async () => {
+		const model = await docs(
+			new Crust("app")
+				.args({ name: "cfg", type: "json", default: null })
+				.flags({ data: { type: "json", default: null } })
+				.action(() => {}),
+		);
+		expect(model.args[0]?.default).toBeNull();
+		expect(model.flags[0]?.default).toBeNull();
+		expect(formatDescription(undefined, model.flags[0]?.default, undefined)).toBe(
+			"[default: null]",
+		);
+	});
 });
