@@ -1,5 +1,5 @@
 import type { DefiningOf } from "../api/context.ts";
-import type { CommandDefinitionData } from "../command/crust.ts";
+import type { CommandConfig, CommandDefinitionData } from "../command/crust.ts";
 import type { commandDefinitionInternal } from "../command/node.ts";
 import type {
 	ClosedMembers,
@@ -13,6 +13,7 @@ import type {
 	SpacedToken,
 	TrimWhitespace,
 	UnionToIntersection,
+	UnknownKeysBrand,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -284,7 +285,8 @@ export type LocalSectionsBrand<C> = "sections" extends keyof C
 	: {};
 
 export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig<N, C> &
-	LocalSectionsBrand<C>;
+	LocalSectionsBrand<C> &
+	UnknownKeysBrand<C, CommandConfig>;
 
 /** Inline `.command(name, config, recipe)` aliases, checked like `.add()` checks a definition's. */
 export type InlineCommandAliasesBrand<

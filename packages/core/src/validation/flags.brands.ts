@@ -11,10 +11,12 @@ import type {
 	IsClosedName,
 	IsUnion,
 	KnownSpellings,
+	KeysOfAnyBranch,
 	LocalValueBrand,
 	DefNameMembers,
 	SpacedToken,
 	UnionToIntersection,
+	UnknownKeysBrand,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -512,13 +514,13 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
  * every other flag in the record. An index signature (a dynamic record) is left to runtime
  * checks, but literal keys beside it are still validated, including against each other.
  */
-export type FlagRecordErrors<F, Existing extends string> =
+export type FlagRecordErrors<F, Existing extends string, Def = FlagDef> =
 	// Each branch of a conditional record is checked on its own; a valid branch's `unknown`
 	// would absorb an invalid sibling's errors in a union, so the branches intersect.
-	BranchRecordErrors<F, Existing> extends (errors: infer E) => void ? E : never;
+	BranchRecordErrors<F, Existing, Def> extends (errors: infer E) => void ? E : never;
 
-type BranchRecordErrors<F, Existing extends string> = F extends unknown
-	? (errors: OneRecordErrors<PresentRecord<F>, Existing>) => void
+type BranchRecordErrors<F, Existing extends string, Def> = F extends unknown
+	? (errors: OneRecordErrors<PresentRecord<F>, Existing, Def>) => void
 	: never;
 
 // Absent placeholders have no spelling; real optional and required undefined definitions
@@ -537,8 +539,9 @@ type PresentRecord<F> = false extends StrictNulls
 			}
 		: F;
 
-type OneRecordErrors<F, Existing extends string> = RecordErrors<
+type OneRecordErrors<F, Existing extends string, Def> = RecordErrors<
 	F,
+	Def,
 	[KnownFlagKey<keyof F>] extends [never]
 		? // An index signature absorbs literal keys in `keyof`; mapping per key recovers them.
 			keyof { [K in keyof F as KnownFlagKey<K>]: 0 } & string
@@ -550,6 +553,7 @@ type OneRecordErrors<F, Existing extends string> = RecordErrors<
 // only needs this union, which keeps a large record of plain flags linear instead of quadratic.
 type RecordErrors<
 	F,
+	Def,
 	Names extends string,
 	Existing extends string,
 	AllAliases extends string = ExtractAllAliases<F[Names & keyof F]>,
@@ -557,6 +561,7 @@ type RecordErrors<
 	[K in keyof F as KnownFlagKey<K>]: K extends string
 		? IntegerLikeBrand<K> &
 				UndefinedFlagBrand<F, K> &
+				UnknownKeysBrand<F[K], Def> &
 				RecordFlagBrand<F, K, Names, Existing, AllAliases>
 		: K extends number
 			? // Builders keep `keyof F` as is, so a number key would hide its runtime spelling from collision checks.
@@ -640,9 +645,6 @@ type RecordFlagBrand<
 				: | Exclude<Names, K>
 					| { [O in Exclude<Names, K>]: ExtractAllAliases<F[O & keyof F]> }[Exclude<Names, K>])
 	>;
-
-// `keyof` a union lists only shared keys, so a risky field in one branch would skip its checks.
-type KeysOfAnyBranch<D> = D extends unknown ? keyof D : never;
 
 type RecordNameBrand<K extends string> = NoPrefixBrand<K> &
 	EmptyFlagSpellingBrand<K> &

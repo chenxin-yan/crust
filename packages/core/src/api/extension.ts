@@ -736,7 +736,7 @@ export interface ExtensionBuilder<
 	 * (default `true`) contributes a flag to every command.
 	 */
 	flags<const F extends FlagsInput<ExtensionFlagDef>>(
-		flags: F & FlagRecordErrors<F, DeclaredSpellings<OF, Provide>>,
+		flags: F & FlagRecordErrors<F, DeclaredSpellings<OF, Provide>, ExtensionFlagDef>,
 	): ExtensionBuilder<
 		Use,
 		Provide,

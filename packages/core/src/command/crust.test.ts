@@ -1229,7 +1229,7 @@ describe("Extension named hooks", () => {
 			const seen: unknown[] = [];
 			const errors: unknown[] = [];
 			const actions: string[] = [];
-			const port = { name: "port", type: "number", default: 3000, env: { name: "PORT" } } as const;
+			const port = { type: "number", default: 3000, env: { name: "PORT" } } as const;
 			const gate = defineExtension(defineExtensionId("gate"))
 				.flags({ stop: { type: "boolean", recursive: true } })
 				.preRun((ctx) => void seen.push(ctx.flags.port))
@@ -2866,6 +2866,8 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 	type DynamicDefs = FlagsDef[] & ArgsDef;
 	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
 	const asDynamic = (value: unknown): DynamicDefs => value as DynamicDefs;
+	// A record alone: the argument members of `DynamicDefs` would read as flags named `schema` or `choices`.
+	const asDynamicFlags = (value: unknown): FlagsDef => asDynamic(value)[0]!;
 	// SAFETY: as above; each fixture keeps its name beside the definition, as config-built input would.
 	const asFlags = (defs: readonly Record<string, unknown>[]): FlagsDef =>
 		Object.fromEntries(defs.map(({ name, ...def }) => [name, def])) as FlagsDef;
@@ -2883,9 +2885,10 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 
 	it("rejects malformed .flags() records on commands, Contexts, and Extensions", () => {
 		const attach = [
-			(input: unknown) => new Crust("cli").flags(asDynamic(input)[0]!),
-			(input: unknown) => defineContext("cfg").flags(asDynamic(input)[0]!),
-			(input: unknown) => defineExtension(defineExtensionId("cfg-ext")).flags(asDynamic(input)[0]!),
+			(input: unknown) => new Crust("cli").flags(asDynamicFlags(input)),
+			(input: unknown) => defineContext("cfg").flags(asDynamicFlags(input)),
+			(input: unknown) =>
+				defineExtension(defineExtensionId("cfg-ext")).flags(asDynamicFlags(input)),
 		];
 		const cases: [unknown, string, string | undefined][] = [
 			// Nullish values typecheck without strictNullChecks; `FlagsInput` admits undefined definitions.
@@ -2920,12 +2923,12 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		// Not array indexes: they keep insertion order.
 		for (const name of ["01", "2fa", "1.5"]) {
 			expect(() =>
-				new Crust("cli").flags(asDynamic([{ [name]: { type: "string" } }])[0]!),
+				new Crust("cli").flags(asDynamicFlags([{ [name]: { type: "string" } }])),
 			).not.toThrow();
 		}
 		expect(() =>
 			new Crust("cli").flags(
-				asDynamic([Object.assign(Object.create(null), { out: { type: "string" } })])[0]!,
+				asDynamicFlags([Object.assign(Object.create(null), { out: { type: "string" } })]),
 			),
 		).not.toThrow();
 	});

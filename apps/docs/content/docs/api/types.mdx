@@ -9,6 +9,8 @@ Every type on this page is a type export of `@crustjs/core`. Tables are generate
 
 Declared in [`types.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/types.ts).
 
+A property a definition doesn't have, such as a misspelled `requried`, is a compile error (`FIX_UNKNOWN_PROPERTY`) wherever a definition is written: `.flags()`, `.args()`, `defineFlag()`, `defineArg()`, a Context's or Extension's `.flags()`, and a command's config. Only TypeScript checks this; at runtime such a property is ignored.
+
 ### `ValueType`
 
 | Value     | Runtime value                        |

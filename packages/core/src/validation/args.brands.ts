@@ -1,4 +1,4 @@
-import type { ArgsDef } from "../types.ts";
+import type { ArgDef, ArgsDef } from "../types.ts";
 import type {
 	CollisionBrand,
 	DefName,
@@ -6,6 +6,7 @@ import type {
 	HasClosedNames,
 	LocalValueBrand,
 	DefNameMembers,
+	UnknownKeysBrand,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ type EmptyArgDefinitionNameBrand<A> = EmptyArgNameBrand<DefNameMembers<A>>;
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
 	LocalValueBrand<A> &
+	UnknownKeysBrand<A, ArgDef> &
 	EmptyArgDefinitionNameBrand<A>;
 
 type VariadicPositionError = {
@@ -103,6 +105,14 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 
 /** Errors-only view of {@link AppendArgsChecks}: `unknown` when no element carries a `FIX_*` brand. */
 export type AppendArgsErrors<A extends ArgsDef, NewA extends ArgsDef> =
+	// A valid branch's `unknown` would absorb an invalid sibling's errors in a union, so the branches intersect.
+	BranchArgsErrors<A, NewA> extends (errors: infer E) => void ? E : never;
+
+type BranchArgsErrors<A extends ArgsDef, NewA extends ArgsDef> = NewA extends unknown
+	? (errors: OneArgsErrors<A, NewA>) => void
+	: never;
+
+type OneArgsErrors<A extends ArgsDef, NewA extends ArgsDef> =
 	AppendArgsChecks<A, NewA> extends infer C extends readonly unknown[]
 		? [{ [I in keyof C]: keyof C[I] & `FIX_${string}` }[number]] extends [never]
 			? unknown
