@@ -707,7 +707,10 @@ describe("renderSkill", () => {
 		it("lists examples after the usage and a declared value name with the flag", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve", examples: ["test-cli serve -m 1G"] },
-				flags: { memory: { type: "string", short: "m", valueName: "bytes" } },
+				flags: {
+					memory: { type: "string", short: "m", valueName: "bytes" },
+					out: { type: "string", valueName: "file|directory" },
+				},
 				run() {},
 			});
 
@@ -717,6 +720,7 @@ describe("renderSkill", () => {
 				"```\nserve [options]\n```\n\n## Examples\n\n```\ntest-cli serve -m 1G\n```",
 			);
 			expect(serve).toContain("| `-m`, `--memory <bytes>` | string | No | - |");
+			expect(serve).toContain("| `--out <file\\|directory>` | string | No | - |");
 		});
 	});
 });

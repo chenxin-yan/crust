@@ -481,9 +481,11 @@ function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 		// A declared value name says more than the type the next column gives.
 		const value =
 			flag.valueName === undefined || flag.valueName === flag.type ? "" : ` <${flag.valueName}>`;
-		const name = flag.spellings
-			.map((spelling, index, all) => `\`${spelling}${index === all.length - 1 ? value : ""}\``)
-			.join(", ");
+		const name = escapeTableCell(
+			flag.spellings
+				.map((spelling, index, all) => `\`${spelling}${index === all.length - 1 ? value : ""}\``)
+				.join(", "),
+		);
 		const required = flag.required ? "Yes" : "No";
 		const desc = escapeTableCell(formatFieldDescription(flag));
 		lines.push(`| ${name} | ${displayType(flag.type)} | ${required} | ${desc} |`);
