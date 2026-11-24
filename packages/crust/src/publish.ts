@@ -13,7 +13,13 @@ import {
 
 import { readCrustConfig } from "./build.ts";
 import { type LineIO, validatePackageIdentity } from "./distribute.ts";
-import { BUN_TARGETS, NODE_TARGETS, resolveTargets, type TargetTable } from "./targets.ts";
+import {
+	BUN_TARGETS,
+	HOST_TARGET,
+	NODE_TARGETS,
+	resolveTargets,
+	type TargetTable,
+} from "./targets.ts";
 
 /** Only the persisted fields publishing consumes; build reports remain informational. */
 type PublishManifest = {
@@ -157,6 +163,7 @@ export function readPublishManifest(stageDir: string): PublishManifest {
  * would publish the old release, and binaries missing a release target:
  * `crust build` stages only this machine by default, while a release ships
  * package.json `crust.targets`, or every target of the compiler (`--target all`) without it.
+ * `host` in `crust.targets` is not required: it names the machine that built the stage.
  */
 export function assertStageMatchesProject(projectDir: string, manifest: PublishManifest): void {
 	const packageJsonPath = join(projectDir, "package.json");
@@ -180,9 +187,10 @@ export function assertStageMatchesProject(projectDir: string, manifest: PublishM
 	const table: TargetTable<string> = manifest.runtime === "node" ? NODE_TARGETS : BUN_TARGETS;
 	const configured = readCrustConfig(project).targets;
 	const staged = new Set(manifest.packages.map((pkg) => pkg.target));
-	const missing = resolveTargets(table, configured).filter(
-		(target) => !staged.has(table.info[target]!.alias),
-	);
+	// `host` names the machine that built the stage, which the publishing machine cannot know.
+	const release = configured?.filter((target) => target !== HOST_TARGET);
+	const required = configured && release?.length === 0 ? [] : resolveTargets(table, release);
+	const missing = required.filter((target) => !staged.has(table.info[target]!.alias));
 	if (missing.length > 0) {
 		throw new Error(
 			`Stage is incomplete: .crust/ holds ${[...staged].join(", ")}, but a release ships ${configured ? "every target in package.json crust.targets" : `every ${table.runtime} target`}; missing ${missing.join(", ")}.\n` +

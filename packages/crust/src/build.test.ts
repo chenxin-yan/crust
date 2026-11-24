@@ -688,6 +688,15 @@ describe("build", () => {
 		);
 		expect(existsSync(lock)).toBe(true);
 		expect(readFileSync(join(stageDir, "kept.txt"), "utf8")).toBe("previous stage");
+
+		// Killed between the swap's two renames: the lock holds the only copy of the previous build.
+		rmSync(stageDir, { recursive: true });
+		mkdirSync(join(lock, "previous"));
+		const realLock = join(realpathSync(tmpDir), ".crust.lock");
+		await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
+			`It holds the previous build: move ${join(realLock, "previous")} back to ${join(realpathSync(tmpDir), ".crust")} first.`,
+		);
+		expect(existsSync(join(lock, "previous"))).toBe(true);
 	});
 
 	it("stages a node bundle without reports when validate is false and rejects bad options", async () => {
@@ -775,7 +784,11 @@ describe("build", () => {
 
 		failRenameFrom.add(join(lockDir, "stage"));
 		try {
-			await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow("EXDEV");
+			const logged: string[] = [];
+			await expect(
+				build({ cwd: tmpDir, validate: false, onLog: (line) => logged.push(line) }),
+			).rejects.toThrow("EXDEV");
+			expect(logged.some((line) => line.includes("successfully"))).toBe(false);
 			expect(readFileSync(bundlePath, "utf8")).toContain("first");
 			expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
 			expect(existsSync(lockDir)).toBe(false);

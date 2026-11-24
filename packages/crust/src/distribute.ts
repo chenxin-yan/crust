@@ -2,7 +2,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, statSync, writeFileSync } 
 import { dirname, join, resolve } from "node:path";
 
 import type { BuildReport } from "@crustjs/core";
-import { bold, cyan, dim, green } from "@crustjs/style";
+import { bold, cyan, dim } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
@@ -507,7 +507,7 @@ function writeDistributionManifest(
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	build: Record<string, BuildReport> | undefined,
-): string {
+): void {
 	const manifest: DistributionManifest = {
 		version: metadata.version,
 		...identity,
@@ -529,9 +529,7 @@ function writeDistributionManifest(
 		...(build ? { build } : {}),
 	};
 
-	const manifestPath = join(stageDir, "manifest.json");
-	writeJson(manifestPath, manifest);
-	return manifestPath;
+	writeJson(join(stageDir, "manifest.json"), manifest);
 }
 
 /** `pkg` without `engines.node`, dropping `engines` once nothing else is left. */
@@ -763,7 +761,7 @@ export async function runDistributeBuild<T extends string>(
 
 	// Written last: `crust publish` treats manifest.json as proof of a complete
 	// build, so a failed compile must not leave one behind.
-	const manifestPath = writeDistributionManifest(
+	writeDistributionManifest(
 		plan.stageDir,
 		metadata,
 		table
@@ -777,13 +775,5 @@ export async function runDistributeBuild<T extends string>(
 		distributionTargets,
 		build,
 	);
-	io.stdout(
-		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,
-	);
-	io.stdout(`  ${rootDir}`);
-	for (const targetPackage of distributionTargets) {
-		io.stdout(`  ${targetPackage.packageDir}`);
-	}
-	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
 	return produced;
 }

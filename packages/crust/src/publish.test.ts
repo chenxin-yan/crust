@@ -13,7 +13,7 @@ import {
 	readPublishManifest,
 	validatePublishManifest,
 } from "./publish.ts";
-import { BUN_TARGETS } from "./targets.ts";
+import { BUN_TARGETS, hostTarget } from "./targets.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -231,6 +231,18 @@ describe("publish manifest validation", () => {
 		expect(() => assertStageMatchesProject(projectDir, everyTarget)).not.toThrow();
 		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
 			"Run `crust build --target all`, or list your release targets",
+		);
+		// `host` is the machine that built the stage, so a stage from another machine is complete.
+		const other = BUN_TARGETS.targets.find((target) => target !== hostTarget(BUN_TARGETS))!;
+		const otherMachine: DistributionManifest = {
+			...manifest,
+			packages: [{ ...manifest.packages[0]!, target: BUN_TARGETS.info[other].alias }],
+		};
+		writeProject({ targets: ["host"] });
+		expect(() => assertStageMatchesProject(projectDir, otherMachine)).not.toThrow();
+		writeProject({ targets: ["host", "bun-windows-x64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"missing bun-windows-x64.",
 		);
 	});
 

@@ -9,11 +9,11 @@ import {
 } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { BuildReport } from "@crustjs/core";
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
-import { dim, yellow } from "@crustjs/style";
+import { bold, dim, green, yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
@@ -717,7 +717,8 @@ async function prepareEntries(
  * tree is staged in `.crust.lock/stage` and replaces `.crust/` only once the
  * build succeeds. Overlapping calls for the same real project directory are
  * rejected across processes before staging. An interrupted process may leave
- * `.crust.lock`; remove it only when no build is running.
+ * `.crust.lock`; remove it only when no build is running, after moving
+ * `.crust.lock/previous` back to `.crust/` if `.crust/` is missing.
  */
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	const cwd = resolve(options.cwd ?? process.cwd());
@@ -728,9 +729,16 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 		mkdirSync(lockDir);
 	} catch (error) {
 		if (!isErrnoException(error) || error.code !== "EEXIST") throw error;
+		const previous = join(lockDir, "previous");
+		const stageDir = join(project, CRUST_DIR);
+		// A process killed between the two swap renames leaves the previous build only in the lock.
+		const restore =
+			existsSync(previous) && !existsSync(stageDir)
+				? `\n  It holds the previous build: move ${previous} back to ${stageDir} first.`
+				: "";
 		throw new Error(
 			`crust build is already building ${project}, or an interrupted build left its lock.\n` +
-				`  Remove ${lockDir} only after confirming no build is running.`,
+				`  Remove ${lockDir} only after confirming no build is running.${restore}`,
 			{ cause: error },
 		);
 	}
@@ -786,6 +794,15 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 			}
 			throw error;
 		}
+		// Printed only once the new tree is .crust/, so a failed swap never follows a success line.
+		const packageDirs = artifacts
+			.filter(({ kind }) => kind === "package-json")
+			.map(({ path }) => dirname(path));
+		io.stdout(
+			`\n${green("✓")} Staged ${bold(`${packageDirs.length}`)} npm package(s) successfully:`,
+		);
+		for (const dir of packageDirs) io.stdout(`  ${dir}`);
+		io.stdout(`\n${dim("Manifest:")} ${join(stageDir, "manifest.json")}`);
 		return {
 			stageDir,
 			artifacts: artifacts.map((artifact) => ({ ...artifact, path: staged(artifact.path) })),
