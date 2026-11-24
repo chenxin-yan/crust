@@ -361,7 +361,8 @@ function effectiveBody(
 			}
 			continue;
 		}
-		if (input === undefined) continue;
+		// A binding's value is text, and a field no flag can carry has no flag type to check.
+		if (field.kind === "other" || boundNames(plan.fields).has(field.name)) continue;
 		const { type, multiple, choices, nullable, itemNullable } = flagValue(spec, field.schema);
 		if (value === null && nullable) continue;
 		const items = multiple ? value : [value];

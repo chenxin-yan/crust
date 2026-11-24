@@ -318,6 +318,22 @@ describe("generated commands", () => {
 				exitCode: 2,
 			});
 		}
+		// A body field named like a parameter has no flag of its own, and is checked all the same.
+		const { app: things } = appFor({
+			"/things/{id}": {
+				put: {
+					operationId: "editThing",
+					parameters: [{ ...pathParam("id"), schema: { type: "integer" } }],
+					...jsonBody({ type: "object", properties: { id: { type: "integer" } } }),
+				},
+			},
+		});
+		expect(
+			await captureExecute(things, ["edit-thing", "1", "--request-body", '{"id":9007199254740993}']),
+		).toMatchObject({
+			stderr: expect.stringContaining('the body field "id" must be an integer from'),
+			exitCode: 2,
+		});
 		expect(calls).toEqual([]);
 	});
 
