@@ -11,7 +11,6 @@ import {
 	type ExecutableApp,
 	executeInProcess,
 	isolate,
-	type ProvideOption,
 } from "./capture.ts";
 
 type Letter =
@@ -72,12 +71,12 @@ export interface InteractiveRun {
  * keys from it, and `stdout` is captured apart, as a pipe. `options.env` and `options.cwd`
  * replace the process's until `done` settles, and captured text is plain unless `options.raw`
  * is set. Throws for `env` or `cwd` while another run is active. `options.provide` replaces the
- * app's same-name Contexts for the run.
+ * same-name Contexts for the run, wherever they are provided.
  */
-export function runInteractive<App extends ExecutableApp>(
-	app: App,
+export function runInteractive(
+	app: ExecutableApp,
 	argv: readonly string[],
-	options?: CaptureOptions & ProvideOption<App>,
+	options?: CaptureOptions,
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const terminal = harness.io.output;

@@ -10,7 +10,6 @@ import {
 	type ContextMap,
 	type ContextsOutput,
 	type ContextsOwnedFlags,
-	type ContextReplacement,
 	type ContextUseFlags,
 	type DefiningOf,
 } from "../api/context.ts";
@@ -2227,7 +2226,7 @@ export class Crust<
 			: never,
 		path: KnownCommandPath<Path, Tree>,
 		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
-		options?: InvocationOptions<ShapeEvent<S>, ContextReplacement<Ctx>>,
+		options?: InvocationOptions<ShapeEvent<S>>,
 	): Promise<ShapeRunOutcome<S>>;
 	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
@@ -2244,8 +2243,7 @@ export class Crust<
 		]
 			? readonly [
 					options?: InvocationOptions<
-						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, Facts>, NoInfer<Path>>>,
-						ContextReplacement<Ctx>
+						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, Facts>, NoInfer<Path>>>
 					>,
 				]
 			: readonly [invalidInput: never]

@@ -72,7 +72,7 @@ Options for `captureExecute()` and `runInteractive()`:
 
 <include lang="ts">../../../examples/modules/testing.ts#env</include>
 
-Both helpers also take `provide`: Context instances, such as [`.of()`](/docs/guide/contexts#replace-a-context-in-tests) doubles, that replace the app's same-name Contexts for this run only, so a test needs no app factory. It is typed against the Contexts the app provides at its root:
+`provide` takes Context instances, such as [`.of()`](/docs/guide/contexts#replace-a-context-in-tests) doubles, that replace the same-name Contexts for this run only, wherever they are provided (the root, an Extension, or a command), so a test needs no app factory. A name nothing provides is ignored:
 
 ```ts
 await captureExecute(app, ["ps"], { provide: [engine.of(fakeEngine)] });

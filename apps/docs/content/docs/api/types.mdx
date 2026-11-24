@@ -363,7 +363,7 @@ The awaited value a factory produces: `FactoryValueOf<typeof config>` is what `a
 
 ### `UseSource` and `UsedContexts`
 
-For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`: the Contexts it names, or an Extension's provided ones, not what their setups use. `ContextReplacement<Contexts>` is an instance that can replace one of an app's Contexts (name to value), as `run()`'s `provide` option takes.
+For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`: the Contexts it names, or an Extension's provided ones, not what their setups use.
 
 ## Extension types
 

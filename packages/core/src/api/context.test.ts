@@ -2262,4 +2262,26 @@ describe("Context replacements", () => {
 			result: 99,
 		});
 	});
+
+	it("replaces a Context a command or an Extension provides, and ignores a name nothing provides", async () => {
+		const local = defineContext("local").setup(() => "real");
+		const shared = defineContext("shared").setup(() => "real");
+		const unused = defineContext("unused").setup(() => "real");
+		const app = new Crust("mono")
+			.extend(defineExtension(defineExtensionId("sharing")).provide(shared()))
+			.command("work", (cmd) =>
+				cmd
+					.provide(local())
+					.use(shared)
+					.action(async ({ ctx }) => [await ctx.local, await ctx.shared]),
+			);
+
+		expect(
+			await app.run(["work"], {}, { provide: [local.of("double"), shared.of("double")] }),
+		).toMatchObject({ status: "completed", result: ["double", "double"] });
+		expect(await app.run(["work"], {}, { provide: [unused.of("double")] })).toMatchObject({
+			status: "completed",
+			result: ["real", "real"],
+		});
+	});
 });

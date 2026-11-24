@@ -101,16 +101,6 @@ export interface ContextInstance<
 /** Any Context instance: the open bound for provider lists; never evidence for trusted attachment. */
 export type AnyContextInstance = ContextInstance<string, unknown, any, any>;
 
-/**
- * An instance that can replace one of `Contexts` (name to value): same name, a value of its type.
- * An open record accepts any instance, as `any` so a typed app stays assignable to `AnyCrust`.
- */
-export type ContextReplacement<Contexts extends object> = string extends keyof Contexts
-	? any
-	: {
-			[K in keyof Contexts & string]: ContextInstance<K, Contexts[K], any, any, any>;
-		}[keyof Contexts & string];
-
 /** Whatever a Context setup produces, erased at the runtime registry. */
 export type ContextValue = Awaited<ReturnType<AnyContextInstance["setup"]>>;
 

@@ -67,7 +67,7 @@ export interface OutputSink {
  * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
  * Its output streams are no terminal, and its `stdin` holds the `stdin` option, else nothing.
  */
-export interface InvocationOptions<Event = unknown, Replacement = AnyContextInstance> {
+export interface InvocationOptions<Event = unknown> {
 	/**
 	 * What the command reads from `stdin`, which reports no terminal, as a pipe does.
 	 * Default: no input.
@@ -86,11 +86,11 @@ export interface InvocationOptions<Event = unknown, Replacement = AnyContextInst
 	 */
 	onEvent?: (event: Event) => unknown;
 	/**
-	 * Context instances that replace the app's same-name Contexts for this invocation, such as
-	 * test doubles from `factory.of(value)`. `run()` types them against the Contexts the app
-	 * provides at its root.
+	 * Context instances that replace the same-name Contexts for this invocation, such as test
+	 * doubles from `factory.of(value)`, wherever they are provided: the root, an Extension, or a
+	 * command. A name nothing provides is ignored.
 	 */
-	provide?: readonly Replacement[];
+	provide?: readonly AnyContextInstance[];
 }
 
 /**
