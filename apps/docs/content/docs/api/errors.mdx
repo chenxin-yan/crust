@@ -60,7 +60,7 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 | `context-after-disposal`                                                          | Any Context is pulled after disposal                                                                                                                                                         |
 | `duplicate-section`                                                               | A Context's section title matches a command section or another Context's section on the same command                                                                                         |
 
-The reasons about names, spellings, collisions, and sections come from the [definition checks](/docs/api/crust#definition-checks): they are raised when the CLI runs from source and by `crust build`, never by a built CLI. The Context reasons, `missing-extension`, and `extension-defer-after-setup` are raised wherever the CLI runs. A definition that is not an object, such as a string, an array, or `undefined`, is a TypeScript error and is not checked at runtime.
+The reasons about names, spellings, collisions, and sections come from the [definition checks](/docs/api/crust#definition-checks): they are raised when the CLI runs from source and by `crust build`, never by a built CLI. The Context reasons, `missing-extension`, and `extension-defer-after-setup` are raised wherever the CLI runs, except `context-flags-not-parsed` for a same-name provider that does not own the declared flags, which is a definition check too. A definition that is not an object, such as a string, an array, or `undefined`, is a TypeScript error and is not checked at runtime.
 
 ### `ParseErrorDetails`
 

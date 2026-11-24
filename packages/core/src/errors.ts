@@ -46,7 +46,8 @@ export type ParseErrorReason =
  * `process.env.CRUST_INTERNAL_BUILD !== "1"` literally where it runs, so the bundler that defines
  * the marker drops it. The Context reasons (`missing-context`, `context-*`,
  * `flags-before-validation`), `extension-defer-after-setup`, and `missing-extension` are raised
- * wherever the CLI runs.
+ * wherever the CLI runs, except `context-flags-not-parsed` for a same-name provider that does not
+ * own the declared Context's flags, which is a definition check.
  */
 export type DefinitionErrorReason =
 	| "alias-collision"
