@@ -47,19 +47,21 @@ describe("runInteractive", () => {
 		expect(run.screen()).not.toContain("HELLO, Ada!");
 	});
 
-	it("keeps stdout bytes as written and shows a character split across stderr writes", async () => {
+	it("keeps bytes as written and shows a character split across stderr writes", async () => {
 		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
 			const reused = Buffer.from("a");
 			stdout.write(reused);
+			stderr.write(reused);
 			reused[0] = 0x62;
 			stdout.write(reused);
+			stderr.write(reused);
 			stderr.write(Uint8Array.of(0xc3));
 			stderr.write(Uint8Array.of(0xa9));
 		});
 
 		const run = runInteractive(app, []);
-		await run.waitFor(/é/);
-		await run.done;
+		await run.waitFor(/abé/);
+		expect(await run.done).toEqual({ stdout: "ab", stderr: "abé", exitCode: 0 });
 		expect(run.stdout()).toBe("ab");
 	});
 
