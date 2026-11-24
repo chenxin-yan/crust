@@ -366,6 +366,40 @@ describe("get, list and set", () => {
 		if (process.platform !== "win32") expect(statSync(userFile()).mode & 0o777).toBe(0o600);
 	});
 
+	it("set() saves in call order, and saves the values it checked", async () => {
+		const { config } = acme();
+		await Promise.all([
+			config.set({ region: "eu", pager: "less" }),
+			config.set({ region: "eu" }),
+			config.set({ region: "us" }),
+		]);
+		const patch = { replicas: 3 };
+		const saving = config.set(patch);
+		patch.replicas = 0;
+		await saving;
+		expect(JSON.parse(readFileSync(userFile(), "utf8"))).toEqual({
+			region: "us",
+			pager: "less",
+			replicas: 3,
+		});
+	});
+
+	it("set() of two configs of one name at once keeps both keys", async () => {
+		write(userFile(), {});
+		const [first, second] = [acme().config, acme().config];
+		await Promise.all([first.set({ region: "eu" }), second.set({ pager: "less" })]);
+		expect(JSON.parse(readFileSync(userFile(), "utf8"))).toEqual({ region: "eu", pager: "less" });
+	});
+
+	it("set() refuses a save that would make the file larger than 16 MiB, keeping the file", async () => {
+		write(userFile(), { pager: "keep" });
+		const { config } = acme();
+		await expect(config.set({ tags: ["x".repeat(16 * 1024 * 1024)] })).rejects.toThrow(
+			`${userFile()} would exceed 16 MiB; nothing was saved`,
+		);
+		expect(await config.get("pager")).toBe("keep");
+	});
+
 	it("set() refuses a value the setting's rules refuse, saving nothing", async () => {
 		const { config } = acme();
 		await expect(config.set({ region: "eu", replicas: 0 })).rejects.toThrow(

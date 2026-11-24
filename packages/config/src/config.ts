@@ -160,12 +160,13 @@ export interface Config<
 	list(): Promise<ConfigEntry<S>[]>;
 	/**
 	 * Save settings in the user's file; `undefined` removes one. Throws for a value the setting's
-	 * rules refuse, before anything is saved.
+	 * rules refuse or a file that would exceed 16 MiB, before anything is saved.
 	 */
 	set(values: ConfigValues<S, keyof S>): Promise<void>;
 	/**
 	 * Save settings in the project file, the nearest, or a new one in the working directory. Throws
-	 * for a value the setting's rules refuse or a linked project file, before anything is saved.
+	 * for a value the setting's rules refuse, a linked project file or a file that would exceed
+	 * 16 MiB, before anything is saved.
 	 */
 	set(
 		values: [P] extends [never] ? never : ConfigValues<S, P>,
@@ -219,6 +220,9 @@ function fileWords(key: string, def: ConfigSetting, value: unknown, path: string
 	);
 }
 
+/** The largest config file read, and so the largest saved. */
+const MAX_FILE_BYTES = 16 * 1024 * 1024;
+
 /** Reads `path` into an object of settings; a missing file holds none. */
 async function readValues(path: string, parse: (text: string) => unknown): Promise<FileValues> {
 	let text: string;
@@ -226,7 +230,7 @@ async function readValues(path: string, parse: (text: string) => unknown): Promi
 		const fs = process.getBuiltinModule("node:fs/promises");
 		// A device or a FIFO, which a project file can link to, would never finish reading.
 		const stats = await fs.stat(path);
-		if (!stats.isFile() || stats.size > 16 * 1024 * 1024) {
+		if (!stats.isFile() || stats.size > MAX_FILE_BYTES) {
 			throw new Error("not a regular file of at most 16 MiB");
 		}
 		text = await fs.readFile(path, "utf8");
@@ -411,21 +415,36 @@ export function defineConfig<
 				`${path} is a symbolic link; replace it with a file to save in it`,
 			);
 		}
-		const next: Record<string, unknown> = { ...(await readValues(path, parse)) };
-		for (const [key, value] of Object.entries(values)) {
-			if (value === undefined) delete next[key];
-			else next[key] = value;
-		}
-		await writeFile(path, stringify(next));
-		return path;
+		// The store's lock keeps the key another config or process saves at the same time.
+		const { withFileLock } = await import("@crustjs/store");
+		return withFileLock(
+			path,
+			async () => {
+				const next: Record<string, unknown> = { ...(await readValues(path, parse)) };
+				for (const [key, value] of Object.entries(values)) {
+					if (value === undefined) delete next[key];
+					else next[key] = value;
+				}
+				const text = stringify(next);
+				// A larger file could not be read again, not even to remove the setting.
+				if (Buffer.byteLength(text) > MAX_FILE_BYTES) {
+					throw new CrustError("VALIDATION", `${path} would exceed 16 MiB; nothing was saved`);
+				}
+				await writeFile(path, text);
+				return path;
+			},
+			{ operation: "write" },
+		);
 	};
-	// One save at a time, so each reads what the one before it wrote.
+	// One save of this config at a time, in call order; the lock alone would let a later call go first.
 	let saving: Promise<unknown> = Promise.resolve();
-	const save = (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
-		const next = saving.then(() => saveNow(values, inProject));
+	const queued = <T>(task: () => Promise<T>): Promise<T> => {
+		const next = saving.then(task);
 		saving = next.catch(() => {});
 		return next;
 	};
+	const save = (values: Record<string, unknown>, inProject: boolean): Promise<string> =>
+		queued(() => saveNow(values, inProject));
 
 	const toStderr = (line: string) => void process.stderr.write(`${line}\n`);
 
@@ -582,15 +601,25 @@ export function defineConfig<
 			return Promise.all(keys.map(async (key) => ({ key, ...(await resolve(key, files)) })));
 		},
 		set: async (values: Record<string, unknown>, target?: { readonly project?: true }) => {
-			// A value the setting's rules refuse would fail every command that reads it.
-			for (const [key, value] of Object.entries(values)) {
-				if (value === undefined) continue;
-				const def = settings[key]!;
-				for (const word of fileWords(key, def, value, "set()")) {
-					await convert(def, { [TEXT]: word }, TEXT, `"${key}"`);
+			// Copied and queued before anything is awaited: saves apply in call order, and the values
+			// checked are the values saved.
+			const patch = Object.fromEntries(
+				Object.entries(values).map(([key, value]) => [
+					key,
+					Array.isArray(value) ? [...value] : value,
+				]),
+			);
+			await queued(async () => {
+				// A value the setting's rules refuse would fail every command that reads it.
+				for (const [key, value] of Object.entries(patch)) {
+					if (value === undefined) continue;
+					const def = settings[key]!;
+					for (const word of fileWords(key, def, value, "set()")) {
+						await convert(def, { [TEXT]: word }, TEXT, `"${key}"`);
+					}
 				}
-			}
-			await save(values, target?.project === true);
+				await saveNow(patch, target?.project === true);
+			});
 		},
 		extension: options.command ? extension.add(configCommand()) : extension,
 		jsonSchema: () => jsonSchema(name, settings),
