@@ -569,8 +569,8 @@ function settingSchema(def: ConfigFlagDef): Record<string, unknown> {
 		def.choices === undefined
 			? {
 					type: def.parse === undefined ? def.type : "string",
-					...(def.min === undefined ? {} : { minimum: def.min }),
-					...(def.max === undefined ? {} : { maximum: def.max }),
+					...(Number.isFinite(def.min) ? { minimum: def.min } : {}),
+					...(Number.isFinite(def.max) ? { maximum: def.max } : {}),
 				}
 			: { enum: [...def.choices] };
 	return {

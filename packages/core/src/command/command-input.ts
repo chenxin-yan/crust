@@ -42,8 +42,8 @@ function valueSchema(def: ArgSnapshot | FlagSnapshot): CommandInputPropertySchem
 		case "integer":
 			return {
 				type: def.type,
-				...(def.min === undefined ? {} : { minimum: def.min }),
-				...(def.max === undefined ? {} : { maximum: def.max }),
+				...(Number.isFinite(def.min) ? { minimum: def.min } : {}),
+				...(Number.isFinite(def.max) ? { maximum: def.max } : {}),
 			};
 		case "boolean":
 			return { type: "boolean" };

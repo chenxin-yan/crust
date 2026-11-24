@@ -356,6 +356,21 @@ describe("commandInputSchema", () => {
 		});
 	});
 
+	it("publishes only finite bounds, which are the ones that reject a value", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("go", (c) =>
+				c
+					.flags({
+						a: { type: "number", max: Number.POSITIVE_INFINITY },
+						b: { type: "integer", min: Number.NaN, max: 3 },
+					})
+					.action(noop),
+			),
+		);
+		const { properties } = commandInputSchema((await app.snapshot()).subCommands.go!, ["go"]);
+		expect(properties).toEqual({ a: { type: "number" }, b: { type: "integer", maximum: 3 } });
+	});
+
 	it("rejects an arg and flag sharing a name, naming the path", async () => {
 		const snapshot = await new Crust("cli")
 			.add(

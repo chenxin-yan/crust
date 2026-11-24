@@ -118,7 +118,7 @@ It throws, naming `path`, when an arg and a flag share a name.
 | `type: "string"` / `"path"`        | `{ type: "string" }`                                                                                                         |
 | `type: "number"` / `"boolean"`     | `{ type: "number" }` / `{ type: "boolean" }`                                                                                 |
 | `type: "integer"`                  | `{ type: "integer" }`                                                                                                        |
-| `min` / `max`                      | `minimum` / `maximum`                                                                                                        |
+| `min` / `max`                      | `minimum` / `maximum`, when finite                                                                                           |
 | `type: "count"`                    | `{ type: "integer", minimum: 0 }`                                                                                            |
 | `type: "url"`                      | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                               |
 | `type: "json"`                     | `{}` (any JSON)                                                                                                              |

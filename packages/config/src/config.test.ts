@@ -442,6 +442,16 @@ describe("config.jsonSchema()", () => {
 			additionalProperties: false,
 		});
 	});
+
+	it("leaves out a bound that is not finite", () => {
+		const config = defineConfig({ name: "acme", project: true }).flags({
+			a: { type: "number", min: Number.NaN, max: Number.POSITIVE_INFINITY },
+		});
+		expect(config.jsonSchema().properties).toEqual({
+			$schema: { type: "string" },
+			a: { type: "number" },
+		});
+	});
 });
 
 describe("one Context per setting", () => {
