@@ -1108,7 +1108,12 @@ type AfterExtend<
 		MergeProviders<ProvidersOf<Facts>, ExtensionsProvidesOutput<Es>>,
 		ActionDepsOf<Facts>,
 		// An open call adds no precise entries (see ExtensionCommandTree).
-		ExtensionCommandsOf<Facts> | KnownSpellings<ExtensionsCommandSpellings<Es>>,
+		// Not a spelling an app command holds: the Extension's entry never joined the tree.
+		| ExtensionCommandsOf<Facts>
+		| Exclude<
+				KnownSpellings<ExtensionsCommandSpellings<Es>>,
+				Exclude<LiteralKeys<Tree>, ExtensionCommandsOf<Facts>>
+		  >,
 		ReplaceEntries<AppRecursiveFlagsOf<Facts>, RecursiveExtensionFlags<Es>>,
 		Facts["output"],
 		ReplaceEntries<AppInlineFlagsOf<Facts>, ExtensionsProvidedFlags<Es>>

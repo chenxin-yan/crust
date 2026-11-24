@@ -229,9 +229,11 @@ it("types the recursive and Context flags of same-id Extensions in one call by t
 
 it("keeps an app command's type when the Extension command colliding with it is replaced", async () => {
 	const id = defineExtensionId("temporary");
+	const colliding = defineExtension(id).add(defineCommand("foo", (c) => c.action(() => "text")));
 	const app = new Crust("app")
 		.add(defineCommand("foo", (c) => c.action(() => 123)))
-		.extend(defineExtension(id).add(defineCommand("foo", (c) => c.action(() => "text"))))
+		.extend(colliding)
+		.extend(colliding)
 		.extend(defineExtension(id));
 	type ResultOf<O> = O extends { status: "completed"; result: infer R } ? R : never;
 	const foo = await unwrap(app.run(["foo"]));
