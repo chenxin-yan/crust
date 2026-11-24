@@ -1101,6 +1101,7 @@ export async function runInvocation(
 	const stdout: string[] = [];
 	const stderr: string[] = [];
 	const stream: ActionEventStream = { onEvent: options?.onEvent };
+	let failed: { error: CaughtError; exitCode: number } | undefined;
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
 		const { signal = new AbortController().signal, env, ...sinks } = options ?? {};
@@ -1124,6 +1125,12 @@ export async function runInvocation(
 					createInvocationOutput(resolvedIO),
 					signal,
 					stream,
+					undefined,
+					// Recorded before `postRun` runs, as `execute()` does: a hook cannot rewrite the status.
+					async (error) => {
+						failed = { error, exitCode: failureExitCode(error) };
+						return undefined;
+					},
 				);
 			},
 			signal,
@@ -1133,7 +1140,7 @@ export async function runInvocation(
 		return {
 			status: "failed",
 			error,
-			exitCode: failureExitCode(error),
+			exitCode: failed && Object.is(error, failed.error) ? failed.exitCode : failureExitCode(error),
 			...eventsOf(stream),
 			stdout: stdout.join("\n"),
 			stderr: stderr.join("\n"),

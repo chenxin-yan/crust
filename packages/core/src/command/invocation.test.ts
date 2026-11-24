@@ -735,6 +735,17 @@ describe("Invocation pipeline — exit status", () => {
 				throw Object.assign(new Error("failed"), { exitCode: 3 });
 			});
 		expect(await execute(rewriting, [])).toMatchObject({ exitCode: 3, processExitCode: 3 });
+		const rewritingAfterRun = new Crust("app")
+			.extend(
+				defineExtension(defineExtensionId("rewrite")).postRun((_context, outcome) => {
+					if (outcome.status === "failed") Object.assign(outcome.error as object, { exitCode: 5 });
+				}),
+			)
+			.action(() => {
+				throw Object.assign(new Error("failed"), { exitCode: 3 });
+			});
+		expect(await execute(rewritingAfterRun, [])).toMatchObject({ exitCode: 3 });
+		expect(await rewritingAfterRun.run([])).toMatchObject({ status: "failed", exitCode: 3 });
 	});
 });
 
