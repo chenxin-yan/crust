@@ -108,7 +108,8 @@ Register-ArgumentCompleter -Native -CommandName ${bin} -ScriptBlock {
 	function New-Result($text, $tip, $type = 'ParameterValue') {
 		$item = $text
 		# A word with spaces or PowerShell syntax is inserted as one quoted argument.
-		if ($text -match '[\\s''"\`$&|;,(){}@#<>]') { $text = "'" + $text.Replace("'", "''") + "'" }
+		# PowerShell reads U+2018 to U+201B as single quotes and U+201C to U+201E as double quotes.
+		if ($text -match '[\\s''"\`$&|;,(){}@#<>\\u2018-\\u201E]') { $text = "'" + ($text -replace '[''\\u2018-\\u201B]', '$0$0') + "'" }
 		if (-not $tip) { $tip = $item }
 		[System.Management.Automation.CompletionResult]::new($text, $item, $type, $tip)
 	}

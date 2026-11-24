@@ -140,7 +140,7 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 		const stub = join(tmpDir, "mycli");
 		await writeFile(
 			stub,
-			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 0\nprintf '%s\\n' "$4-one" "$4-two" "\${3##* }"\n`,
+			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 0\nprintf '%s\\n' "$4-one" "$4-two" "$4’s" "\${3##* }"\n`,
 		);
 		await chmod(stub, 0o755);
 	});
@@ -181,11 +181,17 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 	it("offers punctuation shorts and the values of complete functions", async () => {
 		// PowerShell reads a bare `'` as a string, so `-'` is inserted quoted.
 		expect(await complete(completeScriptPath, "mycli -")).toEqual(["'-'''", "--hidden", "-."]);
+		// A typographic apostrophe ends a single-quoted string in PowerShell, so it is quoted and doubled.
 		expect(await complete(completeScriptPath, "mycli deploy --region us")).toEqual([
+			"'us’’s'",
 			"us-one",
 			"us-two",
 		]);
-		expect(await complete(completeScriptPath, "mycli deploy api")).toEqual(["api-one", "api-two"]);
+		expect(await complete(completeScriptPath, "mycli deploy api")).toEqual([
+			"'api’’s'",
+			"api-one",
+			"api-two",
+		]);
 	});
 
 	it('offers no flags after the first positional of a command with a "passthrough" argument', async () => {
