@@ -367,10 +367,14 @@ function effectiveBody(
 		const items = multiple ? value : [value];
 		if (
 			!Array.isArray(items) ||
-			items.some((item: unknown) => typeof item !== type && !(item === null && itemNullable))
+			items.some(
+				(item: unknown) =>
+					!(type === "integer" ? Number.isSafeInteger(item) : typeof item === type) &&
+					!(item === null && itemNullable),
+			)
 		) {
 			problems.push(
-				`the body field "${field.name}" must be ${multiple ? "a list of " : "a "}${type}`,
+				`the body field "${field.name}" must be ${multiple ? "a list of " : type === "integer" ? "an " : "a "}${type}`,
 			);
 		} else if (
 			choices &&
@@ -428,7 +432,10 @@ function flagDef(spec: OpenApiSpec, { target }: PlannedInput, plan: CommandPlan)
 		const restricted = { ...fields, ...(choices && { choices }) };
 		return multiple ? { type, multiple: true, ...restricted } : { type, ...restricted };
 	}
+	// One branch per type: core's flag definition does not distribute over a union `type`.
 	if (type === "number")
+		return multiple ? { type, multiple: true, ...fields } : { type, ...fields };
+	if (type === "integer")
 		return multiple ? { type, multiple: true, ...fields } : { type, ...fields };
 	// `--no-<name>` is how a user sends `false`.
 	return multiple

@@ -6,7 +6,7 @@ import {
 	defineContext,
 } from "@crustjs/core";
 import { commandInputSchema } from "@crustjs/core/tooling";
-import { confirmation, json, jsonInput } from "@crustjs/extensions";
+import { confirmation, help, json, jsonInput } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -272,6 +272,82 @@ describe("generated commands", () => {
 		expect(outcome).toMatchObject({ status: "completed", result: { id: "42", name: "Ada" } });
 	});
 
+	it("reads an integer parameter or body field as an integer flag, refusing an inexact one before any request", async () => {
+		const calls = stubFetch();
+		const acme = buildApi();
+		const app = new Crust("acme").extend(help(), acme.extension).add(...acme.commands);
+
+		expect(await captureExecute(app, ["users", "list-users", "--limit", "1.5"])).toEqual({
+			stdout: "",
+			stderr: "Error: Expected an integer for --limit.\n",
+			exitCode: 2,
+		});
+		// `Number("9007199254740993")` is 9007199254740992, so it would ask for another user.
+		expect(
+			await captureExecute(app, [
+				"users",
+				"create-user",
+				"--name",
+				"Ada",
+				"--age",
+				"9007199254740993",
+			]),
+		).toEqual({
+			stdout: "",
+			stderr:
+				"Error: Expected an integer from -9007199254740991 to 9007199254740991 for --age; larger ones lose precision.\n",
+			exitCode: 2,
+		});
+		expect(calls).toEqual([]);
+		expect((await captureExecute(app, ["users", "list-users", "--help"])).stdout).toContain(
+			"--limit <integer>",
+		);
+		// A body field from --request-body is checked the same way.
+		expect(
+			await captureExecute(app, [
+				"users",
+				"create-user",
+				"--request-body",
+				'{"name":"Ada","age":1.5}',
+			]),
+		).toMatchObject({ exitCode: 2 });
+		expect(calls).toEqual([]);
+	});
+
+	it("types integer path parameters and lists of integers as integers", async () => {
+		const items = defineApi({
+			spec: {
+				openapi: "3.1.0",
+				paths: {
+					"/items/{id}": {
+						get: {
+							operationId: "getItem",
+							parameters: [
+								{ name: "id", in: "path", required: true, schema: { type: "integer" } },
+								{
+									name: "near",
+									in: "query",
+									schema: { type: "array", items: { type: "integer" } },
+								},
+								{ name: "weight", in: "query", schema: { type: "number" } },
+							],
+							responses: { "200": { description: "The item" } },
+						},
+					},
+				},
+			},
+			baseUrl: "https://api.example.com/",
+		});
+		const snapshot = await new Crust("shop")
+			.extend(items.extension)
+			.add(...items.commands)
+			.snapshot();
+		const getItem = at(snapshot, "get-item");
+		expect(getItem.args.map(({ type }) => type)).toEqual(["integer"]);
+		expect(getItem.flags.near).toMatchObject({ type: "integer", multiple: true });
+		expect(getItem.flags.weight).toMatchObject({ type: "number" });
+	});
+
 	it("prints only the JSON under --json", async () => {
 		stubFetch();
 		const acme = buildApi();
@@ -368,7 +444,7 @@ describe("generated commands", () => {
 			properties: {
 				"request-body": { type: "object", properties: { profile: { type: "object" } } },
 				name: { type: "string", description: "Display name" },
-				age: { type: "number" },
+				age: { type: "integer" },
 				role: { type: "string", enum: ["admin", "member"] },
 			},
 		});
@@ -381,7 +457,7 @@ describe("generated commands", () => {
 					enum: ["admin", "member"],
 					description: "Only users with this role",
 				},
-				limit: { type: "number" },
+				limit: { type: "integer" },
 				tag: { type: "array", items: { type: "string" } },
 			},
 		});

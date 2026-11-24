@@ -240,7 +240,7 @@ Error: Expected a number for --ratio.
 ```
 
 - `type: "number"` reads a finite decimal, such as `-1.5` or `2e3`: no hex, `Infinity`, or surrounding spaces.
-- `type: "integer"` reads digits with an optional leading minus.
+- `type: "integer"` reads digits with an optional leading minus, up to ±9007199254740991, the largest integer a JavaScript number holds exactly; a larger one is an error that says so, never a rounded value.
 - `min` and `max` bound a `number` or `integer`, inclusive. They check every value given on argv, in the environment, or in typed `run()` input, but not the `default`. Arguments take them too.
 - `type: "count"` counts the flag's occurrences: `-vvv` is `3`, and an omitted flag is `0`, typed `number`. It takes no value, no negation, and no `env`.
 

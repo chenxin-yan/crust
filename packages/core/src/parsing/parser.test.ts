@@ -88,7 +88,7 @@ describe("parseArgs — number flags", () => {
 		});
 		expect(parseArgs(cmd, ["--port=-42", "--", "007"]).flags.port).toBe(-42);
 		expect(parseArgs(cmd, ["--", "007"]).args.count).toBe(7);
-		for (const raw of ["1.5", "1e3", "+1", "0x10", "", "99999999999999999999"]) {
+		for (const raw of ["1.5", "1e3", "+1", "0x10", ""]) {
 			expect(() => parseAndValidate(cmd, [`--port=${raw}`], {})).toThrow(
 				"Expected an integer for --port.",
 			);
@@ -97,6 +97,17 @@ describe("parseArgs — number flags", () => {
 		expect(() => validateParsed(cmd, parseStructured(cmd, { flags: { port: 1.5 } }))).toThrow(
 			"Expected an integer for --port.",
 		);
+	});
+
+	it("refuses an integer a number cannot hold exactly, saying so", () => {
+		const cmd = makeNode({ meta: "test", flags: { id: { type: "integer" } } });
+		const range = "Expected an integer from -9007199254740991 to 9007199254740991 for --id;";
+		expect(parseArgs(cmd, ["--id=9007199254740991"]).flags.id).toBe(Number.MAX_SAFE_INTEGER);
+		// `Number("9007199254740993")` is 9007199254740992: another id.
+		for (const raw of ["9007199254740993", "-9007199254740992", "99999999999999999999"]) {
+			expect(() => parseAndValidate(cmd, [`--id=${raw}`], {})).toThrow(range);
+		}
+		expect(() => parseStructured(cmd, { flags: { id: 2 ** 53 } })).toThrow(range);
 	});
 
 	it("checks min and max on every source, but not on the default", () => {

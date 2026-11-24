@@ -85,8 +85,8 @@ const INTEGER = /^-?\d+$/;
 const BOOLEAN_WORDS = "true, false, 1, 0, yes, no, on, off";
 
 /**
- * Check a number for a `number` or `integer` definition or snapshot: finite (a safe integer
- * for `integer`) and within `min` and `max`. Typed `run()` values arrive as numbers; argv
+ * Check a number for a `number` or `integer` definition or snapshot: finite (for `integer`, an
+ * integer a number holds exactly) and within `min` and `max`. Typed `run()` values arrive as numbers; argv
  * and environment text is read by {@link coerceValue} first.
  */
 export function checkNumber(
@@ -96,7 +96,13 @@ export function checkNumber(
 ): number {
 	if (def.type !== "number" && def.type !== "integer") return value;
 	const kind = def.type === "integer" ? "an integer" : "a number";
-	const valid = def.type === "integer" ? Number.isSafeInteger(value) : Number.isFinite(value);
+	if (def.type === "integer" && Number.isInteger(value) && !Number.isSafeInteger(value)) {
+		throw new CrustError(
+			"PARSE",
+			`Expected an integer from ${Number.MIN_SAFE_INTEGER} to ${Number.MAX_SAFE_INTEGER} for ${label}; larger ones lose precision.`,
+		);
+	}
+	const valid = def.type === "integer" ? Number.isInteger(value) : Number.isFinite(value);
 	if (!valid) throw new CrustError("PARSE", `Expected ${kind} for ${label}.`);
 	const { min, max } = def;
 	if ((min !== undefined && value < min) || (max !== undefined && value > max)) {
