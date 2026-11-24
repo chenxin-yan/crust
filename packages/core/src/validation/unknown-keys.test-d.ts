@@ -13,6 +13,8 @@ import { defineExtensionId } from "../identity.ts";
 	defineFlag({ type: "string", requried: true });
 	// @ts-expect-error argument-only properties are not flag properties
 	defineFlag({ type: "string", variadic: true });
+	// @ts-expect-error an unknown key set to `undefined` is still unknown
+	defineFlag({ type: "string", requried: undefined });
 }
 
 {
@@ -22,6 +24,8 @@ import { defineExtensionId } from "../identity.ts";
 	defineArg("target", { type: "string", requird: true });
 	// @ts-expect-error flag-only properties are not argument properties
 	defineArg("target", { type: "string", short: "t" });
+	// @ts-expect-error `name` comes from the first parameter, even when set to `undefined`
+	defineArg("target", { type: "string", name: undefined });
 }
 
 {
@@ -32,6 +36,8 @@ import { defineExtensionId } from "../identity.ts";
 	new Crust("tool").flags({ mode: { type: "string", chocies: ["a", "b"] } });
 	// @ts-expect-error a plain flag with a misspelled key
 	new Crust("tool").flags({ verbose: { type: "boolean", descripton: "More output" } });
+	// @ts-expect-error a misspelled key set to `undefined`
+	new Crust("tool").flags({ out: { type: "string", requried: undefined } });
 	new Crust("tool").command("deploy", (command) =>
 		// @ts-expect-error `defualt` is not a flag property
 		command.flags({ region: { type: "string", defualt: "us" } }),
@@ -43,6 +49,8 @@ import { defineExtensionId } from "../identity.ts";
 	new Crust("tool").args({ name: "target", type: "string", required: true });
 	// @ts-expect-error `requird` is not an argument property
 	new Crust("tool").args({ name: "target", type: "string", requird: true });
+	// @ts-expect-error a misspelled key set to `undefined`
+	new Crust("tool").args({ name: "target", type: "string", requird: undefined });
 }
 
 {

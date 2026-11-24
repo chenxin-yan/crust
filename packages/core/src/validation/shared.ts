@@ -308,9 +308,15 @@ type SchemaInputBrand<T> = T extends { schema: infer S extends StandardSchema }
 // `keyof` a union lists only shared keys, so a key in one branch alone would escape its checks.
 export type KeysOfAnyBranch<D> = D extends unknown ? keyof D : never;
 
-// A key typed `?: never` holds no value: it is how a definition type forbids a property.
+// An optional key typed `?: never` holds no value: it is how a definition type forbids a property.
 type HeldKeys<T> = T extends unknown
-	? { [K in keyof T]-?: [Exclude<T[K], undefined>] extends [never] ? never : K }[keyof T]
+	? {
+			[K in keyof T]-?: {} extends Pick<T, K>
+				? [Exclude<T[K], undefined>] extends [never]
+					? never
+					: K
+				: K;
+		}[keyof T]
 	: never;
 
 // Only object members are definitions; a primitive in an open record is left to its other checks.
