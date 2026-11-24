@@ -53,9 +53,14 @@ function stepArgv(
 		for (const item of flag.multiple && Array.isArray(value) ? value : [value]) {
 			if (flag.type === "boolean") {
 				if (typeof item !== "boolean") throw new Error(`"--${name}" value is not a boolean`);
-				// `false` on a flag that is not negatable has no spelling: it is the flag left unset.
+				// `false` on a flag that is not negatable has no spelling: it is the flag left unset,
+				// which its environment variable may turn on.
 				if (item) options.push(`--${name}`);
 				else if (flag.negatable) options.push(`--no-${name}`);
+				else if (flag.env !== undefined)
+					throw new Error(
+						`"--${name}" false has no spelling, and its environment variable may set it`,
+					);
 				continue;
 			}
 			if (flag.type === "count") {

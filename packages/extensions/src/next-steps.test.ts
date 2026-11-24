@@ -321,6 +321,33 @@ describe("nextSteps", () => {
 		});
 	});
 
+	it("skips false on a boolean flag that is not negatable but reads an environment variable", async () => {
+		const go = defineCommand("go", (cmd) =>
+			cmd
+				.flags({ cache: { type: "boolean", env: "CACHE" }, quiet: { type: "boolean" } })
+				.action(() => {}),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(go)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(go, { flags: { cache: false } });
+					next.add(go, { flags: { quiet: false } });
+				}),
+			);
+
+		expect((await captureExecute(app, ["suggest"])).stderr).toBe(
+			[
+				'nextSteps(): skipped "app go": "--cache" false has no spelling, and its environment variable may set it',
+				"Next steps:",
+				"  app go",
+				"",
+			].join("\n"),
+		);
+	});
+
 	it("reports a throwing onError on stderr and still prints the action's steps", async () => {
 		const app = appWith({
 			onError: () => {
