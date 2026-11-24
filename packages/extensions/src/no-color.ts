@@ -71,6 +71,7 @@ export async function withTypedColorFlag<T>(
 ): Promise<T> {
 	if (context.command.flags.color?.extension !== NO_COLOR) return render();
 	const end = context.argv.indexOf("--");
+	// shortcut: a `--color` or `--no-color` meant for a passthrough argument counts too, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
 	const words = end === -1 ? context.argv : context.argv.slice(0, end);
 	const on = words.lastIndexOf("--color");
 	const off = words.lastIndexOf("--no-color");
