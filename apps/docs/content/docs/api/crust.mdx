@@ -322,7 +322,7 @@ Invokes a command programmatically with a typed path and structured input, captu
 Editors complete command names, argument and flag names, and the action's result type. Input rules:
 
 - Values bind directly against definitions without producing argv, then flow through parsers, schemas, Contexts, and the action. Custom parsers and schemas still receive their raw input, usually strings.
-- Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
+- Supplied positionals must form a prefix. `undefined` means omitted. An empty array for a variadic argument or a `multiple` flag is a supplied empty list: the default and the environment do not apply, and a required one fails with `Missing required argument` or `Missing required flag`, as `--tags ""` does on argv.
 - A flag the input omits falls back to its `env` variable, then to its default; a supplied value always wins. Variables come from `process.env`, so `run()` resolves like the terminal; wrap the call in [`withEnv()`](/docs/modules/testing#withenvenv-fn) so a test's result doesn't depend on the caller's shell. An invalid environment value fails like on argv, naming the variable but not the value. TypeScript lets the input omit a `required` flag that has an `env` binding.
 - TypeScript rejects unknown argument, flag, and top-level keys, including in inputs held in variables. Keys set to `undefined` count as omitted. At runtime, unknown argument or flag keys return a failed outcome before the action runs.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.

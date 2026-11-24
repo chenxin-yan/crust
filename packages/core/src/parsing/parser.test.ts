@@ -493,8 +493,8 @@ describe("parseArgs — variadic args", () => {
 		expect(parseArgs(cmd, []).args.files).toEqual(["fallback"]);
 		expect(parseArgs(cmd, ["a", "b"]).args.files).toEqual(["a", "b"]);
 		expect(parseStructured(cmd, {}).args.files).toEqual(["fallback"]);
-		// An empty occurrence array is omission, matching `multiple` flags.
-		expect(parseStructured(cmd, { args: { files: [] } }).args.files).toEqual(["fallback"]);
+		// An empty occurrence array is a supplied empty list, as for `multiple` flags.
+		expect(parseStructured(cmd, { args: { files: [] } }).args.files).toEqual([]);
 		expect(parseStructured(cmd, { args: { files: ["a"] } }).args.files).toEqual(["a"]);
 	});
 
@@ -1395,19 +1395,25 @@ describe("parseStructured", () => {
 		).toEqual(parseArgs(command, []));
 	});
 
-	it("treats empty multiple arrays as zero occurrences for defaults and required flags", () => {
+	it("reads empty multiple arrays as empty lists, over the environment and the default", () => {
 		const command = makeNode({
 			meta: "test",
 			flags: {
 				optional: { type: "string", multiple: true },
-				defaulted: { type: "string", multiple: true, default: ["fallback"] },
-				required: { type: "string", multiple: true, required: true },
+				defaulted: { type: "string", multiple: true, default: ["fallback"], env: "TAGS" },
+				required: { type: "string", multiple: true, required: true, delimiter: "," },
 			},
 		});
-		const result = parseStructured(command, {
-			flags: { optional: [], defaulted: [], required: [] },
-		});
-		expect(result).toEqual(parseArgs(command, []));
+		const result = parseStructured(
+			command,
+			{ flags: { optional: [], defaulted: [], required: [] } },
+			{ TAGS: "a" },
+		);
+		expect(result.flags).toEqual({ optional: [], defaulted: [], required: [] });
+		expect(result.sources.flags).toEqual({ optional: "run", defaulted: "run", required: "run" });
+		// A required list given none fails as `--required ""` does on the command line.
+		const argv = parseArgs(command, ["--required", ""], {});
+		expect(() => validateParsed(command, argv)).toThrow('Missing required flag "--required"');
 		expect(() => validateParsed(command, result)).toThrow('Missing required flag "--required"');
 	});
 });

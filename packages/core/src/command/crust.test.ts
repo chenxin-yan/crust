@@ -1164,20 +1164,28 @@ describe("Extension named hooks", () => {
 			},
 		);
 
-		it("treats a list the delimiter leaves empty as omitted, as argv does", async () => {
-			async function execute(text: Text, argv: string[]) {
+		it("reads a list the delimiter leaves empty as an empty list, as argv does", async () => {
+			async function execute(text: Text, argv: string[], required: boolean) {
 				const stderr: string[] = [];
+				const stdout: string[] = [];
+				const tags = required
+					? ({ type: "string", multiple: true, delimiter: ",", required } as const)
+					: ({ type: "string", multiple: true, delimiter: ",", default: ["d"] } as const);
 				const exitCode = await new Crust("cli")
-					.flags({ tags: { type: "string", multiple: true, delimiter: ",", required: true } })
+					.flags({ tags })
 					.extend(defineExtension(defineExtensionId("text")).preRun((ctx) => ctx.bindText(text)))
-					.action(() => {})
-					.execute({ argv, io: { stdout: { write() {} }, stderr: lineSink(stderr) } });
-				return { exitCode, stderr: stderr.join("\n") };
+					.action(({ flags, stdout }) => stdout(JSON.stringify(flags.tags)))
+					.execute({ argv, io: { stdout: lineSink(stdout), stderr: lineSink(stderr) } });
+				return { exitCode, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 			}
-			const fromArgv = await execute({}, ["--tags", ","]);
+			const optional = await execute({}, ["--tags", ","], false);
+			expect(optional).toEqual({ exitCode: 0, stdout: "[]", stderr: "" });
+			expect(await execute({ flags: { tags: [","] } }, [], false)).toEqual(optional);
+			expect(await execute({ flags: { tags: [] } }, [], false)).toEqual(optional);
+			const fromArgv = await execute({}, ["--tags", ","], true);
 			expect(fromArgv.exitCode).toBe(2);
 			expect(fromArgv.stderr).toContain('Missing required flag "--tags"');
-			expect(await execute({ flags: { tags: [","] } }, [])).toEqual(fromArgv);
+			expect(await execute({ flags: { tags: [","] } }, [], true)).toEqual(fromArgv);
 		});
 
 		it("does not suggest a command-line spelling for text that starts with =", async () => {
@@ -1306,9 +1314,10 @@ describe("Extension named hooks", () => {
 			]);
 		});
 
-		it("reports an empty variadic or multiple-flag array as omitted under run() and bindInput", async () => {
+		it("reports an empty variadic or multiple-flag array as given under run() and bindInput", async () => {
 			const empty = { args: { files: [] }, flags: { tags: [], labels: [] } };
 			const seen: ExtensionContext["sources"][] = [];
+			const received: unknown[] = [];
 			const app = (bind: boolean) =>
 				new Crust("cli")
 					.flags({
@@ -1321,11 +1330,15 @@ describe("Extension named hooks", () => {
 							.setup((ctx) => void (bind && ctx.bindInput(empty)))
 							.preRun((ctx) => void seen.push(ctx.sources)),
 					)
-					.action(() => {});
+					.action(({ args, flags }) => void received.push({ args, flags }));
 			await unwrap(app(false).run([], empty));
 			expect(await app(true).execute({ argv: [] })).toBe(0);
-			const omitted = { args: {}, flags: { tags: "default" } };
-			expect(seen).toEqual([omitted, omitted]);
+			expect(seen).toEqual([
+				{ args: { files: "run" }, flags: { tags: "run", labels: "run" } },
+				{ args: { files: "bound" }, flags: { tags: "bound", labels: "bound" } },
+			]);
+			// The default does not apply: `[]` is an empty list.
+			expect(received).toEqual([empty, empty]);
 		});
 
 		it("is empty in the routing-failure onError context", async () => {
@@ -1639,8 +1652,8 @@ describe("Extension setup, flag handlers, and noAction", () => {
 		const listed = handled({
 			mode: { type: "string", multiple: true, delimiter: ",", default: ["a"] },
 		});
-		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("action");
-		// `--mode ""` is given: an empty list, not an omission.
+		// `[]` and `--mode ""` are given: an empty list, not an omission.
+		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("handled");
 		const lines: string[] = [];
 		await listed.execute({
 			argv: ["--mode", ""],

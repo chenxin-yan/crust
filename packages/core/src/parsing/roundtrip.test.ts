@@ -245,6 +245,8 @@ function generateArgs(random: Random, defs: readonly ArgDef[]) {
 	for (const def of defs.slice(0, supplied)) {
 		const count = def.variadic ? (mustSupply(def) ? 1 : 0) + int(random, 3) : 1;
 		const items = Array.from({ length: count }, () => scalar(random, def));
+		// Argv has no word for an empty list, so zero occurrences is omission on both sides.
+		if (count === 0) continue;
 		args[def.name] = def.variadic ? items.map((item) => item.value) : items[0]!.value;
 		tokens.push(...items.map((item) => item.token));
 	}
@@ -284,9 +286,10 @@ function generateFlags(random: Random, defs: Readonly<Record<string, FlagDef>>) 
 			continue;
 		}
 		if (!mustSupply(def) && random() < 0.5) continue;
-		// Zero occurrences is an empty array on the structured side and nothing on argv.
 		const count = def.multiple ? (mustSupply(def) ? 1 : 0) + int(random, 3) : 1;
 		const items = Array.from({ length: count }, () => encode(name, def));
+		// Zero occurrences is omission on both sides: `[]` would be an empty list.
+		if (count === 0) continue;
 		flags[name] = def.multiple ? items.map((item) => item.value) : items[0]!.value;
 		tokens.push(...items.map((item) => item.token));
 	}

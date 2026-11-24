@@ -442,7 +442,7 @@ Parses `argv` for the command at `path` as an invocation of that command would, 
 Binds structured input from `setup` or `preRun`, with the conversion typed `run()` uses.
 
 - Keys given explicitly on argv are kept, and their supplied values are never converted. A flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`), and a positional argument when argv supplied it.
-- Supplied values replace environment values (including an invalid one) and defaults. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
+- Supplied values replace environment values (including an invalid one) and defaults; an empty array is a supplied empty list. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
 - Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
 - Calls add up, together with `bindText`: a key bound again takes the later value, and the keys a call leaves out keep theirs. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
 - Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
@@ -464,7 +464,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | Source    | Meaning                                                                                                                                             |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
-| `run`     | Typed `run()` input. An empty array for a variadic argument or a `multiple` flag gives no value, as omitting it on argv does                        |
+| `run`     | Typed `run()` input, an empty array for a variadic argument or a `multiple` flag included                                                           |
 | `env`     | The flag's `env` variable                                                                                                                           |
 | `bound`   | Supplied by `bindInput` or `bindText`                                                                                                               |
 | `default` | The definition's default                                                                                                                            |

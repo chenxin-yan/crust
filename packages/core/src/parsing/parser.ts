@@ -298,8 +298,9 @@ function splitOccurrences(values: readonly string[], delimiter: string | undefin
 /**
  * Convert an environment value or bound text into the shape argv tokens produce, so the
  * shared coercion path (`choices`, `parse`, type conversion, schemas) runs
- * identically. A repeatable flag's `delimiter` splits the text, and zero occurrences
- * after the split are an omission; booleans read the same words as positional booleans.
+ * identically. A repeatable flag's `delimiter` splits the text; zero occurrences
+ * after the split leave a variable unset, while bound text is an empty list, as
+ * `--tags ""` is. Booleans read the same words as positional booleans.
  *
  * @param words - One word per occurrence; a flag that is not `multiple` takes one
  * @param variable - The environment variable the text came from; none for bound text
@@ -311,7 +312,7 @@ function textFlagValue(
 	variable?: string,
 ): ArgvFlagValue | undefined {
 	const occurrences = splitOccurrences(words, def.multiple ? def.delimiter : undefined);
-	if (def.multiple && occurrences.length === 0) return undefined;
+	if (def.multiple && occurrences.length === 0 && variable !== undefined) return undefined;
 	if (def.type !== "boolean") {
 		const value = def.multiple ? occurrences : occurrences[0]!;
 		return variable === undefined
@@ -365,11 +366,11 @@ function applyEnvAndDelimiter(
 				argvValue.kind === "string" &&
 				Array.isArray(argvValue.value)
 			) {
-				const occurrences = splitOccurrences(argvValue.value, def.delimiter);
-				// `--filter ""` asks for an empty list; a required flag still needs a value.
-				const missing =
-					occurrences.length === 0 && def.required === true && def.default === undefined;
-				values[name] = missing ? undefined : { kind: "string", value: occurrences };
+				// `--filter ""` asks for an empty list.
+				values[name] = {
+					kind: "string",
+					value: splitOccurrences(argvValue.value, def.delimiter),
+				};
 			} else {
 				values[name] = argvValue;
 			}
@@ -422,12 +423,7 @@ function resolveFlags<F extends FlagsDef, V>(
 	const resolved: Record<string, ParsedFlagValue> = {};
 	for (const [name, def] of Object.entries(flagsDef)) {
 		const parsedValue = Object.hasOwn(values, name) ? values[name] : undefined;
-
-		// An empty multiple array is zero occurrences, matching argv omission.
-		const absent =
-			parsedValue === undefined ||
-			(def.multiple && Array.isArray(parsedValue) && parsedValue.length === 0);
-		if (!absent) {
+		if (parsedValue !== undefined) {
 			present?.add(name);
 			resolved[name] = coerceOrDefer(() => coerce(name, def, parsedValue), defer, `--${name}`);
 			continue;
@@ -441,7 +437,8 @@ function resolveFlags<F extends FlagsDef, V>(
 }
 
 /**
- * Validate required flags against already-resolved flag values.
+ * Validate required flags against already-resolved flag values. A required list given an
+ * empty one, as `--tags ""` or `[]` gives it, is missing.
  */
 function validateRequiredFlags<F extends FlagsDef>(
 	flagsDef: F,
@@ -449,7 +446,8 @@ function validateRequiredFlags<F extends FlagsDef>(
 ): void {
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (def.required === true && def.default === undefined) {
-			if (resolvedFlags[name] === undefined) {
+			const value = resolvedFlags[name];
+			if (value === undefined || (def.multiple && Array.isArray(value) && value.length === 0)) {
 				const names = def.flags ? listedMembers(def.flags) : [name];
 				throw new CrustError(
 					"VALIDATION",
@@ -519,7 +517,8 @@ function validateRequiredArgs<A extends ArgsDef>(argsDef: A, resolvedArgs: RawPa
 /**
  * Resolve positional argument definitions against the parsed positional tokens.
  * Handles variadic args, coercion, and default values. A `variadic: "afterDoubleDash"`
- * argument reads `afterDoubleDash` instead of `positionals`.
+ * argument reads `afterDoubleDash` instead of `positionals`. A variadic argument in
+ * `supplied` that gets no values is an empty list, not its default.
  *
  * Never throws for missing required values; {@link validateParsed} enforces
  * required constraints.
@@ -530,6 +529,7 @@ function resolveArgs<A extends ArgsDef, V>(
 	coerce: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
 	defer?: DeferValueError,
 	afterDoubleDash: readonly V[] = [],
+	supplied?: ReadonlySet<string>,
 ) {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
@@ -550,7 +550,7 @@ function resolveArgs<A extends ArgsDef, V>(
 				def.variadic === "afterDoubleDash" ? afterDoubleDash : positionals.slice(index);
 			// Supplied values replace the scalar default; omission yields it as the only element.
 			resolved[name] =
-				remaining.length === 0 && def.default !== undefined
+				remaining.length === 0 && def.default !== undefined && !supplied?.has(name)
 					? [resolveDefault(def, label)]
 					: coerceOrDefer(() => remaining.map((v, i) => coerce(def, v, label, i)), defer, label);
 			if (def.variadic !== "afterDoubleDash") index = positionals.length;
@@ -951,12 +951,13 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 	coerceFlag: (name: string, def: FlagDef, value: W) => ParsedFlagValue,
 	defer?: DeferValueError,
 	afterDoubleDash?: readonly V[],
+	suppliedArgs?: ReadonlySet<string>,
 ) {
 	// Flags given a value, so an omission that resolves to a default never orders as supplied.
 	const present = new Set<string>();
 	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag, defer, present);
 	return {
-		...resolveArgs(command.args, positionals, coerceArg, defer, afterDoubleDash),
+		...resolveArgs(command.args, positionals, coerceArg, defer, afterDoubleDash, suppliedArgs),
 		flags,
 		present,
 	};
@@ -1136,13 +1137,12 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
 			}
 			target.push(...value);
-			// An empty array is zero occurrences, so like argv omission it supplies nothing.
-			if (value.length > 0) suppliedArgs.add(definition.name);
 		} else {
 			// A non-variadic JSON array is one positional value.
 			target.push(value);
-			suppliedArgs.add(definition.name);
 		}
+		// `[]` for a variadic argument is an empty list, not an omission.
+		suppliedArgs.add(definition.name);
 	}
 	// Only named records carry argument names to validate; argv has positional tokens.
 	for (const name of Object.keys(inputArgs ?? {})) {
@@ -1198,6 +1198,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			valueErrors.set(label, error);
 		},
 		afterDoubleDash,
+		suppliedArgs,
 	);
 	// Key order stands in for command-line order; environment values follow, sorted, as on argv.
 	const flagOrder = [
