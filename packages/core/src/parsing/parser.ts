@@ -927,8 +927,18 @@ function valueSources(
 		const chosen = source(name) ?? (def.default === undefined ? undefined : "default");
 		if (chosen) entries.push([name, chosen]);
 	}
-	// fromEntries defines own properties, so an argument named `__proto__` stays a key.
-	return Object.freeze(Object.fromEntries(entries));
+	return sourceRecord(entries);
+}
+
+/**
+ * A frozen record without a prototype, so `sources[name]` reads `undefined` for an unset name
+ * such as `toString`.
+ */
+export function sourceRecord(
+	entries: Iterable<readonly [string, ValueSource]>,
+): Readonly<Record<string, ValueSource>> {
+	// assign copies own properties, so an argument named `__proto__` stays a key.
+	return Object.freeze(Object.assign(Object.create(null), Object.fromEntries(entries)));
 }
 
 /** Both front doors share binding, defaults, and canonical flag validation. */
@@ -1271,15 +1281,13 @@ export function bindStructuredInput(
 		names: Record<string, unknown>,
 		structuredSources: Readonly<Record<string, ValueSource>>,
 	): Readonly<Record<string, ValueSource>> =>
-		Object.freeze(
-			Object.fromEntries([
-				...Object.entries(original).filter(([name]) => !Object.hasOwn(names, name)),
-				...Object.entries(structuredSources).map(([name, source]): [string, ValueSource] => [
-					name,
-					source === "run" ? "bound" : source,
-				]),
+		sourceRecord([
+			...Object.entries(original).filter(([name]) => !Object.hasOwn(names, name)),
+			...Object.entries(structuredSources).map(([name, source]): [string, ValueSource] => [
+				name,
+				source === "run" ? "bound" : source,
 			]),
-		);
+		]);
 	// A replaced flag's environment value error no longer applies.
 	const replaced = new Set(Object.keys(inputFlags).map((name) => `--${name}`));
 	const valueErrors = new Map(

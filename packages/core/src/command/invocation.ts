@@ -27,6 +27,7 @@ import {
 	bindStructuredInput,
 	parseArgs,
 	parseStructured,
+	sourceRecord,
 	validateParsed,
 	type ArgvParseResult,
 } from "../parsing/parser.ts";
@@ -1279,7 +1280,7 @@ async function renderFailure(
 				parseCommandArgv(prepared.rootNode, path, commandArgv),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
-			sources: Object.freeze({ args: Object.freeze({}), flags: Object.freeze({}) }),
+			sources: Object.freeze({ args: sourceRecord([]), flags: sourceRecord([]) }),
 			signal,
 			stdin: output.io.stdin,
 			stdout: output.io.stdout,

@@ -1332,6 +1332,27 @@ describe("Extension named hooks", () => {
 			const { app, seen } = recordingApp();
 			await app.execute({ argv: ["--nope"], io: { stderr: { write() {} } } });
 			expect(seen).toEqual([{ args: {}, flags: {} }]);
+			expect(seen[0]?.flags.constructor).toBeUndefined();
+		});
+
+		it("reads undefined for an unset name Object.prototype has, before and after bindInput", async () => {
+			const seen: unknown[] = [];
+			const app = new Crust("cli")
+				.flags({ constructor: { type: "string" }, host: { type: "string" } })
+				.args({ name: "toString", type: "string" })
+				.extend(
+					defineExtension(defineExtensionId("recorder"))
+						.setup((ctx) => {
+							seen.push(ctx.sources.flags.constructor, ctx.sources.args.toString);
+							ctx.bindInput({ flags: { host: "example.com" } });
+						})
+						.preRun(
+							(ctx) => void seen.push(ctx.sources.flags.constructor, ctx.sources.args.toString),
+						),
+				)
+				.action(() => {});
+			expect(await app.execute({ argv: [] })).toBe(0);
+			expect(seen).toEqual([undefined, undefined, undefined, undefined]);
 		});
 	});
 
