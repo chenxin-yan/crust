@@ -433,7 +433,9 @@ function _typecheckOmitsUndefinedInputSections() {
 		.command("bare", (command) => command);
 	type Shape = (typeof app)["_types"]["shape"];
 	type _build = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["build"]>>, "flags">>;
-	type _bare = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, never>>;
+	type _bare = Expect<
+		Equal<RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, Record<string, never>>
+	>;
 
 	// @ts-expect-error -- no args section
 	void app.run(["build"], { args: {} });
@@ -446,6 +448,17 @@ function _typecheckOmitsUndefinedInputSections() {
 	void app.run(["bare"], { flags: { minify: true } });
 	// @ts-expect-error -- no raw section: words after `--` are arguments
 	void app.run(["bare"], { raw: ["--"] });
+
+	// A command without inputs takes nothing, `{}` or `undefined`, and no other value.
+	void app.run(["bare"]);
+	void app.run(["bare"], {});
+	void app.run(["bare"], undefined);
+	// @ts-expect-error -- a primitive is no input
+	void app.run(["bare"], 42);
+	// @ts-expect-error -- a primitive is no input, through a handle
+	void app.at(["bare"]).run("text");
+	// @ts-expect-error -- a primitive is no input, on a bare app
+	void new Crust("bare").run([], 42);
 }
 
 // keeps required input required whatever the input's inference
