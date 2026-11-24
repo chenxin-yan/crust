@@ -199,6 +199,8 @@ export function flagValue(
 	type: "string" | "number" | "integer" | "boolean";
 	multiple: boolean;
 	choices?: string[];
+	/** The enum's non-null members, whatever their type: each is a valid value. */
+	values: readonly unknown[];
 	/** Whether the value may be `null`, which no flag sends: its `type` and its `enum`, where set, allow it. */
 	nullable: boolean;
 	/** For a list, whether its items may be `null`, by the same rule. */
@@ -220,6 +222,7 @@ export function flagValue(
 	return {
 		type,
 		multiple,
+		values,
 		nullable: allowsNull(view),
 		itemNullable: multiple && allowsNull(item),
 		...(type === "string" && choices.length > 0 && { choices }),

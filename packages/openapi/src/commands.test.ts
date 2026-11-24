@@ -323,8 +323,14 @@ describe("generated commands", () => {
 			"/things/{id}": {
 				put: {
 					operationId: "editThing",
-					parameters: [{ ...pathParam("id"), schema: { type: "integer" } }],
-					...jsonBody({ type: "object", properties: { id: { type: "integer" } } }),
+					parameters: [
+						{ ...pathParam("id"), schema: { type: "integer" } },
+						{ name: "mode", in: "query", schema: { type: "string" } },
+					],
+					...jsonBody({
+						type: "object",
+						properties: { id: { type: "integer" }, mode: { enum: ["auto", 1] } },
+					}),
 				},
 			},
 		});
@@ -340,6 +346,11 @@ describe("generated commands", () => {
 			exitCode: 2,
 		});
 		expect(calls).toEqual([]);
+		// A mixed enum's flag type is number, yet its string member is still a valid JSON value.
+		expect(
+			await captureExecute(things, ["edit-thing", "1", "--request-body", '{"mode":"auto"}']),
+		).toMatchObject({ exitCode: 0 });
+		expect(JSON.parse(calls[0]!.body!)).toEqual({ mode: "auto" });
 	});
 
 	it("types integer path parameters and lists of integers as integers", async () => {

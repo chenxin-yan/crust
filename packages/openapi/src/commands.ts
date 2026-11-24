@@ -363,7 +363,10 @@ function effectiveBody(
 		}
 		// A binding's value is text, and a field no flag can carry has no flag type to check.
 		if (field.kind === "other" || boundNames(plan.fields).has(field.name)) continue;
-		const { type, multiple, choices, nullable, itemNullable } = flagValue(spec, field.schema);
+		const { type, multiple, choices, values, nullable, itemNullable } = flagValue(
+			spec,
+			field.schema,
+		);
 		if (value === null && nullable) continue;
 		const items = multiple ? value : [value];
 		if (
@@ -371,6 +374,8 @@ function effectiveBody(
 			items.some(
 				(item: unknown) =>
 					!(type === "integer" ? Number.isSafeInteger(item) : typeof item === type) &&
+					// A mixed enum has one flag type, and its other members are still valid JSON values.
+					!values.includes(item) &&
 					!(item === null && itemNullable),
 			)
 		) {
