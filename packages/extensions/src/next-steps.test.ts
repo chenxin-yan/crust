@@ -481,6 +481,36 @@ describe("nextSteps", () => {
 		expect(seen).toEqual([[{ at: -0 }, { timeout: -0 }]]);
 	});
 
+	it("skips a number argv would reject for its integer type or min and max", async () => {
+		const scale = defineCommand("scale", (cmd) =>
+			cmd
+				.args({ name: "port", type: "number", min: 1, max: 10 })
+				.flags({ jobs: { type: "integer" } })
+				.action(() => {}),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(scale)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(scale, { flags: { jobs: 1.5 } });
+					next.add(scale, { args: { port: 99 } });
+					next.add(scale, { args: { port: 10 }, flags: { jobs: 2 } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n").slice(0, -1);
+		expect(lines).toEqual([
+			'nextSteps(): skipped "app scale": Expected an integer for "--jobs".',
+			'nextSteps(): skipped "app scale": Expected a number from 1 to 10 for argument "port".',
+			"Next steps:",
+			"  app scale --jobs 2 10",
+		]);
+		await replay(app, lines.slice(-1));
+	});
+
 	it("skips json values JSON would change and replays the rest", async () => {
 		const seen: unknown[] = [];
 		const show = defineCommand("show", (cmd) =>

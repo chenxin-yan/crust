@@ -1,16 +1,18 @@
-import type { CommandSnapshot, ExtensionContext, ValueType } from "@crustjs/core";
-import type { RunInputValue } from "@crustjs/core/tooling";
+import type { ArgSnapshot, CommandSnapshot, ExtensionContext, FlagSnapshot } from "@crustjs/core";
+import { checkNumber, type RunInputValue } from "@crustjs/core/tooling";
 import { parseJsonValue } from "@crustjs/utils/json";
 import { shellQuote } from "@crustjs/utils/process";
 
 import type { NextStep } from "./next-steps.ts";
 
 /** Argv parses a `json` value with `JSON.parse`, so even a string value needs its JSON encoding. */
-function argvValue(value: RunInputValue, type: ValueType | undefined, label: string): string {
+function argvValue(value: RunInputValue, def: ArgSnapshot | FlagSnapshot, label: string): string {
+	const { type } = def;
 	if (typeof value === "string" && type !== "json") return value;
-	// Argv reads only finite decimals.
+	// Argv reads only finite decimals, and checks an `integer` and `min`/`max` as `run()` does.
 	if (typeof value === "number" && type !== "json") {
 		if (!Number.isFinite(value)) throw new Error(`${label} value ${value} has no argv spelling`);
+		checkNumber(def, value, label);
 		return Object.is(value, -0) ? "-0" : String(value);
 	}
 	if (value instanceof URL) return value.href;
@@ -62,7 +64,7 @@ function stepArgv(
 				options.push(...Array.from({ length: Number(item) }, () => `--${name}`));
 				continue;
 			}
-			const text = argvValue(item, flag.type, `"--${name}"`);
+			const text = argvValue(item, flag, `"--${name}"`);
 			// The parser splits each occurrence on the delimiter and drops empty pieces.
 			if (flag.delimiter !== undefined && (text === "" || text.includes(flag.delimiter))) {
 				const problem = text === "" ? "is dropped by" : "contains";
@@ -96,7 +98,7 @@ function stepArgv(
 			throw new Error(`argument "${arg.name}" follows omitted "${omitted}"`);
 		(afterSeparator ? afterDoubleDash : positionals).push(
 			...(arg.variadic && Array.isArray(value) ? value : [value]).map((item) =>
-				argvValue(item, arg.type, `argument "${arg.name}"`),
+				argvValue(item, arg, `argument "${arg.name}"`),
 			),
 		);
 	}

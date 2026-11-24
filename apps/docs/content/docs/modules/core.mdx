@@ -84,6 +84,7 @@ const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"))
 | `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
 | `CommandSnapshot`                                                                  | Same type as the root export, for tooling-only imports             |
 | `parseFlagValues()` / `FlagEnvironment`                                            | Resolves flags from their `env` bindings without argv              |
+| `checkNumber()`                                                                    | Checks a number against an `integer` type and `min`/`max`          |
 | `commandInputSchema()` / `CommandInputSchema` / `CommandInputPropertySchema`       | Describes a command's flat JSON input as JSON Schema               |
 | `parseCommandInput()` / `RunInputPayload` / `RunInputValue`                        | Splits flat JSON input into structured `run()` input               |
 | `commandInputFields()` / `CommandInputFields`                                      | Lists a command's arg names and `url` fields for that split        |

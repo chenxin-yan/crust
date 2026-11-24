@@ -77,11 +77,15 @@ const INTEGER = /^-?\d+$/;
 const BOOLEAN_WORDS = "true, false, 1, 0, yes, no, on, off";
 
 /**
- * Check a number for a `number` or `integer` definition: finite (a safe integer for
- * `integer`) and within `min` and `max`. Typed `run()` values arrive as numbers; argv
+ * Check a number for a `number` or `integer` definition or snapshot: finite (a safe integer
+ * for `integer`) and within `min` and `max`. Typed `run()` values arrive as numbers; argv
  * and environment text is read by {@link coerceValue} first.
  */
-function checkNumber(def: ArgDef | FlagDef, value: number, label: string): number {
+export function checkNumber(
+	def: { readonly type?: string; readonly min?: number; readonly max?: number },
+	value: number,
+	label: string,
+): number {
 	if (def.type !== "number" && def.type !== "integer") return value;
 	const kind = def.type === "integer" ? "an integer" : "a number";
 	const valid = def.type === "integer" ? Number.isSafeInteger(value) : Number.isFinite(value);
