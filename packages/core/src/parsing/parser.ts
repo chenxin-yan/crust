@@ -526,17 +526,21 @@ function tokenizeArgv(command: CommandNode, argv: readonly string[]) {
 		// POSIX guideline 10: every token after the first `--` is an operand
 		// (https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02).
 		if (arg === "--") {
-			const separatorIndex = positionals.length;
-			positionals.push(...argv.slice(index + 1));
-			return { positionals, separatorIndex, flagValues };
+			// Not `push(...)`: spreading a long argv overflows the call stack.
+			return {
+				positionals: positionals.concat(argv.slice(index + 1)),
+				separatorIndex: positionals.length,
+				flagValues,
+			};
 		}
 
 		const token = matchFlagToken(command.flagSpellings, arg);
 		if (token === undefined) {
 			// POSIX stop mode: from the first positional on, every word is kept as typed.
+			// No positional precedes this one, so the tail is the whole list.
 			if (passthrough) {
-				positionals.push(...argv.slice(index));
-				break;
+				const rest = argv.slice(index);
+				return { positionals: rest, separatorIndex: rest.length, flagValues };
 			}
 			positionals.push(arg);
 			continue;

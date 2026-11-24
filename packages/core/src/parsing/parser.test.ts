@@ -334,6 +334,16 @@ describe('parseArgs — variadic: "passthrough"', () => {
 		// `-` (stdin) is a positional, so it starts the passthrough too.
 		expect(parseArgs(exec, ["-", "-v"]).args).toEqual({ argv: ["-", "-v"] });
 	});
+
+	it("keeps an argv tail longer than the call stack's argument limit", () => {
+		const words = Array.from({ length: 150_000 }, () => "x");
+		expect(parseArgs(run, ["alpine", ...words]).args.command).toHaveLength(150_000);
+		const list = makeNode({
+			meta: { name: "list" },
+			args: [{ name: "files", type: "string", variadic: true }],
+		});
+		expect(parseArgs(list, ["--", ...words]).args.files).toHaveLength(150_000);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
