@@ -115,7 +115,7 @@ $ my-cli api --spec listUsers
 - For an `operationId`, the operation with its `method` and `path` added, and with the path item's shared `parameters` merged into its own: an operation parameter with the same `name` and `in` replaces the shared one.
 - An unknown target fails with exit code 1, and so does an `operationId` several operations share, naming their `METHOD path`s; pass the path instead.
 
-`--list` and `--spec` send no request, so with a path or a request flag (`-X`, `-H`, `-F`, `--body`, `--paginate`) they fail with a `PARSE` error instead of ignoring it: `--list sends no request: leave out the path, -X, -H, -F, --body and --paginate.`
+`--list` and `--spec` send no request, so with a path or a request flag (`-X`, `-H`, `-F`, `--body`, `--paginate`) they fail with a `PARSE` error instead of ignoring it: `--list sends no request: leave out the path, -X, -H, -F, --body and --paginate.` Together, they fail the same way: `Flags --list and --spec cannot be used together`.
 
 Both read the spec this way:
 

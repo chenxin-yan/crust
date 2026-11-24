@@ -458,6 +458,11 @@ export function createApiCommand(
 					// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
 					const json = (flags as { json?: unknown }).json === true;
 					const browse = flags.list ? "list" : flags.spec !== undefined ? "spec" : undefined;
+					if (flags.list && flags.spec !== undefined) {
+						throw new CrustError("PARSE", "Flags --list and --spec cannot be used together", {
+							flag: "spec",
+						});
+					}
 					if (
 						browse !== undefined &&
 						(args.path !== undefined ||

@@ -148,6 +148,18 @@ describe("api --list and --spec", () => {
 		expect(calls).toEqual([]);
 	});
 
+	it.each([
+		["--list", "--spec", "getUser"],
+		["--spec", "getUser", "--list"],
+	])("rejects api %s %s %s as a usage error", async (...argv) => {
+		const calls = stubFetch();
+		const { stdout, stderr, exitCode } = await captureExecute(buildApp(), ["api", ...argv]);
+
+		expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 2 });
+		expect(stderr).toContain("Flags --list and --spec cannot be used together");
+		expect(calls).toEqual([]);
+	});
+
 	it("prints an operation by operationId with $refs used once inlined (URI-encoded too), recursive ones under $refs, and non-pointer fragments kept", async () => {
 		const { stdout, exitCode } = await captureExecute(buildApp(), ["api", "--spec", "createUser"]);
 
