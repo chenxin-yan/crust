@@ -17,12 +17,7 @@ import {
 } from "./errors.ts";
 import { throwIfAborted } from "./http.ts";
 import { fileKeys, type KeyringKind, type WriteKey } from "./keyring.ts";
-import type {
-	AuthWarning,
-	CredentialStore,
-	CredentialStoreOptions,
-	CredentialStoreStatus,
-} from "./types.ts";
+import type { CredentialStore, CredentialStoreOptions, CredentialStoreStatus } from "./types.ts";
 
 // The credentials file: one strict `@crustjs/store` document, changed only
 // through synchronous `store.update()` updaters and deleted only by `store.reset()`. Records are
@@ -139,13 +134,12 @@ export interface CredentialStoreInternals {
 	 * How a write into `document` stores its secret, picked before the document lock: the file's
 	 * key, else the keyring's (created once), else plaintext. Only a `login` replaces a file key
 	 * the keyring no longer holds. `signal` is observed until a key write is dispatched. A
-	 * plaintext fallback goes to `onWarning` when given, else to the store's `keyring.onWarning`.
+	 * plaintext fallback goes to the store's `keyring.onWarning`.
 	 */
 	writeKey(
 		document: CredentialsDocument | undefined,
 		login: boolean,
 		signal: AbortSignal | undefined,
-		onWarning?: (warning: AuthWarning) => void,
 	): Promise<WriteKey>;
 	/** `record` (key `key`) holding `secret`, stored as `writeKey` says. */
 	withSecret(
@@ -631,8 +625,8 @@ export function credentialStore(options: CredentialStoreOptions): CredentialStor
 		update,
 		lockIdentity,
 		reveal,
-		writeKey: (document, login, signal, onWarning) =>
-			keys.forWrite(document?.keyId, document?.keyring, login, signal, onWarning),
+		writeKey: (document, login, signal) =>
+			keys.forWrite(document?.keyId, document?.keyring, login, signal),
 		withSecret,
 	});
 	return credentials;

@@ -1001,6 +1001,85 @@ describe("storage", () => {
 		expect(left).toEqual([]);
 	});
 
+	it("without a keyring, a call that joins a shared refresh while its token request runs is told too", async () => {
+		let issued = 0;
+		let answer!: () => void;
+		const answered = new Promise<void>((resolve) => (answer = resolve));
+		const { auth, tokenRequests } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: async () => {
+				issued += 1;
+				if (issued > 1) await answered;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		const flight = () => [...refreshFlights.values()][0];
+		const warnings: AuthWarning[] = [];
+		// The first call starts the refresh without a callback; the second joins once its request is sent.
+		const starter = auth.token();
+		await vi.waitFor(() => expect(tokenRequests()).toHaveLength(2));
+		const joiner = auth.token({ onWarning: (warning) => warnings.push(warning) });
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(2));
+		answer();
+		expect((await starter).value).toBe("AT2");
+		expect((await joiner).value).toBe("AT2");
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect(tokenRequests()).toHaveLength(2);
+	});
+
+	it("without a keyring, a throwing onWarning fails only its own call of a shared refresh", async () => {
+		let issued = 0;
+		const { auth, app, issuer, fetch, tokenRequests } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		// The login's lock is held until both calls wait for the same refresh.
+		const store = credentialStore({ app });
+		const { key } = createTokenSource({
+			config: defineServers({ servers: [{ issuer, clientId: "cli" }] }),
+			identity: { issuer, clientId: "cli", apiOrigins: [API] },
+			store,
+			fetch,
+		});
+		const lock = await holdLock((fn) => credentialStoreInternals(store).lockIdentity(key, fn));
+		const flight = () => [...refreshFlights.values()][0];
+		const broken = new Error("broken output");
+		const warnings: AuthWarning[] = [];
+		const thrower = auth.token({
+			onWarning: () => {
+				throw broken;
+			},
+		});
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(1));
+		const other = auth.token({ onWarning: (warning) => warnings.push(warning) });
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(2));
+		await lock.release();
+		expect(await rejection(thrower)).toBe(broken);
+		expect((await other).value).toBe("AT2");
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect(tokenRequests()).toHaveLength(2);
+	});
+
+	it("without a keyring, a login that is stale stores nothing and reports no plaintext write", async () => {
+		const { auth } = setup();
+		const play = browser();
+		const warnings: AuthWarning[] = [];
+		const error = await rejection(
+			auth.login({
+				onUrl: async (prompt) => {
+					await auth.logout();
+					play.onUrl(prompt);
+				},
+				onCode: noCode,
+				onWarning: (warning) => warnings.push(warning),
+			}),
+		);
+		expect(error).toBeInstanceOf(StaleCommitError);
+		expect(warnings).toEqual([]);
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
+	});
+
 	it("strict refuses to store a login without a keyring, with a typed key error", async () => {
 		const { auth } = setup(undefined, { strict: true });
 		const error = await rejection(auth.login({ onUrl: browser().onUrl, onCode: noCode }));

@@ -61,11 +61,10 @@ const TOKEN_ERROR_CODES: ReadonlySet<string> = new Set([
 ]);
 
 interface Flight {
-	readonly promise: Promise<AccessToken>;
+	/** The token, and whether the refresh stored it in plaintext, which each waiter reports. */
+	readonly promise: Promise<{ token: AccessToken; plaintext: boolean }>;
 	readonly controller: AbortController;
 	waiters: number;
-	/** The `onWarning` of each waiter still attached, which a plaintext write reports to. */
-	readonly warnings: OnWarning[];
 }
 
 /** In-process single-flight refreshes, by credentials file and key. */
@@ -263,8 +262,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 	async function refresh(
 		generation: string,
 		signal: AbortSignal,
-		warnings: readonly OnWarning[],
-	): Promise<AccessToken> {
+	): Promise<{ token: AccessToken; plaintext: boolean }> {
 		return store.lockIdentity(
 			key,
 			async () => {
@@ -274,19 +272,13 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 				// With the lock held, a mark's refresh is no longer running: its outcome is unknown.
 				if (record.refreshInProgress) throw new RefreshOutcomeUnknownError();
 				// Another process or source refreshed or logged in meanwhile: use its token.
-				if (record.generation !== generation) return tokenOf(document, record, signal);
+				if (record.generation !== generation) {
+					return { token: await tokenOf(document, record, signal), plaintext: false };
+				}
 				// The keys come first: one that can't be read or created stops the refresh unmarked.
 				const secret = await store.reveal(document, key, record, signal);
 				if (secret.refreshToken === undefined) throw new LoginRequiredError("expired");
-				// Without a waiter's own callback, the store's `keyring.onWarning` gets it.
-				const onWarning =
-					warnings.length === 0
-						? undefined
-						: (warning: AuthWarning) => {
-								// A copy: a callback that aborts its own call detaches it from `warnings`.
-								for (const notify of warnings.slice()) notify(warning);
-							};
-				const writeKey = await store.writeKey(document, false, signal, onWarning);
+				const writeKey = await store.writeKey(document, false, signal);
 				const server = await discoverServer(signal);
 				throwIfAborted(signal);
 				const storeId = document.storeId;
@@ -342,7 +334,10 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 						}
 						return withRecord(withFileKey(current as CredentialsDocument, writeKey).document, next);
 					});
-					return accessToken(tokens.accessToken, next.generation as string);
+					return {
+						token: accessToken(tokens.accessToken, next.generation as string),
+						plaintext: writeKey.kind === "plaintext",
+					};
 				} catch (error) {
 					// The tokens are discarded; the mark stays unless a reset removed the record.
 					throw error instanceof LoginRequiredError ? error : new RefreshOutcomeUnknownError();
@@ -383,32 +378,34 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 		return error instanceof OAuthError ? error : new RefreshFailedError();
 	}
 
-	/** Joins this credential's refresh in this process, or starts it. */
-	function sharedRefresh(
+	/**
+	 * Joins this credential's refresh in this process, or starts it. A plaintext write is
+	 * reported to each waiter's own `onWarning` once the refresh is done, never to one that left.
+	 */
+	async function sharedRefresh(
 		generation: string,
 		signal: AbortSignal | undefined,
 		onWarning: OnWarning | undefined,
-	) {
+	): Promise<AccessToken> {
 		let flight = refreshFlights.get(id);
 		if (!flight) {
 			const controller = new AbortController();
-			const warnings: OnWarning[] = [];
-			const promise = refresh(generation, controller.signal, warnings).finally(() => {
+			const promise = refresh(generation, controller.signal).finally(() => {
 				if (refreshFlights.get(id) === flight) refreshFlights.delete(id);
 			});
 			promise.catch(() => {});
-			flight = { promise, controller, waiters: 0, warnings };
+			flight = { promise, controller, waiters: 0 };
 			refreshFlights.set(id, flight);
 		}
 		const joined = flight;
 		joined.waiters += 1;
-		if (onWarning) joined.warnings.push(onWarning);
-		return detach(joined.promise, signal, () => {
+		const { token, plaintext } = await detach(joined.promise, signal, () => {
 			joined.waiters -= 1;
-			if (onWarning) joined.warnings.splice(joined.warnings.indexOf(onWarning), 1);
 			// Until the mark is written, the refresh stops when its last waiter leaves.
 			if (joined.waiters === 0) joined.controller.abort(new AbortError());
 		});
+		if (plaintext) onWarning?.({ code: "plaintext-storage" });
+		return token;
 	}
 
 	async function getFrom(
@@ -584,7 +581,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 							key,
 							async () => {
 								throwIfAborted(stop);
-								const writeKey = await store.writeKey(await store.read(), true, stop, onWarning);
+								const writeKey = await store.writeKey(await store.read(), true, stop);
 								const stored = await store.withSecret(writeKey, key, record, {
 									accessToken: tokens.accessToken,
 									refreshToken: tokens.refreshToken,
@@ -609,6 +606,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 									discarded = next.discarded;
 									return withRecord(next.document, stored);
 								}, stop);
+								if (writeKey.kind === "plaintext") onWarning?.({ code: "plaintext-storage" });
 								return redacted(
 									{
 										identity: { ...identity, apiOrigins: [...identity.apiOrigins] },
