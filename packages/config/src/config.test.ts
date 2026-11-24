@@ -373,14 +373,16 @@ describe("get, list and set", () => {
 			config.set({ region: "eu" }),
 			config.set({ region: "us" }),
 		]);
-		const patch = { replicas: 3 };
+		const patch = { replicas: 3, tags: ["a"] };
 		const saving = config.set(patch);
 		patch.replicas = 0;
+		patch.tags.push("b");
 		await saving;
 		expect(JSON.parse(readFileSync(userFile(), "utf8"))).toEqual({
 			region: "us",
 			pager: "less",
 			replicas: 3,
+			tags: ["a"],
 		});
 	});
 
