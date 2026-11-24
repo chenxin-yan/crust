@@ -10,7 +10,7 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
-import { textOutput } from "../text-output.ts";
+import { optionalTextOutput } from "../text-output.ts";
 
 // Renderers, templates and file writing load on first use (see render.ts), so
 // registering completion() costs nothing until a script is generated.
@@ -160,7 +160,7 @@ const completionFactory: ExtensionFactory<
 						description: OUTPUT_DIR_DESCRIPTION,
 					},
 				})
-				.output(textOutput)
+				.output(optionalTextOutput)
 				.action(async (context) => {
 					const renderer = await loadRenderer();
 					const outputDir = context.flags["output-dir"];

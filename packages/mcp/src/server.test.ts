@@ -1,3 +1,7 @@
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
 	type AnyCrust,
 	Crust,
@@ -8,7 +12,7 @@ import {
 	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
-import { json, nextSteps } from "@crustjs/extensions";
+import { completion, json, nextSteps } from "@crustjs/extensions";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -464,6 +468,21 @@ describe("createMcpServer", () => {
 			content: [unmet, { type: "text", text: "" }],
 			isError: true,
 		});
+	});
+
+	it("reports completion --output-dir as a success, though it returns no script", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "crust-mcp-completion-"));
+		cleanups.push(() => rm(dir, { recursive: true, force: true }));
+		const app = new Crust("cli", { version: "1.0.0" }).extend(completion());
+		const client = await connect(app, { include: [["completion"]] });
+
+		const result = await client.callTool({
+			name: "completion",
+			arguments: { shell: "bash", "output-dir": dir },
+		});
+
+		expect(result.isError).toBeUndefined();
+		expect((await readdir(dir)).length).toBeGreaterThan(0);
 	});
 
 	it("sends progress notifications for yielded events when the request has a progress token", async () => {
