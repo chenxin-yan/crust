@@ -68,6 +68,9 @@ const runtimes = [bun, ...(which("node") ? ["node"] : [])];
 // The fd writer and its guarantees apply outside Windows; Windows keeps the stream writer.
 const fdWriter = process.platform !== "win32";
 
+// The spawn timeout kills `bash`, not the writer in its pipeline: a regressed fixture must end itself.
+const PIPELINE_DEADLINE = "setTimeout(() => process.exit(9), 4_000).unref();\n";
+
 const run = (runtime: string, source: string) =>
 	spawnSync(runtime, ["--input-type=module", "--eval", source], {
 		encoding: "utf8",
@@ -176,7 +179,7 @@ await new Crust("pipe-cli")
 		it.runIf(fdWriter)(
 			`stops a streaming action piped to head -1 and aborts its signal (${runtime})`,
 			() => {
-				const source = `${importCore("dist/index.js")}await new Crust("follow")
+				const source = `${importCore("dist/index.js")}${PIPELINE_DEADLINE}await new Crust("follow")
 	.action(async ({ stdout, signal }) => {
 		try {
 			for (let n = 0; !signal.aborted; n++) {
@@ -210,7 +213,7 @@ await new Crust("pipe-cli")
 		it.runIf(fdWriter)(
 			`dies by a SIGINT that arrives right after stdout closed (${runtime})`,
 			() => {
-				const source = `${importCore("dist/index.js")}await new Crust("follow")
+				const source = `${importCore("dist/index.js")}${PIPELINE_DEADLINE}await new Crust("follow")
 	.action(async ({ stdout }) => {
 		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 		for (;;) {
@@ -237,6 +240,45 @@ await new Crust("pipe-cli")
 					{ encoding: "utf8", timeout: 5_000 },
 				);
 				expect({ stdout, status }).toEqual({ stdout: "130 0\n", status: 0 });
+			},
+		);
+
+		it.runIf(fdWriter)(
+			`keeps an in-process host alive through a SIGINT after stdout closed (${runtime})`,
+			() => {
+				const source = `${importCore("dist/index.js")}${PIPELINE_DEADLINE}const code = await new Crust("follow")
+	.action(async ({ stdout }) => {
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+		for (;;) {
+			try {
+				stdout("x");
+			} catch {
+				break;
+			}
+			await sleep(5);
+		}
+		process.kill(process.pid, "SIGINT");
+		await sleep(500);
+	})
+	.execute({ argv: [], io: { stderr: (text) => console.error(text) } });
+console.error(\`resolved \${code}\`);
+process.exitCode = 0;
+`;
+				const { stdout, stderr, status } = spawnSync(
+					"bash",
+					[
+						"-c",
+						'"$0" --input-type=module --eval "$1" | true; echo "${PIPESTATUS[*]}"',
+						runtime,
+						source,
+					],
+					{ encoding: "utf8", timeout: 5_000 },
+				);
+				expect({ stdout, stderr, status }).toEqual({
+					stdout: "0 0\n",
+					stderr: "resolved 141\n",
+					status: 0,
+				});
 			},
 		);
 

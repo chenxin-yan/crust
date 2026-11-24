@@ -112,14 +112,14 @@ Every issue the `.output()` schema reports for one result is aggregated into one
 
 ## Propagation boundaries
 
-| Failure                                                                                                                      | `run()`                                | `execute()`                                                                                 |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Eager builder checks (direct inputs, sibling names/aliases)                                                                  | Throws at the builder call             | Throws at the builder call                                                                  |
-| Deferred recipe, inherited-flag, or Context-demand checks                                                                    | `failed` outcome when encountered      | Rendered when encountered; exit `1`                                                         |
-| Preparation                                                                                                                  | `failed` outcome; no hooks run         | Rendered directly; exit `1`                                                                 |
-| Routing, argv syntax, typed `run()` input binding                                                                            | `failed` outcome; no hooks run         | Rendered via `onError`; exit `2`                                                            |
-| Extension hooks before the action (including `bindInput`), validation, Context setup, Command Action, `.output()` validation | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1` (`2` for validation)                                       |
-| Cancellation (an `AbortError`, even when cleanup then fails)                                                                 | `failed` outcome                       | Offered to `onError`, else only cleanup failures render; exit `130` (`143` after `SIGTERM`) |
+| Failure                                                                                                                      | `run()`                                | `execute()`                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Eager builder checks (direct inputs, sibling names/aliases)                                                                  | Throws at the builder call             | Throws at the builder call                                                                                               |
+| Deferred recipe, inherited-flag, or Context-demand checks                                                                    | `failed` outcome when encountered      | Rendered when encountered; exit `1`                                                                                      |
+| Preparation                                                                                                                  | `failed` outcome; no hooks run         | Rendered directly; exit `1`                                                                                              |
+| Routing, argv syntax, typed `run()` input binding                                                                            | `failed` outcome; no hooks run         | Rendered via `onError`; exit `2`                                                                                         |
+| Extension hooks before the action (including `bindInput`), validation, Context setup, Command Action, `.output()` validation | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1` (`2` for validation)                                                                    |
+| Cancellation (an `AbortError`, even when cleanup then fails)                                                                 | `failed` outcome                       | Offered to `onError`, else only cleanup failures render; exit `130` (`143` after `SIGTERM`, `141` after a closed stdout) |
 
 When definition checks run:
 
@@ -163,6 +163,6 @@ When work throws the signal's reason, as `signal.throwIfAborted()` does, that er
 
 Cleanup that fails while cancellation unwinds wraps it in a `SuppressedError`. A `SuppressedError` whose `.suppressed` side is cancellation is still cancellation:
 
-- `execute()` exits `130`, or `143` after `SIGTERM`.
+- `execute()` exits `130`, `143` after `SIGTERM`, or `141` after a closed stdout.
 - `onError` hooks receive the failure as usual.
 - If no hook claims it, only the cleanup failures render, never the abort. Each goes to the renderer's `cleanup` when it has one. Otherwise a failed Context disposal renders as `Cleanup failed: message`, and a `SuppressedError` thrown by the action's own `await using` renders its disposal failure as `Error: message`.

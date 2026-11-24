@@ -1238,6 +1238,11 @@ export async function executeInvocation(
 			// (npm/cli#8164), and a forwarded SIGTERM can meet a process-group kill, so one signal
 			// arrives twice within a millisecond; a person pressing twice takes far longer.
 			if (performance.now() - interruptedAt < RELAYED_SIGNAL_WINDOW_MS) return;
+			// An in-process host survives its first real signal, also after a closed stdout cancelled the run.
+			if (inProcess && interruptedAt === Number.NEGATIVE_INFINITY) {
+				interruptedAt = performance.now();
+				return;
+			}
 			process.removeListener(name, onSignal);
 			if (process.listenerCount(name) === 0) process.kill(process.pid, name);
 		};
@@ -1275,6 +1280,8 @@ export async function executeInvocation(
 					extensionContext = context;
 				},
 				async (error, context) => {
+					// A writer that bypasses `stdout()` (raw bytes to fd 1): cancel before hooks and cleanup run.
+					onStdoutClosed(error);
 					// Recorded before the hooks run: an `onError` hook that rewrites `exitCode` changes only the output.
 					rendered = { error, exitCode: failureExitCode(error, cancelledExitCode) };
 					return renderFailure(error, argv, prepared, output, signal, env, context);

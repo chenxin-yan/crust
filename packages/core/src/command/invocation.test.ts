@@ -799,10 +799,25 @@ describe("Invocation pipeline — output failures", () => {
 		expect(await execute(ignoring, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
 
 		// A writer that bypasses stdout(), such as raw bytes to the process's stdout.
-		const direct = new Crust("app").action(() => {
+		// Hooks see the cancellation, and a failing cleanup keeps 141.
+		let postRunCause: unknown;
+		const leaky = defineExtension(defineExtensionId("leaky"))
+			.setup(({ defer }) =>
+				defer(() => {
+					throw new Error("close failed");
+				}),
+			)
+			.postRun(({ signal }) => {
+				postRunCause = signal.reason?.cause;
+			});
+		const direct = new Crust("app").extend(leaky).action(() => {
 			throw stdoutClosed();
 		});
-		expect(await execute(direct, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
+		expect(await execute(direct, stdoutClosed)).toEqual({
+			exitCode: 141,
+			stderr: ["Cleanup failed: close failed"],
+		});
+		expect(postRunCause).toBe("SIGPIPE");
 	});
 
 	it("fails the invocation with 1 on any other stdout write error", async () => {
