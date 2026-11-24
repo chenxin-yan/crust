@@ -107,7 +107,7 @@ export async function writeSnapshotProtocol(
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		throw new Error(
-			`The Command Snapshot cannot be written as JSON: ${message}\nA definition key an Extension owns holds a value JSON cannot carry, such as a BigInt or a cyclic object.`,
+			`The Command Snapshot cannot be written as JSON: ${message}\nA default, or a definition key an Extension owns, holds a value JSON cannot carry, such as a BigInt or a cyclic object.`,
 			{ cause: error },
 		);
 	}

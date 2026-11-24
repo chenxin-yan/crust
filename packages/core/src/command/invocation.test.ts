@@ -89,7 +89,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls.join("\n")).toMatch(
-			/^The Command Snapshot cannot be written as JSON: .*BigInt.*\nA definition key an Extension owns holds a value JSON cannot carry/s,
+			/^The Command Snapshot cannot be written as JSON: .*BigInt.*\nA default, or a definition key an Extension owns, holds a value JSON cannot carry/s,
 		);
 	});
 
