@@ -1307,7 +1307,7 @@ export async function executeInvocation(
 				// A throwing getter on an arbitrary thrown value must not replace the failure.
 			}
 			if (cleanupFailure) renderCleanupFailure(cleanupFailure.error, output, "Cleanup failed");
-			// Cancellation keeps its exit code (130, or 143 after SIGTERM) even when cleanup failed
+			// Cancellation keeps its exit code (130, 143 after SIGTERM, 141 after a closed stdout) even when cleanup failed
 			// while unwinding it (callers such as shell loops must still see the interrupt).
 			exitCode =
 				rendered && Object.is(error, rendered.error)
