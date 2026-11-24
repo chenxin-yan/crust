@@ -43,8 +43,8 @@ templates/base/_gitignore   -> my-project/.gitignore
 templates/base/__tests__/   -> my-project/__tests__/
 ```
 
-- A single leading `_` on a copied file's name becomes `.`; `__` stays unchanged. Directory names are never renamed.
-- Symlinks in the template are skipped.
+- A single leading `_` on a copied file's name becomes `.`; `__` and a file named only `_` stay unchanged. Directory names are never renamed.
+- Symlinks in the template, to files or directories, are skipped.
 - To layer templates, call `scaffold()` more than once with `conflict: "overwrite"`.
 
 ## Files written from code
@@ -79,7 +79,7 @@ See [Locating templates](#locating-templates) for how `template` resolves. A cal
 
 A destination holding only `.git` counts as empty, so `git init` before scaffolding needs no `conflict`.
 
-Every check runs before anything is deleted or written: the template exists, there is something to write, every `files` key stays inside the new project, nothing is written inside `.git`, no planned file is also the directory of another, the conflict rule, and the symlink rules below. `"replace"` also refuses a template inside the destination, or a destination inside the template, since it would delete template files before copying them. `"overwrite"` refuses an existing directory where a file goes, or an existing file where a directory goes. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
+Every check runs before anything is deleted or written: the template exists and every file to copy can be read, there is something to write, every `files` key stays inside the new project, nothing is written inside `.git`, no two planned files differ only in letter case, no planned file is also the directory of another in any letter case, the conflict rule, and the symlink rules below. `"replace"` also refuses a template inside the destination, or a destination inside the template, since it would delete template files before copying them. `"overwrite"` refuses an existing directory where a file goes, or an existing file where a directory goes. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
 
 Symlinks in the destination:
 

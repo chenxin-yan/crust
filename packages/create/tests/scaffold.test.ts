@@ -202,6 +202,38 @@ describe("scaffold", () => {
 		},
 	);
 
+	// One folder on a case-insensitive filesystem, so the rule holds on every platform, as for .git.
+	it.each([
+		[{ A: "one", "a/b": "two" }, '"A" cannot be both a file and the directory of'],
+		[{ "README.md": "one", "readme.md": "two" }, "differ only in letter case"],
+	])("refuses paths that differ only in letter case before deleting anything: %j", async (files, message) => {
+		mkdirSync(destDir);
+		writeFileSync(join(destDir, "keep.txt"), "keep");
+
+		for (const dryRun of [true, false]) {
+			await expect(scaffold({ dest: destDir, files, conflict: "replace", dryRun })).rejects.toThrow(
+				message,
+			);
+		}
+		expect(readdirSync(destDir)).toEqual(["keep.txt"]);
+	});
+
+	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+		"refuses an unreadable template file before deleting anything, in a dry run as well",
+		async () => {
+			createTemplateFile("a.txt", "a");
+			createTemplateFile("secret.txt", "s");
+			chmodSync(join(templateDir, "secret.txt"), 0o000);
+			mkdirSync(destDir);
+			writeFileSync(join(destDir, "old.txt"), "old");
+
+			for (const dryRun of [true, false]) {
+				await expect(scaffoldTemplate({ conflict: "replace", dryRun })).rejects.toThrow("EACCES");
+			}
+			expect(readdirSync(destDir)).toEqual(["old.txt"]);
+		},
+	);
+
 	it("refuses an empty plan before deleting anything", async () => {
 		mkdirSync(destDir);
 		writeFileSync(join(destDir, "keep.txt"), "keep");
@@ -303,6 +335,13 @@ describe("scaffold", () => {
 			expect(existsSync(join(destDir, "file.txt"))).toBe(false);
 		});
 
+		it("'overwrite' onto the template itself keeps every file's bytes", async () => {
+			const result = await scaffold({ template: templateDir, dest: templateDir, conflict: "overwrite" });
+
+			expect(result.files).toEqual(["file.txt"]);
+			expect(readFileSync(join(templateDir, "file.txt"), "utf-8")).toBe("new content");
+		});
+
 		it("'overwrite' replaces conflicting files and leaves the others", async () => {
 			writeFileSync(join(destDir, "file.txt"), "old content");
 			writeFileSync(join(destDir, "other.txt"), "other");
@@ -342,6 +381,17 @@ describe("scaffold", () => {
 		expect(readOutputFile(join("__mocks__", "bar.ts"))).toBe("export default {}");
 	});
 
+	it("does not rename a file named only _", async () => {
+		createTemplateFile("_", "root");
+		createTemplateFile("sub/_", "nested");
+
+		const result = await scaffoldTemplate();
+
+		expect(result.files).toEqual(["_", join("sub", "_")]);
+		expect(readOutputFile("_")).toBe("root");
+		expect(readOutputFile(join("sub", "_"))).toBe("nested");
+	});
+
 	it("defaults conflict to 'abort'", async () => {
 		// Create a non-empty destination directory
 		mkdirSync(destDir, { recursive: true });
@@ -355,17 +405,22 @@ describe("scaffold", () => {
 
 	// Windows needs a privilege to create symlinks; the traversal itself is the same on every platform.
 	it.skipIf(process.platform === "win32")(
-		"skips symlinked files and writes only template-relative paths under dest",
+		"skips symlinked files and directories and writes only template-relative paths under dest",
 		async () => {
 			createTemplateFile("src/index.ts", "// my-app");
 			const outsideFile = join(tempDir, "outside.txt");
 			writeFileSync(outsideFile, "outside", "utf-8");
 			symlinkSync(outsideFile, join(templateDir, "linked.txt"));
+			const outsideDir = join(tempDir, "outside-dir");
+			mkdirSync(outsideDir);
+			writeFileSync(join(outsideDir, "secret.txt"), "secret");
+			symlinkSync(outsideDir, join(templateDir, "linked-dir"));
 
 			const result = await scaffoldTemplate();
 
 			expect(result.files).toEqual([join("src", "index.ts")]);
 			expect(existsSync(join(destDir, "linked.txt"))).toBe(false);
+			expect(existsSync(join(destDir, "linked-dir"))).toBe(false);
 			expect(readOutputFile(join("src", "index.ts"))).toBe("// my-app");
 		},
 	);
@@ -451,6 +506,27 @@ describe("scaffold", () => {
 			}
 			expect(readFileSync(join(destDir, ".git", "config"), "utf-8")).toBe("[core]\n");
 		});
+
+		it.each([
+			["the destination root", "link", "."],
+			["a parent folder", "sub/link", ".."],
+		])(
+			"refuses a path into .git through a link to %s, in a dry run as well",
+			async (_, link, target) => {
+				mkdirSync(join(destDir, ".git"));
+				writeFileSync(join(destDir, ".git", "config"), "[core]\n");
+				mkdirSync(join(destDir, "sub"));
+				symlinkSync(target, join(destDir, link));
+				const key = `${link}/.git/config`;
+
+				for (const dryRun of [true, false]) {
+					await expect(
+						scaffold({ dest: destDir, files: { [key]: "x" }, conflict: "overwrite", dryRun }),
+					).rejects.toThrow("is inside .git");
+				}
+				expect(readFileSync(join(destDir, ".git", "config"), "utf-8")).toBe("[core]\n");
+			},
+		);
 
 		it("writes through a link that stays inside the destination", async () => {
 			createTemplateFile("alias.txt", "my-app");

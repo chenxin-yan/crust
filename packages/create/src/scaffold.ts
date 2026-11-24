@@ -1,5 +1,7 @@
 import {
+	accessSync,
 	closeSync,
+	constants,
 	fchmodSync,
 	lstatSync,
 	mkdirSync,
@@ -28,7 +30,8 @@ import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
  *
  * For example, `_gitignore` becomes `.gitignore`.
  * Files starting with `__` (double underscore) are left unchanged to avoid
- * collisions with conventional directory names like `__tests__` or `__mocks__`.
+ * collisions with conventional directory names like `__tests__` or `__mocks__`,
+ * and a file named only `_` is left unchanged, since `.` is no file name.
  * Only the filename is renamed — parent directories are left unchanged.
  *
  * @param relativePath - The file path relative to the template root.
@@ -38,7 +41,7 @@ function renameDotfile(relativePath: string): string {
 	const dir = dirname(relativePath);
 	const base = relativePath.slice(dir === "." ? 0 : dir.length + 1);
 
-	if (base.startsWith("_") && !base.startsWith("__")) {
+	if (base.length > 1 && base.startsWith("_") && !base.startsWith("__")) {
 		const renamed = `.${base.slice(1)}`;
 		return dir === "." ? renamed : join(dir, renamed);
 	}
@@ -108,6 +111,9 @@ function assertDestinationWritable(
 				throw new Error(`Destination path "${current}" is a symlink into .git.`);
 			}
 			stat = statSync(target);
+			current = target;
+		} else if (isGitPath(relative(realDestDir, current))) {
+			throw new Error(`Destination path "${current}" is inside .git.`);
 		}
 		const isFile = index === segments.length - 1;
 		if (stat.isDirectory() === isFile) {
@@ -141,7 +147,9 @@ function assertDestinationWritable(
  * @throws When the template source cannot be resolved, does not exist, or is not a directory.
  * @throws When there is nothing to write: the template is empty and `files` has no entries.
  * @throws When `dest` is empty, or a `files` key is absolute or leaves the destination.
- * @throws When a planned file is inside `.git`, or one planned file is the directory of another.
+ * @throws When a planned file is inside `.git`, two planned files differ only in letter case, or
+ *   one planned file is the directory of another in any letter case.
+ * @throws When a template file to copy cannot be read.
  * @throws When `dest` exists and is not a directory.
  * @throws When `conflict` is `"abort"` and the destination holds anything besides `.git`.
  * @throws When `conflict` is `"replace"` and the template and the destination contain each other.
@@ -184,13 +192,19 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 				`Template path "${templateDir}" is not a directory (from template: "${String(template)}").`,
 			);
 		}
-		// Relative string listing, not Dirents: Yarn PnP's zip filesystem reports Dirent.parentPath
-		// as ".", which would make every template file resolve outside the destination.
-		// lstat keeps symlinks excluded.
-		for (const relFromTemplate of readdirSync(templateDir, { recursive: true, encoding: "utf8" })) {
-			const source = join(templateDir, relFromTemplate);
-			if (lstatSync(source).isFile()) plan.set(renameDotfile(relFromTemplate), { source });
-		}
+		// Names, not Dirents: Yarn PnP's zip filesystem reports Dirent.parentPath as ".", which would
+		// make every template file resolve outside the destination. Descending only into what lstat
+		// calls a directory skips symlinked files and directories alike.
+		const walk = (relDir: string): void => {
+			for (const name of readdirSync(join(templateDir, relDir))) {
+				const relFromTemplate = join(relDir, name);
+				const source = join(templateDir, relFromTemplate);
+				const stat = lstatSync(source);
+				if (stat.isDirectory()) walk(relFromTemplate);
+				else if (stat.isFile()) plan.set(renameDotfile(relFromTemplate), { source });
+			}
+		};
+		walk("");
 	}
 	for (const [key, text] of Object.entries(files)) {
 		const relPath = filesKeyPath(destDir, key);
@@ -199,13 +213,25 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	if (plan.size === 0) {
 		throw new Error("Nothing to scaffold: the template has no files and `files` has no entries.");
 	}
+	// Paths are compared in any letter case, as for .git, so the project fits a case-insensitive
+	// filesystem.
+	const folded = new Map<string, string>();
+	for (const [relPath, { source, text }] of plan) {
+		const other = folded.get(relPath.toLowerCase());
+		if (other !== undefined) {
+			throw new Error(`"${other}" and "${relPath}" differ only in letter case.`);
+		}
+		folded.set(relPath.toLowerCase(), relPath);
+		if (source !== undefined && text === undefined) accessSync(source, constants.R_OK);
+	}
 	for (const relPath of plan.keys()) {
 		if (isGitPath(relPath)) {
 			throw new Error(`"${relPath}" is inside .git.`);
 		}
 		for (let dir = dirname(relPath); dir !== "."; dir = dirname(dir)) {
-			if (plan.has(dir)) {
-				throw new Error(`"${dir}" cannot be both a file and the directory of "${relPath}".`);
+			const file = folded.get(dir.toLowerCase());
+			if (file !== undefined) {
+				throw new Error(`"${file}" cannot be both a file and the directory of "${relPath}".`);
 			}
 		}
 	}
@@ -255,11 +281,13 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 			continue;
 		}
 		// Permission bits go on before the bytes, so a private file is never readable by others.
+		// Read before opening: with `template` as `dest`, opening truncates the source.
 		const mode = statSync(source).mode & 0o777;
+		const content = text ?? readFileSync(source);
 		const fd = openSync(destFilePath, "w", mode);
 		try {
 			fchmodSync(fd, mode);
-			writeFileSync(fd, text ?? readFileSync(source));
+			writeFileSync(fd, content);
 		} finally {
 			closeSync(fd);
 		}
