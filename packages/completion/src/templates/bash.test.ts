@@ -18,6 +18,8 @@ const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
  * Drive a generated bash completion function as bash itself would: source
  * the script (registers `fnName`), set `COMP_WORDS`/`COMP_CWORD` for the
  * cursor position, invoke `fnName`, then print `COMPREPLY` one per line.
+ * `line` is `COMP_LINE`; by default the words with no space around a `=`
+ * word, as Readline splits `--flag=value`.
  * Returns the candidates sorted so equality checks are order-stable.
  */
 async function runBashCompletion(
@@ -26,6 +28,7 @@ async function runBashCompletion(
 	words: string[],
 	cwd?: string,
 	pathDir?: string,
+	line = words.reduce((l, w, i) => (w === "=" || words[i - 1] === "=" ? l + w : `${l} ${w}`)),
 ): Promise<string[]> {
 	const compWordsLines = words.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`).join("\n");
 	const compCword = words.length - 1;
@@ -35,8 +38,8 @@ ${pathDir === undefined ? "" : `PATH=${shQuote(pathDir)}:"$PATH"`}
 source ${shQuote(scriptPath)}
 ${compWordsLines}
 COMP_CWORD=${compCword}
-COMP_LINE=${shQuote(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
+COMP_LINE=${shQuote(line)}
+COMP_POINT=${line.length}
 ${fnName}
 for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 `;
@@ -382,7 +385,7 @@ describe("renderBash · one-character alias spellings", () => {
 describe("renderBash · punctuation shorts", () => {
 	let tmpDir: string;
 	let scriptPath: string;
-	const shorts = [".", "$", "*", "'", "\\", "`"];
+	const shorts = [".", "$", "*", "\\", "`"];
 
 	beforeAll(async () => {
 		const spec: CompletionCommand = {
@@ -400,6 +403,13 @@ describe("renderBash · punctuation shorts", () => {
 					type: "string",
 					takesValue: true,
 					choices: ["cash", "card"],
+				},
+				{
+					name: "quote",
+					spellings: ["-'"],
+					type: "string",
+					takesValue: true,
+					choices: ["east", "west"],
 				},
 			],
 			args: [],
@@ -429,6 +439,15 @@ describe("renderBash · punctuation shorts", () => {
 		]);
 		expect(
 			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-*", "-+", "cash", ""], tmpDir),
+		).toEqual(["serve"]);
+	});
+
+	it("completes and routes past the value of a short inserted quoted", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-\\'", "e"], tmpDir)).toEqual([
+			"east",
+		]);
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-\\'", "east", ""], tmpDir),
 		).toEqual(["serve"]);
 	});
 });
@@ -659,6 +678,18 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 		expect(
 			await runBashCompletion(wholeWordScript, "_mycli", ["mycli", "build", "--target=br"]),
 		).toEqual(["--target=browser"]);
+
+		// A space after the empty value ends it, as COMP_LINE shows.
+		expect(
+			await runBashCompletion(
+				scriptPath,
+				"_mycli",
+				["mycli", "build", "--target", "=", "--o"],
+				undefined,
+				undefined,
+				"mycli build --target= --o",
+			),
+		).toEqual(["--out"]);
 	});
 
 	it("after `--`, no subcommand or flag candidates are offered", async () => {

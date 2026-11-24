@@ -449,21 +449,27 @@ export function renderBash(
 	// bash_completionsV2.
 	// Readline splits `--flag=value` at `=`; the shim joins it back, as
 	// `_init_completion -n "="` does, so the walk sees one word.
-	// shortcut: `--flag= value` and `--flag =value` join too, since COMP_WORDS
-	// drops the spaces; upgrade by reading COMP_LINE if that ever matters.
+	// COMP_WORDS drops the spaces; COMP_LINE tells `--flag=value` from
+	// `--flag= value`. A word that is not a prefix of the rest of the line
+	// leaves `gap` at 0, so the shim joins as if no space were there.
 	lines.push(`${initFn}() {`);
 	lines.push("\tCOMPREPLY=()");
 	lines.push("\twords=()");
-	lines.push("\tlocal w joined=0");
+	lines.push('\tlocal w joined=0 gap line="$COMP_LINE"');
 	lines.push('\tfor w in "${COMP_WORDS[@]:0:COMP_CWORD+1}"; do');
+	lines.push("\t\tgap=0");
 	lines.push(
-		'\t\tif [[ "$w" == "=" && ${#words[@]} -gt 0 && "${words[${#words[@]}-1]}" == --* && "${words[${#words[@]}-1]}" != *=* ]]; then',
+		'\t\tif [[ "$line" == [[:space:]]* ]]; then gap=1; line="${line#"${line%%[![:space:]]*}"}"; fi',
+	);
+	lines.push('\t\tline="${line#"$w"}"');
+	lines.push(
+		'\t\tif (( ! gap )) && [[ "$w" == "=" && ${#words[@]} -gt 0 && "${words[${#words[@]}-1]}" == --* && "${words[${#words[@]}-1]}" != *=* ]]; then',
 	);
 	lines.push('\t\t\twords[${#words[@]}-1]+="="; joined=1');
-	lines.push("\t\telif (( joined )); then");
+	lines.push("\t\telif (( joined && ! gap )); then");
 	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=0');
 	lines.push("\t\telse");
-	lines.push('\t\t\twords[${#words[@]}]="$w"');
+	lines.push('\t\t\twords[${#words[@]}]="$w"; joined=0');
 	lines.push("\t\tfi");
 	lines.push("\tdone");
 	lines.push("\tcword=$(( ${#words[@]} - 1 ))");
@@ -527,6 +533,12 @@ export function renderBash(
 	lines.push("\telse");
 	lines.push(`\t\t${initFn} || return`);
 	lines.push("\tfi");
+	// A short quoted for insertion (`-\'`) is compared in its literal spelling.
+	lines.push("\tlocal _n");
+	lines.push("\tfor (( _n = 1; _n < cword; _n++ )); do");
+	lines.push('\t\tif [[ "${words[_n]}" == -\\\\? ]]; then words[_n]="-${words[_n]:2}"; fi');
+	lines.push("\tdone");
+	lines.push('\tif (( cword > 0 )); then prev="${words[cword-1]}"; fi');
 	lines.push("");
 	lines.push('\tlocal cmd_path=""');
 	lines.push(`\tlocal subcmds="${bashDoubleQuoteInner(rootSubcmds)}"`);
