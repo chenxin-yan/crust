@@ -317,10 +317,16 @@ describe("prompts()", () => {
 			"--description",
 			"d",
 		]);
-		// The cursor starts on "test", the preselected default.
-		const result = await answer(run, [/Features/, "", "space"]);
+		// Both defaults are preselected; the cursor wraps, so this deselects each wherever it starts.
+		const result = await answer(
+			run,
+			[/Targets/, ""],
+			[/Features/, "", "space", "down", "space"],
+			[/Config/, ""],
+		);
 		expect(result).toMatchObject({
-			stdout: "name=app dir=out template=vue features= git=true description=d\n",
+			stdout:
+				'name=app dir=out targets=api template=vue features= git=true description=d config={"enabled":true}\n',
 			exitCode: 0,
 		});
 	});
