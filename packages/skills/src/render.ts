@@ -203,9 +203,11 @@ function commandInvocation(node: CommandDocumentation): string {
 	return node.path.map(normalizeName).join(" ");
 }
 
-/** Displayed value type; integers and counts document as `number`, other richer Core types as `string`. */
-function displayType(type: DocumentationArg["type"] | DocumentationFlag["type"]): BaseValueType {
-	if (type === "integer" || type === "count") return "number";
+/** Displayed value type; `integer` and `count` show as themselves, other richer Core types as `string`. */
+function displayType(
+	type: DocumentationArg["type"] | DocumentationFlag["type"],
+): BaseValueType | "integer" | "count" {
+	if (type === "integer" || type === "count") return type;
 	return type === "number" || type === "boolean" ? type : "string";
 }
 
@@ -474,7 +476,10 @@ function renderFlagsTable(flags: readonly DocumentationFlag[]): string[] {
 
 function formatFieldDescription(field: DocumentationArg | DocumentationFlag): string {
 	const flag = "multiple" in field ? field : undefined;
-	const description = [field.description, flag?.multiple ? "Can be specified multiple times" : ""]
+	const description = [
+		field.description,
+		flag?.multiple || field.type === "count" ? "Can be specified multiple times" : "",
+	]
 		.filter(Boolean)
 		.join(". ");
 	return (

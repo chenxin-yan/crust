@@ -683,8 +683,8 @@ describe("renderSkill", () => {
 			expect(serve).toContain('| `--host` | string | No | `[default: "localhost"]` |');
 			expect(serve).toContain("| `--port` | number | No | `[default: 8080]` |");
 			expect(serve).toContain("| `--root` | string | No | - |");
-			expect(serve).toContain("| `--workers` | number | No | - |");
-			expect(serve).toContain("| `--verbose` | number | No | - |");
+			expect(serve).toContain("| `--workers` | integer | No | - |");
+			expect(serve).toContain("| `--verbose` | count | No | Can be specified multiple times |");
 			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | `[default: true]` |");
 		});
 	});
