@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Crust, defineCommand, defineContext } from "@crustjs/core";
+import {
+	Crust,
+	defineCommand,
+	defineContext,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
 import { didYouMean, help } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -12,6 +18,13 @@ import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import type { GeneratedDefinition } from "./commands.ts";
 import { type Api, type DefineApiOptions, defineApi } from "./define-api.ts";
 import { operations } from "./operations.ts";
+
+declare module "@crustjs/core" {
+	interface CommandExtras {
+		/** A command key only this file's `tiers` Extension owns. */
+		tier?: string;
+	}
+}
 
 // A built CLI reads `<dir>/<id>/`: `built.dir` makes this process one, else it runs from source.
 const built = vi.hoisted(() => ({ dir: undefined as string | undefined }));
@@ -279,6 +292,29 @@ describe("spec data files", () => {
 
 		expect(await builtApp.snapshot()).toEqual(await sourceApp.snapshot());
 		expect(await captureExecute(builtApp, ["api", "--list"])).toEqual(sourceList);
+	});
+
+	it("carry an override's package keys onto the command, from source and in a built CLI", async () => {
+		const tiers = defineExtension(defineExtensionId("tiers")).owns("tier");
+		const keyed = () =>
+			chained().override({ status: { tier: "gold" }, listUsers: { tier: "free" } });
+		const appWith = () => appOf(keyed()).extend(tiers);
+		const tierOf = async (app: ReturnType<typeof appWith>) => {
+			const { subCommands } = await app.snapshot();
+			return [
+				subCommands.health?.meta.tier,
+				subCommands.users?.subCommands["list-users"]?.meta.tier,
+			];
+		};
+
+		expect(await tierOf(appWith())).toEqual(["gold", "free"]);
+		const files = await ship(appWith());
+		expect(JSON.parse(files.get("openapi/index.json")!).commands[0].meta).toEqual({
+			tier: "gold",
+			description: "The status",
+			hidden: true,
+		});
+		expect(await tierOf(appWith())).toEqual(["gold", "free"]);
 	});
 
 	it("give a built CLI the operations path items with a $ref resolve to, also those their own methods override", async () => {

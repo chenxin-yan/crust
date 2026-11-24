@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { schema } from "@crustjs/extensions";
-import { createMcpServer } from "@crustjs/mcp";
+import { createMcpServer, mcp } from "@crustjs/mcp";
 import { writeSkills } from "@crustjs/skills";
 import { captureExecute } from "@crustjs/testing";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -155,6 +155,28 @@ describe("generated commands in their consumers", () => {
 				url: "https://api.example.com/v1/users",
 				body: '{"profile":{"bio":"hi"},"name":"Ada"}',
 			},
+		]);
+	});
+
+	it("MCP reads an override's mcp key as it reads a hand-written command's", async () => {
+		const keyed = acme.override({
+			listUsers: { hidden: false, mcp: { readOnlyHint: true } },
+			createUser: { mcp: false },
+		});
+		const server = await createMcpServer(
+			new Crust("acme").extend(mcp(), keyed.extension).add(...keyed.commands),
+		);
+		const client = new Client({ name: "test-client", version: "0.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+		cleanups.push(async () => {
+			await client.close();
+			await server.close();
+		});
+
+		const { tools } = await client.listTools();
+		expect(tools.map((tool) => [tool.name, tool.annotations])).toEqual([
+			["users_list-users", { readOnlyHint: true }],
 		]);
 	});
 

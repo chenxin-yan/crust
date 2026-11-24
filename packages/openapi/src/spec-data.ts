@@ -12,6 +12,7 @@ import {
 	groupMeta,
 	groupTree,
 	operationCommand,
+	type OperationMeta,
 	operationMeta,
 } from "./commands.ts";
 import type { CommandPlan } from "./lint.ts";
@@ -37,7 +38,8 @@ export interface SpecIndex {
 	/** The generated root commands, in order. */
 	readonly commands: readonly {
 		readonly name: string;
-		readonly meta: Pick<CommandConfig, "description" | "hidden">;
+		/** Its metadata, with the override's package keys (`CommandExtras`) as JSON. */
+		readonly meta: OperationMeta;
 		readonly operationId: string;
 		/** The data file its operation is read from. */
 		readonly file: string;

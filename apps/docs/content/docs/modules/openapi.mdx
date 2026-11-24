@@ -92,7 +92,7 @@ Every operation becomes a command unless an override [excludes](#overrides) it o
 
 <include lang="ts">../../../examples/modules/openapi.ts#start-empty</include>
 
-An agent that runs commands unattended gets every generated command as an MCP tool, the ones that write and delete too. Narrow them with a rule like the read-only one, and let it check a request first with [`api preview`](#preview-a-request): `include: [["api", "preview"]]` offers the preview without `api` itself, which could send the requests your rule left out.
+An agent that runs commands unattended gets every generated command as an MCP tool, the ones that write and delete too. Narrow them with a rule like the read-only one, or keep a command in the CLI and out of the tools with [`mcp: false`](/docs/modules/mcp#the-mcp-key) in its [override](#overrides): `.each((op) => ({ mcp: op.method === "get" ? { readOnlyHint: true } : false }))`. Let the agent check a request first with [`api preview`](#preview-a-request): `include: [["api", "preview"]]` offers the preview without `api` itself, which could send the requests your rule left out.
 
 ## The `api` command
 
@@ -340,6 +340,7 @@ One shape, given for every operation by `.each(op)` or for one operationId by `.
 - An `.override()` entry may also set `expect: { method, path }`, the operation it was written for: when the spec moves the operationId elsewhere, `crust build` fails (`override-stale`).
 - `positional` takes parameter names, and a body field is never positional. Values fill the arguments in order, so the required ones come first, and a list parameter, a variadic argument, comes last; any other order fails `crust build` (`positional-order`). `flagName` and `bind` also take top-level body field names. An entry set to `undefined` is no entry: the default applies.
 - `bind` functions may be async and get the command's `ctx`, typed by `.use()`; they run before every request.
+- Any other key is a command key an installed package owns, such as [`@crustjs/mcp`](/docs/modules/mcp#the-mcp-key)'s `mcp`: it is in the types once a file of the project imports that package, and it is set on the generated command's metadata as on a command you write, so the same `unowned-key` check applies. A built CLI keeps the value of a command at its root in the [data files](#the-spec), so give it JSON data.
 
 ## What `crust build` checks
 
