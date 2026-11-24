@@ -18,6 +18,7 @@ import {
 import type { CommandPlan } from "./lint.ts";
 import { kebab } from "./names.ts";
 import type { Operation } from "./operations.ts";
+import { commandExtras } from "./overrides.ts";
 import { record } from "./schema.ts";
 import { BUILT_SPEC_FILE } from "./spec-source.ts";
 import { METHODS, isLocalRef, pointerKeys } from "./spec-traversal.ts";
@@ -384,15 +385,17 @@ function holds(node: CommandSnapshot, plan: CommandPlan): boolean {
 
 /**
  * Whether `command` is the planned command: it declares `.output()` and has the plan's description,
- * hidden state and arguments, and at least its flags.
+ * hidden state, package keys and arguments, and at least its flags.
  */
 export function isPlannedCommand(command: CommandSnapshot, plan: CommandPlan): boolean {
 	const args = plan.inputs.filter(({ kind }) => kind === "arg").map(({ name }) => name);
+	const { name: _name, description, hidden, ...extras } = command.meta;
 	const meta = operationMeta(plan);
 	return (
 		command.output === true &&
-		command.meta.description === meta.description &&
-		(command.meta.hidden === true) === (meta.hidden === true) &&
+		description === meta.description &&
+		(hidden === true) === (meta.hidden === true) &&
+		process.getBuiltinModule("node:util").isDeepStrictEqual(extras, commandExtras(plan.fields)) &&
 		command.args.length === args.length &&
 		command.args.every(({ name }, position) => name === args[position]) &&
 		plan.inputs.every(({ kind, name }) => kind === "arg" || Object.hasOwn(command.flags, name))

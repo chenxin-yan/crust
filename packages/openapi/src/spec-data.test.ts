@@ -698,6 +698,25 @@ describe("spec data files", () => {
 		expect(
 			(await runBuildHooks(new Crust("acme").extend(acme.extension).add(acme.commands[0]!))).error,
 		).toContain('missing or different "users list-users", "users create-user"');
+		// With this handle's commands read, a handle that differs only in a package key, either way.
+		void acme.commands;
+		const keyed = acme.override({ status: { tier: "gold" } });
+		const tiers = defineExtension(defineExtensionId("tiers")).owns("tier");
+		for (const [extension, commands] of [
+			[acme.extension, keyed.commands],
+			[keyed.extension, acme.commands],
+		] as const) {
+			expect(
+				(
+					await runBuildHooks(
+						new Crust("acme")
+							.extend(extension)
+							.extend(tiers)
+							.add(...commands),
+					)
+				).error,
+			).toContain('missing or different "status"');
+		}
 	});
 
 	it("fail the build when the app holds another handle's commands and none of this one's", async () => {
