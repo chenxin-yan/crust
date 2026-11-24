@@ -56,7 +56,16 @@ function stepArgv(
 			if (typeof member.flag !== "string" || !Object.hasOwn(flag.flags, member.flag))
 				throw new Error(`"--${key}" value names none of its flags`);
 			const memberDef = flag.flags[member.flag]!;
-			const memberValue = memberDef.type === "boolean" ? true : member.value;
+			const boolean = memberDef.type === "boolean";
+			// As `run()` reads it: no other key, and a boolean member takes no value.
+			if (
+				Object.keys(member).some((k) => k !== "flag" && k !== "value") ||
+				(boolean && member.value !== undefined)
+			)
+				throw new Error(
+					`"--${key}" value is not ${boolean ? `{ flag: "${member.flag}" }` : `{ flag: "${member.flag}", value }`}`,
+				);
+			const memberValue = boolean ? true : member.value;
 			if (memberValue === undefined) throw new Error(`"--${member.flag}" value is missing`);
 			[name, flag, value] = [member.flag, memberDef, memberValue];
 		}

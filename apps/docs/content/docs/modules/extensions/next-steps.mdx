@@ -74,7 +74,7 @@ A step is skipped, with a `nextSteps():` note on stderr, when:
 - a repeatable flag value is empty or contains the flag's `delimiter` (argv would split or drop it);
 - a number value is not finite, a fraction for an `integer`, or outside `min`/`max` (argv rejects it);
 - a `json` value would change through JSON: a non-finite number, `-0`, `undefined`, or anything else that is not plain JSON data;
-- an exclusive group's value names none of its member flags, or no value for a member that takes one;
+- an exclusive group's value names none of its member flags, no value for a member that takes one, a value for a boolean member, or a key other than `flag` and `value`;
 - a boolean flag value is not a boolean;
 - a boolean flag that is not negatable but has an `env` binding or is `required` is given `false` (the variable may turn it on, or the command fails without the flag).
 
