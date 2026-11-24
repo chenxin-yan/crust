@@ -77,6 +77,22 @@ type _NullableLayer = Expect<
 		ContextService<"db", LayerValue<Db> | null>
 	>
 >;
+// A `never` or `any` value (a setup that only throws, an untyped parse) provides no service.
+type _NeverValue = Expect<
+	Equal<ServicesOf<{ ctx: { broken: Promise<never> } }>, ContextService<"broken", never>>
+>;
+type _AnyValue = Expect<
+	Equal<ServicesOf<{ ctx: { loose: Promise<any> } }>, ContextService<"loose", any>>
+>;
+const broken = defineContext("broken").setup(async () => {
+	throw new Error("setup failed");
+});
+new Crust("cli").provide(broken()).action(
+	// @ts-expect-error -- a Context whose setup only throws does not provide Db.
+	handler(function* () {
+		return yield* Db;
+	}),
+);
 
 // A layer() with a non-literal name provides nothing: its entry cannot be tied to the path.
 declare const dynamicName: string;

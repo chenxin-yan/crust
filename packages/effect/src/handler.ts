@@ -46,7 +46,9 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
 		? never
 		: {
 				[K in keyof Bag & string]-?: Bag[K] extends Promise<infer Value>
-					? ContextService<K, Value> | ([Value] extends [LayerValue<infer S>] ? S : never)
+					? // A `never` or `any` value is assignable to every layer value and infers `S` as `unknown`.
+						| ContextService<K, Value>
+						| ([Value] extends [LayerValue<infer S>] ? (unknown extends S ? never : S) : never)
 					: never;
 			}[keyof Bag & string]
 	: never;
