@@ -115,7 +115,8 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".Sh SUBCOMMANDS");
 		const groups = byHeading(model.children);
 		for (const [heading, children] of groups) {
-			if (groups.size > 1) lines.push(`.Ss ${macroArgument(heading ?? "Additional commands")}`);
+			if (heading !== undefined || groups.size > 1)
+				lines.push(`.Ss ${macroArgument(heading ?? "Additional commands")}`);
 			lines.push(
 				`.Bl -tag -width ${Math.max(8, ...children.map((child) => commandLabel(child).length))}n`,
 			);

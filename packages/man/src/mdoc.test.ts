@@ -194,6 +194,15 @@ describe("renderManPageMdoc", () => {
 		);
 	});
 
+	it("titles a .group() of commands when it is the only group", async () => {
+		const root = await new Crust("demo")
+			.group("Core", (g) => g.add(defineCommand("deploy", (cmd) => cmd.action(() => {}))))
+			.snapshot();
+		const mdoc = renderManPageMdoc({ root, section: 1 });
+
+		expect(mdoc).toContain(".Sh SUBCOMMANDS\n.Ss Core\n.Bl -tag -width 8n\n.It Nm deploy\n");
+	});
+
 	it("lists inherited flags before .group() subsections when no own flag is ungrouped", async () => {
 		const root = await new Crust("demo")
 			.extend(help())
