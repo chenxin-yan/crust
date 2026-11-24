@@ -535,6 +535,22 @@ describe("scaffold", () => {
 			},
 		);
 
+		it("refuses a path through a link into a .git that does not exist yet", async () => {
+			symlinkSync(".", join(destDir, "link"));
+
+			for (const dryRun of [true, false]) {
+				await expect(
+					scaffold({
+						dest: destDir,
+						files: { "link/.git/hooks/pre-commit": "x" },
+						conflict: "overwrite",
+						dryRun,
+					}),
+				).rejects.toThrow("is inside .git");
+			}
+			expect(existsSync(join(destDir, ".git"))).toBe(false);
+		});
+
 		it("writes through a link that stays inside the destination", async () => {
 			createTemplateFile("alias.txt", "my-app");
 			writeFileSync(join(destDir, "real.txt"), "old", "utf-8");

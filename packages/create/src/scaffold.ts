@@ -70,7 +70,8 @@ function filesKeyPath(destDir: string, key: string): string {
  * Walks every existing component of `relPath` below `realDestDir`, so an ancestor directory
  * link is caught before `mkdir` would create anything through it, and a dangling file link is
  * caught before `write` would create its target. A link must resolve inside the destination and
- * outside its `.git`. With `keepsExisting` (nothing is deleted first), an existing ancestor must
+ * outside its `.git`; the walk goes on from its target, so a path through a link cannot reach
+ * `.git` either, whether or not it exists. With `keepsExisting` (nothing is deleted first), an existing ancestor must
  * be a directory and the file itself must not be one. Components that do not exist yet are
  * created fresh by the caller.
  */
@@ -86,6 +87,9 @@ function assertDestinationWritable(
 	let current = realDestDir;
 	for (const [index, segment] of segments.entries()) {
 		current = join(current, segment);
+		if (isGitPath(relative(realDestDir, current))) {
+			throw new Error(`Destination path "${current}" is inside .git.`);
+		}
 		let stat: Stats;
 		try {
 			stat = lstatSync(current);
@@ -112,8 +116,6 @@ function assertDestinationWritable(
 			}
 			stat = statSync(target);
 			current = target;
-		} else if (isGitPath(relative(realDestDir, current))) {
-			throw new Error(`Destination path "${current}" is inside .git.`);
 		}
 		const isFile = index === segments.length - 1;
 		if (stat.isDirectory() === isFile) {
