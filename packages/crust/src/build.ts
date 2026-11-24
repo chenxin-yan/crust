@@ -445,7 +445,10 @@ export type BuildOptions = {
 	bytecode?: boolean;
 	/** Materialize Command Snapshots and run Extension build hooks before compiling. Default: true. */
 	validate?: boolean;
-	/** Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`. */
+	/**
+	 * Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`.
+	 * A throw rejects `build()`; on the closing summary lines `.crust/` already holds the new build.
+	 */
 	onLog?: (line: string, stream: "stdout" | "stderr") => void;
 };
 

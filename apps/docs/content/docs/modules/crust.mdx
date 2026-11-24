@@ -106,7 +106,7 @@ crust publish --dry-run
 2. Selects the compiler and checks it against `engines` (binaries) and tsdown's requirements (Node.js binaries). Node.js binary targets are downloaded and unpacked here.
 3. Stages every package in a temporary folder, writing `manifest.json` last, and replaces `.crust/` with it only when everything succeeded. A failed build keeps the previous `.crust/`.
 
-- It prints nothing and throws on failure; `onLog` receives each progress line with its stream.
+- It prints nothing and throws on failure; `onLog` receives each progress line with its stream. A throw from `onLog` on the closing summary, printed once the output is in place, still rejects `build()` although `.crust/` holds the new build.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
 
 <Callout type="warn">
