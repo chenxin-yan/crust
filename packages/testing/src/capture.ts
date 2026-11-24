@@ -11,7 +11,9 @@ export interface CaptureOptions {
 	 * Replaces `process.env` for the run, then restores it, so flags' `env` fallbacks, settings,
 	 * config and state directories, app code and child processes see only these variables.
 	 * `{}` is an empty environment; `{ ...process.env, NAME: "value" }` keeps the shell's and
-	 * changes one. Only one run at a time may replace it.
+	 * changes one. Without `XDG_*` variables (`APPDATA` and `LOCALAPPDATA` on Windows), config,
+	 * data, state and cache directories stay under the real home directory. Only one run at a
+	 * time may replace it.
 	 */
 	env?: Environment | undefined;
 	/**
@@ -30,6 +32,7 @@ export interface CaptureOptions {
 export interface ExecutableApp {
 	// Core's own options type: a copy of its members drifts, and stops matching under
 	// `exactOptionalPropertyTypes`.
+	/** Resolves to the exit code and never rejects, as a Crust app's `execute()` does. */
 	execute(options?: ExecuteOptions): Promise<number>;
 }
 
