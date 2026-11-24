@@ -245,9 +245,9 @@ describe("renderBash — url/path/json value-flag handling", () => {
 			]);
 		});
 
-		it("equals form: `mycli --out=st<TAB>` keeps the literal `*` and the flag prefix", async () => {
-			const completions = await runCompletion(["mycli", "--out=st"]);
-			expect(completions).toEqual(["--out=star*.txt", "--out=starlight.txt"]);
+		it("equals form: `mycli --out=st<TAB>` keeps the literal `*`", async () => {
+			const completions = await runCompletion(["mycli", "--out", "=", "st"]);
+			expect(completions).toEqual(["star*.txt", "starlight.txt"]);
 		});
 	});
 
@@ -329,7 +329,7 @@ describe("renderBash · mixed flag value modes", () => {
 
 	it.each<[string, string[], string[]]>([
 		["choices, short separate", ["dep", "-m", ""], ["fast", "slow"]],
-		["choices, alias equals", ["deploy", "--flavor="], ["--flavor=fast", "--flavor=slow"]],
+		["choices, alias equals", ["deploy", "--flavor", "="], ["fast", "slow"]],
 		[
 			"files, short separate",
 			["dep", "-o", ""],
@@ -337,8 +337,8 @@ describe("renderBash · mixed flag value modes", () => {
 		],
 		[
 			"files, alias equals",
-			["deploy", "--output=hello"],
-			["--output=hello world.txt", "@compopt -o filenames"],
+			["deploy", "--output", "=", "hello"],
+			["@compopt -o filenames", "hello world.txt"],
 		],
 		["suppression, short separate", ["dep", "-e", ""], ["@compopt +o default"]],
 		["suppression, alias equals", ["deploy", "--url=ht"], ["@compopt +o default"]],
@@ -495,9 +495,11 @@ describe("renderBash · complete functions", () => {
 			"at\\ mycli\\ deploy\\ --region",
 		]);
 		expect(await complete(["mycli", "deploy", "-r", "us"])).toEqual(["us-one", "us-two"]);
-		expect(await complete(["mycli", "deploy", "--region=us"])).toEqual([
-			"--region=us-one",
-			"--region=us-two",
+		// The address shows the flag, not the argument, takes the word after `=`.
+		expect(await complete(["mycli", "deploy", "--region", "=", "at"])).toEqual([
+			"at-one",
+			"at-two",
+			"at\\ mycli\\ deploy\\ --region",
 		]);
 	});
 
@@ -643,11 +645,20 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 	const complete = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
 
 	it("`--name=value` form completes the value's choice list", async () => {
-		const candidates = await complete(["mycli", "build", "--target=br"]);
-		// Bash sees one current token `--target=br`; the script splits on
-		// `=` and offers the choices that match prefix `br`.
-		expect(candidates).toContain("--target=browser");
-		expect(candidates).not.toContain("--target=node");
+		// Readline splits at `=` and replaces only the text after it.
+		expect(await complete(["mycli", "build", "--target", "=", "br"])).toEqual(["browser"]);
+		expect(await complete(["mycli", "build", "--target", "="])).toEqual(["browser", "node"]);
+		expect(await complete(["mycli", "build", "--target", "=", "node", "--"])).toEqual([
+			"--out",
+			"--target",
+		]);
+
+		// Without `=` in COMP_WORDBREAKS, the word arrives whole and is replaced whole.
+		const wholeWordScript = join(tmpDir, "whole-word.bash");
+		await writeFile(wholeWordScript, `COMP_WORDBREAKS=" "\nsource ${shQuote(scriptPath)}\n`);
+		expect(
+			await runBashCompletion(wholeWordScript, "_mycli", ["mycli", "build", "--target=br"]),
+		).toEqual(["--target=browser"]);
 	});
 
 	it("after `--`, no subcommand or flag candidates are offered", async () => {

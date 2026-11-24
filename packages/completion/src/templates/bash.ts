@@ -446,14 +446,28 @@ export function renderBash(
 	// Cobra-style init shim. Provides cur/prev/words/cword without depending
 	// on the bash-completion package. Adapted from spf13/cobra's
 	// bash_completionsV2.
+	// Readline splits `--flag=value` at `=`; the shim joins it back, as
+	// `_init_completion -n "="` does, so the walk sees one word.
+	// shortcut: `--flag= value` and `--flag =value` join too, since COMP_WORDS
+	// drops the spaces; upgrade by reading COMP_LINE if that ever matters.
 	lines.push(`${initFn}() {`);
 	lines.push("\tCOMPREPLY=()");
-	lines.push('\tcur="${COMP_WORDS[COMP_CWORD]}"');
+	lines.push("\twords=()");
+	lines.push("\tlocal w joined=0");
+	lines.push('\tfor w in "${COMP_WORDS[@]:0:COMP_CWORD+1}"; do');
 	lines.push(
-		'\tif (( COMP_CWORD > 0 )); then prev="${COMP_WORDS[COMP_CWORD-1]}"; else prev=""; fi',
+		'\t\tif [[ "$w" == "=" && ${#words[@]} -gt 0 && "${words[${#words[@]}-1]}" == --* && "${words[${#words[@]}-1]}" != *=* ]]; then',
 	);
-	lines.push('\twords=("${COMP_WORDS[@]}")');
-	lines.push("\tcword=$COMP_CWORD");
+	lines.push('\t\t\twords[${#words[@]}-1]+="="; joined=1');
+	lines.push("\t\telif (( joined )); then");
+	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=0');
+	lines.push("\t\telse");
+	lines.push('\t\t\twords[${#words[@]}]="$w"');
+	lines.push("\t\tfi");
+	lines.push("\tdone");
+	lines.push("\tcword=$(( ${#words[@]} - 1 ))");
+	lines.push('\tcur="${words[cword]}"');
+	lines.push('\tif (( cword > 0 )); then prev="${words[cword-1]}"; else prev=""; fi');
 	lines.push("}");
 	lines.push("");
 
@@ -569,14 +583,16 @@ export function renderBash(
 	// After `--` nothing is a flag or a flag value: skip to positional slots.
 
 	// `--name=value` partial: split, look up, then offer choice values or
-	// path candidates, or suppress the file fallback. `compgen -P` / the
-	// file helper prefix each candidate with `${_flag}=` so bash's
-	// command-line replacement substitutes the full token (otherwise
-	// readline would replace `--target=br` with bare `browser`).
+	// path candidates, or suppress the file fallback. When `=` breaks words
+	// (bash's default), Readline replaces only the text after it, so the
+	// candidates are bare values; otherwise `compgen -P` / the helpers
+	// prefix each with `${_flag}=` to replace the whole word.
 	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == --*=* ]]; then');
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
 	lines.push('\t\tlocal _value="${cur#*=}"');
-	pushFlagValueCase("\t\t", "$_flag", "$_value", "${_flag}=");
+	lines.push('\t\tlocal _prefix="${_flag}="');
+	lines.push('\t\tif [[ "$COMP_WORDBREAKS" == *=* ]]; then _prefix=""; fi');
+	pushFlagValueCase("\t\t", "$_flag", "$_value", "$_prefix");
 	// Free-form `--name=value`: let bash file-complete the value portion.
 	lines.push("\t\treturn");
 	lines.push("\tfi");
