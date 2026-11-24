@@ -2265,13 +2265,24 @@ describe("Extension onError hooks", () => {
 		});
 		const app = new Crust("cli")
 			.extend(observer)
-			.add(defineCommand("sub", { aliases: ["s"] }, (cmd) => cmd.action(() => {})));
+			.add(defineCommand("sub", { aliases: ["s"] }, (cmd) => cmd.action(() => {})))
+			.command("group", (group) =>
+				group.command("leaf", (leaf) =>
+					leaf.flags({ force: { type: "boolean" } }).action(() => {}),
+				),
+			);
 
 		await app.execute({ argv: ["s", "--bogus"] });
 		await app.execute({ argv: ["nope"] });
+		await app.execute({ argv: ["group", "--force", "leaf"] });
 		expect(seen).toEqual([
 			{ name: "sub", path: ["cli", "sub"], error: 'Unknown flag "--bogus"' },
 			{ name: "cli", path: ["cli"], error: expect.stringContaining('"nope"') },
+			{
+				name: "group",
+				path: ["cli", "group"],
+				error: 'Unknown flag "--force"; flags of subcommand "leaf" go after its name',
+			},
 		]);
 	});
 
@@ -2402,6 +2413,19 @@ describe("Crust .execute()", () => {
 		await app.execute({ argv: [] });
 
 		expect(process.exitCode).toBe(130);
+	});
+
+	it("reports an unknown flag plainly when the subcommand after it cannot be built", async () => {
+		let recipeCalls = 0;
+		const app = new Crust("app").command("broken", () => {
+			recipeCalls++;
+			throw new Error("recipe boom");
+		});
+
+		expect(await app.execute({ argv: ["--bogus", "broken"] })).toBe(2);
+		expect(stderrChunks.join("\n")).toContain('Unknown flag "--bogus"');
+		expect(recipeCalls).toBe(1);
+		process.exitCode = 0;
 	});
 
 	it("does not run a runnable parent for a typoed subcommand", async () => {

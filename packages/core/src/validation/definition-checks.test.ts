@@ -217,6 +217,13 @@ describe("definition checks", () => {
 		},
 	);
 
+	it("names a reused astral short with one dash when its shape differs", async () => {
+		const app = new Crust("cli")
+			.flags({ rocket: { type: "string", short: "🚀" } })
+			.command("c", (c) => c.flags({ r: { type: "boolean", short: "🚀" } }).action(() => {}));
+		await expect(app.snapshot()).rejects.toThrow(/^Flag "-🚀" takes no value on command "cli c"/);
+	});
+
 	it.each(checkedRules.map(([reason, define]) => ({ reason, define })))(
 		"$reason is not checked in a built artifact",
 		async ({ reason, define }) => {

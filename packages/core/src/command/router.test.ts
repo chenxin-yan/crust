@@ -262,13 +262,18 @@ describe("resolveCommand — known-flag skipping", () => {
 			run() {},
 		});
 		const mid = makeNode({ meta: "mid", subCommands: { leaf } });
-		const root = makeNode({ meta: "app", subCommands: { mid } });
+		const root = makeNode({
+			meta: "app",
+			flags: { config: { type: "string", short: "c", description: "config" } },
+			subCommands: { mid },
+		});
 		for (const argv of [
 			["--force", "mid", "leaf"],
 			["--force=1", "mid", "leaf"],
 			["mid", "-f", "leaf"],
+			["--force", "--config=x", "mid", "leaf"],
 		]) {
-			expect(() => resolveCommand(root, argv)).toThrow(
+			expect(() => resolveCommand(root, argv, true)).toThrow(
 				expect.objectContaining({
 					code: "PARSE",
 					message: expect.stringMatching(
@@ -278,13 +283,18 @@ describe("resolveCommand — known-flag skipping", () => {
 				}),
 			);
 		}
-		// Nobody knows it, or the subcommand word follows `--`: the parser reports the plain error.
+		// Nobody knows it, or the subcommand word follows `--` or is a flag's value: the parser
+		// reports the plain error.
 		for (const argv of [
 			["--bogus", "mid", "leaf"],
 			["--force", "--", "mid", "leaf"],
+			["--force", "--config", "mid", "leaf"],
+			["--force", "-c", "mid", "leaf"],
 		]) {
-			expect(resolveCommand(root, argv).commandPath).toEqual(["app"]);
+			expect(resolveCommand(root, argv, true).commandPath).toEqual(["app"]);
 		}
+		// Only argv routing hints: a typed path, or the failure renderer recovering the route, does not.
+		expect(resolveCommand(root, ["--force", "mid", "leaf"]).commandPath).toEqual(["app"]);
 	});
 
 	it("does not hint past a word the action's arguments take", () => {
@@ -300,7 +310,7 @@ describe("resolveCommand — known-flag skipping", () => {
 			run() {},
 		});
 		// `app notes.txt ls` runs the root action, so `ls -l` would not have run either.
-		expect(resolveCommand(root, ["-l", "notes.txt", "ls"]).commandPath).toEqual(["app"]);
+		expect(resolveCommand(root, ["-l", "notes.txt", "ls"], true).commandPath).toEqual(["app"]);
 	});
 });
 

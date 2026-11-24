@@ -254,7 +254,7 @@ export function checkReusedFlagShapes(
 		const takesValue = def.type !== "boolean";
 		const ancestor = ancestors.get(spelling);
 		if (ancestor && ancestor.takesValue !== takesValue) {
-			const flag = spelling.length === 1 ? `-${spelling}` : `--${spelling}`;
+			const flag = Array.from(spelling).length === 1 ? `-${spelling}` : `--${spelling}`;
 			const takes = (value: boolean) => (value ? "takes a value" : "takes no value");
 			throw new CrustError(
 				"DEFINITION",

@@ -739,7 +739,7 @@ interface ResolvedInput {
 }
 
 function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
-	const route = resolveCommand(root, argv);
+	const route = resolveCommand(root, argv, true);
 	return { argv, route, parsed: parseArgs(route.command, route.argv) };
 }
 

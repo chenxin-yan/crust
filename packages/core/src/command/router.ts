@@ -134,18 +134,33 @@ function subcommandKnowing(
 	rest: readonly string[],
 ): string[] | undefined {
 	const path: string[] = [];
+	let isValue = false;
 	for (const word of rest) {
 		if (word === "--") return undefined;
-		const child = findChild(node.subCommands, word);
+		if (isValue) {
+			isValue = false;
+			continue;
+		}
+		let child: ReturnType<typeof findChild>;
+		let match: ReturnType<typeof matchFlagToken>;
+		try {
+			child = findChild(node.subCommands, word);
+			// This builds a lazy child off the route: one that cannot be built gives no hint.
+			match = child ? matchFlagToken(child.node.flagSpellings, token) : undefined;
+		} catch {
+			return undefined;
+		}
 		if (!child) {
 			// Routing would hand this word to the action's arguments, so no later subcommand runs.
 			if (!word.startsWith("-") && node.run && node.args.length > 0) return undefined;
-			// Otherwise a flag, a flag's value, or a word routing rejects anyway.
+			// A known flag's value is not a subcommand name: routing sets both aside.
+			const flag = matchFlagToken(node.flagSpellings, word);
+			isValue = flag !== undefined && !(flag instanceof CrustError) && flag.pending !== undefined;
+			// Otherwise a flag or a word routing rejects anyway.
 			continue;
 		}
 		path.push(child.canonicalName);
 		node = child.node;
-		const match = matchFlagToken(node.flagSpellings, token);
 		// `--force=1` on a boolean `--force` is still a flag this subcommand knows.
 		if (
 			!(
@@ -178,7 +193,7 @@ function subcommandKnowing(
  *    split here is the one the resolved command makes. A flag it does not
  *    know is reported by its parser, exactly as when typed after the name.
  * 4. A flag the current command does not know stops routing: its parser
- *    reports it, with a hint when a later subcommand word knows it
+ *    reports it, with a hint when `hint` is set and a later subcommand word knows it
  * 5. Any other word: when the current command has an action and declares
  *    arguments, it is an argument; otherwise it is a COMMAND_NOT_FOUND error
  *    whose `details.available` lists visible canonical sibling names (aliases
@@ -192,11 +207,16 @@ function subcommandKnowing(
  *
  * @param command - The root command to resolve from
  * @param argv - The argv array to resolve against
+ * @param hint - Whether to raise rule 4's hint: set only when routing a command line
  * @returns The resolved command, argv, and the command path
  * @throws {CrustError} COMMAND_NOT_FOUND for a word that names no subcommand where no argument can take it
- * @throws {CrustError} PARSE for a flag only a later subcommand knows, typed before that subcommand's name
+ * @throws {CrustError} PARSE, when `hint` is set, for a flag only a later subcommand knows, typed before that subcommand's name
  */
-export function resolveCommand(command: CommandNode, argv: readonly string[]): CommandRoute {
+export function resolveCommand(
+	command: CommandNode,
+	argv: readonly string[],
+	hint = false,
+): CommandRoute {
 	const path = [command.meta.name];
 
 	let current: CommandNode = command;
@@ -221,7 +241,7 @@ export function resolveCommand(command: CommandNode, argv: readonly string[]): C
 			const match = matchFlagToken(current.flagSpellings, candidate);
 			if (match === undefined) break;
 			if (match instanceof CrustError) {
-				if (match.is("PARSE") && match.details?.reason === "unknown-flag") {
+				if (hint && match.is("PARSE") && match.details?.reason === "unknown-flag") {
 					const later = subcommandKnowing(current, candidate, routedArgv.slice(1));
 					if (later) {
 						throw new CrustError(
