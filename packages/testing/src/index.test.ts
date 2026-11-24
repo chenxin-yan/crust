@@ -69,6 +69,9 @@ describe("captureExecute", () => {
 				(await captureExecute(app, [], { env: { ...process.env, CRUST_TEST_TOKEN: "given" } }))
 					.stdout,
 			).toMatch(/^given kept \d+\n$/);
+			expect((await captureExecute(app, [], { env: process.env })).stdout).toMatch(
+				/^from-shell kept [1-9]\d*\n$/,
+			);
 			expect(process.env.CRUST_TEST_TOKEN).toBe("from-shell");
 			expect(process.env.CRUST_TEST_OTHER).toBe("kept");
 		} finally {

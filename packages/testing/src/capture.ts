@@ -70,9 +70,8 @@ let replacing = false;
  * are in place when this returns, and it throws without running `fn` while another run is active.
  */
 export function isolate<T>(options: CaptureOptions | undefined, fn: () => Promise<T>): Promise<T> {
-	const env = options?.env;
 	const cwd = options?.cwd;
-	if (env === undefined && cwd === undefined) return fn();
+	if (options?.env === undefined && cwd === undefined) return fn();
 	// shortcut: a run without `env` or `cwd` that starts during a replacement is not caught, because
 	// telling it from a run nested in withEnv() needs AsyncLocalStorage.
 	if (replacing || activeExecutions > 0) {
@@ -80,6 +79,8 @@ export function isolate<T>(options: CaptureOptions | undefined, fn: () => Promis
 			"Another run is active. Run tests that pass `env` or `cwd`, or use withEnv(), one after another, not concurrently.",
 		);
 	}
+	// Copied before anything changes: the caller may pass `process.env` itself.
+	const env = options?.env && { ...options.env };
 	const savedEnv = { ...process.env };
 	const savedCwd = process.cwd();
 	if (cwd !== undefined) process.chdir(cwd);
