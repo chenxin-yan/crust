@@ -602,10 +602,13 @@ export function renderBash(
 
 	// Default branch: flags vs subcmds vs positional choices.
 	// Line by line: an unquoted `$(compgen …)` would glob-expand a short such as `-*`.
+	// Readline inserts a candidate as typed text, so `%q` keeps a short such as `-'` one word.
 	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == -* ]]; then');
 	lines.push("\t\tlocal _flag_word");
 	lines.push("\t\twhile IFS= read -r _flag_word; do");
-	lines.push('\t\t\tif [[ -n "$_flag_word" ]]; then COMPREPLY[${#COMPREPLY[@]}]="$_flag_word"; fi');
+	lines.push(
+		'\t\t\tif [[ -n "$_flag_word" ]]; then printf -v _flag_word %q "$_flag_word"; COMPREPLY[${#COMPREPLY[@]}]="$_flag_word"; fi',
+	);
 	lines.push('\t\tdone <<< "$(compgen -W "$flags" -- "$cur")"');
 	lines.push("\telse");
 	const needsPosWalk = argChoiceEntries.length > 0 || argSuppressEntries.length > 0;

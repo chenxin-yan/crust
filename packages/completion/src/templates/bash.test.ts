@@ -416,9 +416,9 @@ describe("renderBash · punctuation shorts", () => {
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
-	it("offers every punctuation short as typed", async () => {
+	it("offers every punctuation short quoted as Readline inserts it", async () => {
 		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-"], tmpDir)).toEqual(
-			[...shorts.map((short) => `-${short}`), "-+", "--money"].sort(),
+			["-.", "-\\$", "-\\*", "-\\'", "-\\\\", "-\\`", "-+", "--money"].sort(),
 		);
 	});
 
