@@ -135,7 +135,7 @@ $ deploy
 deploying to the default region
 ```
 
-- The app changes no `tsconfig`. Once any file in the project imports the package, the key is typed on every definition, in every file, inline `.command()` children and `defineCommand()` files included. Without the package, the key is an unknown-key compile error.
+- The app changes no `tsconfig`. Once any file in the project imports the package, the key is typed on every definition, in every file, inline `.command()` children and `defineCommand()` files included. A `CommandExtras` key is typed on the root's `new Crust(name, { … })` metadata too. Without the package, the key is an unknown-key compile error.
 - Core never reads the key. Snapshots pass it through unchanged, so the Extension reads `flag.hint` typed, without a cast.
 - The value must be JSON data or a function. `crust build` leaves a function out of the snapshot file it writes, and fails on anything else JSON refuses, such as a BigInt or a cyclic object.
 - The key cannot be named `toJSON` or after a field a snapshot sets itself (`inputSchema`, `extension`, `inherited`): `.owns()` refuses it with a `DEFINITION` error (`reserved-name`).

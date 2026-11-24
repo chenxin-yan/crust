@@ -30,6 +30,7 @@ import { flagRecordEntries, isBareToken, normalizeArg } from "../parsing/spellin
 import { validateCommandSections } from "../sections.ts";
 import type {
 	ArgsDef,
+	CommandExtras,
 	CommandMeta,
 	CommandSectionInput,
 	FlagsDef,
@@ -97,7 +98,7 @@ import {
 	installContextFlags,
 	registerFlag,
 } from "./node.ts";
-import { snapshotCommand } from "./snapshot.ts";
+import { CORE_COMMAND_KEYS, extraEntries, snapshotCommand } from "./snapshot.ts";
 import type { CommandGroup, CommandSnapshot } from "./snapshot.ts";
 import type {
 	CheckedRunInput,
@@ -187,14 +188,12 @@ export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "
 	readonly sections?: readonly CommandSectionInput[];
 }
 
-/** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<
-	CommandMeta,
-	"description" | "version" | "usage" | "examples"
-> & {
+/** Static metadata accepted by the root command constructor, including keys packages add through {@link CommandExtras}. */
+export interface RootCommandMeta
+	extends Pick<CommandMeta, "description" | "version" | "usage" | "examples">, CommandExtras {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly CommandSectionInput[];
-};
+}
 
 export type AnyCommandDefinitionBuilder = Crust<
 	any,
@@ -1656,7 +1655,7 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
-	 * @param metadata - Optional root description, version, usage, examples, and documentation sections.
+	 * @param metadata - Optional root description, version, usage, examples, documentation sections, and keys packages add through `CommandExtras`.
 	 */
 	constructor(
 		nameInput: Name &
@@ -1685,6 +1684,8 @@ export class Crust<
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = validateCommandSections(name, meta.sections);
 		}
+		// Keys packages add through `CommandExtras` pass through, as `defineCommand()` passes them.
+		Object.assign(this._node.meta, Object.fromEntries(extraEntries(meta, CORE_COMMAND_KEYS)));
 		this._ancestorOwnedFlags = {};
 	}
 

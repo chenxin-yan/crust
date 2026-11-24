@@ -46,6 +46,11 @@ function _typecheckMcpKey() {
 		c.action(() => {}),
 	);
 	defineCommand("login", { mcp: false }, (c) => c.action(() => {}));
+	// The root takes it as every other command does.
+	new Crust("cli", { description: "CLI", mcp: false }).extend(mcp());
+	new Crust("cli", { mcp: { readOnlyHint: true } }).extend(mcp());
+	// @ts-expect-error -- the root's value is typed the same way
+	new Crust("cli", { mcp: true });
 	// @ts-expect-error -- `true` is not a value: a command is a tool unless it says `false`
 	defineCommand("on", { mcp: true }, (c) => c.action(() => {}));
 	// @ts-expect-error -- hints use the specification's names

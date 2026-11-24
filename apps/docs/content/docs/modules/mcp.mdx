@@ -66,14 +66,14 @@ Every `include` path must be a canonical command path; hidden commands count. A 
 
 ### The `mcp` key
 
-`mcp()` owns an `mcp` key on command metadata, for `defineCommand()` and inline `.command()` alike:
+`mcp()` owns an `mcp` key on command metadata, for `defineCommand()`, inline `.command()`, and the root's `new Crust(name, { mcp })` alike:
 
 <include lang="ts">../../../examples/modules/mcp.ts#key</include>
 
 - `mcp: false` keeps the command, and everything under it, out of the tools. Use it for commands an agent should not run unattended, or that need a person, such as a browser sign-in. A command [`@crustjs/openapi`](/docs/modules/openapi#overrides) generates takes the key in its override.
 - An object holds the tool's [annotations](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations), under the specification's names: `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. They are passed to the client as they are, as hints; a client must not rely on them for safety.
 - The key is in the types once any file of the project imports `@crustjs/mcp`. A command that sets it in an application that does not install `mcp()` fails with a `DEFINITION` error (`unowned-key`) from source and in `crust build`, also when the application is served with `createMcpServer()`: install `mcp()` there too.
-- The root command takes no `mcp` key.
+- On the root, `false` covers every command, so the server lists no tools, and hints become the root tool's annotations.
 
 The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. Building the tool list throws, naming the paths, when:
 

@@ -130,6 +130,19 @@ describe("toolsFromSnapshot", () => {
 		expect(root).toMatchObject({ name: "cli", path: [] });
 	});
 
+	it("reads the root's mcp key as any command's", async () => {
+		const hinted = new Crust("cli", { mcp: { readOnlyHint: true } }).extend(mcp()).action(noop);
+		const [root] = toolsFromSnapshot(await hinted.snapshot());
+		expect(root).toMatchObject({ name: "cli", annotations: { readOnlyHint: true } });
+
+		// As on any command, `false` covers everything under it.
+		const excluded = new Crust("cli", { mcp: false })
+			.extend(mcp())
+			.action(noop)
+			.add(defineCommand("run", (c) => c.action(noop)));
+		expect(toolsFromSnapshot(await excluded.snapshot())).toEqual([]);
+	});
+
 	it("rejects tool-name collisions after filtering, naming both paths", async () => {
 		const colliding = new Crust("cli")
 			.add(defineCommand("a_b", (c) => c.action(noop)))

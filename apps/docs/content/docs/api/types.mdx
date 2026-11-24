@@ -166,7 +166,7 @@ type SharedFlags = InferFlags<typeof shared>; // { region: "us" | "eu" }
 
 ### `ArgExtras`, `FlagExtras`, and `CommandExtras`
 
-Empty interfaces that argument definitions, flag definitions, and command metadata extend, as do `ArgSnapshot`, `FlagSnapshot`, and `CommandSnapshot.meta`. A package adds an optional key with module augmentation (`declare module "@crustjs/core" { interface FlagExtras { hint?: string } }`), and its Extension declares the key with [`.owns()`](#extensionbuilder). Core never reads such a key and passes it through to snapshots unchanged. See [Own a definition key](/docs/guide/extensions#own-a-definition-key).
+Empty interfaces that argument definitions, flag definitions, and command metadata (the root's [`RootCommandMeta`](/docs/api/crust#constructor) included) extend, as do `ArgSnapshot`, `FlagSnapshot`, and `CommandSnapshot.meta`. A package adds an optional key with module augmentation (`declare module "@crustjs/core" { interface FlagExtras { hint?: string } }`), and its Extension declares the key with [`.owns()`](#extensionbuilder). Core never reads such a key and passes it through to snapshots unchanged. See [Own a definition key](/docs/guide/extensions#own-a-definition-key).
 
 ### `CommandSectionInput`
 

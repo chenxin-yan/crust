@@ -78,8 +78,9 @@ const APP = `import { Crust } from "@crustjs/core";
 import { deploy } from "./commands.ts";
 import { standIn } from "./stand-in.ts";
 
-await new Crust("acme")
+await new Crust("acme", { description: "Acme", tool: { readOnly: true } })
 	.extend(standIn())
+	.action(() => {})
 	.add(deploy)
 	.command("status", { tool: false }, (c) =>
 		c.flags({ watch: { type: "boolean", hint: "Keep watching" } }).action(() => {}),
@@ -95,8 +96,21 @@ import "./stand-in.ts";
 await new Crust("acme").add(deploy).execute();
 `;
 
+// The root's metadata takes the key too, and the same check covers it.
+const UNOWNED_ROOT = `import { Crust } from "@crustjs/core";
+import "./stand-in.ts";
+
+// @ts-expect-error -- the package types the key's value on the root too
+new Crust("acme", { tool: true });
+
+await new Crust("acme", { tool: false }).action(() => {}).execute();
+`;
+
 // A project without the package.
 const BARE = `import { Crust } from "@crustjs/core";
+
+// @ts-expect-error -- unknown without the package that adds it
+new Crust("acme", { tool: false });
 
 new Crust("acme").flags({
 	// @ts-expect-error -- unknown without the package that adds it
@@ -118,6 +132,7 @@ beforeAll(() => {
 		"commands.ts": COMMANDS,
 		"app.ts": APP,
 		"unowned.ts": UNOWNED,
+		"unowned-root.ts": UNOWNED_ROOT,
 		"bare.ts": BARE,
 	})) {
 		writeFileSync(join(fixtureDir, file), source);
@@ -134,7 +149,7 @@ beforeAll(() => {
 	};
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
-		JSON.stringify({ compilerOptions, files: ["app.ts", "unowned.ts"] }),
+		JSON.stringify({ compilerOptions, files: ["app.ts", "unowned.ts", "unowned-root.ts"] }),
 	);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.bare.json"),
@@ -167,6 +182,11 @@ function run(file: string, argv: string[], env: Record<string, string> = {}) {
 }
 
 it("passes the keys to the owning Extension through the snapshot", () => {
+	expect(run("app.ts", [])).toEqual({
+		status: 0,
+		stdout: `${JSON.stringify({ tool: { readOnly: true }, args: [], flags: [] })}\n`,
+		stderr: "",
+	});
 	expect(run("app.ts", ["deploy", "api"])).toEqual({
 		status: 0,
 		stdout: `${JSON.stringify({ tool: { readOnly: true }, args: ["Where to"], flags: [["region", "Region"]] })}\n`,
@@ -186,5 +206,10 @@ it("reports a key no installed Extension owns from source, and not in a built CL
 	});
 	expect(run("unowned.ts", ["deploy", "api"], { CRUST_INTERNAL_BUILD: "1" })).toMatchObject({
 		status: 0,
+	});
+	expect(run("unowned-root.ts", [])).toEqual({
+		status: 1,
+		stdout: "",
+		stderr: 'Error: Command "acme" sets "tool", which no installed Extension owns\n',
 	});
 });
