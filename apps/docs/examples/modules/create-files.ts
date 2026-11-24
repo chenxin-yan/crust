@@ -17,6 +17,6 @@ await scaffold({
 		// Changes one line of a template file.
 		"src/index.ts": index.replace('"app"', JSON.stringify(name)),
 		// Added only when asked for.
-		...(docker ? { Dockerfile: 'FROM node:24\nCOPY . .\nCMD ["node", "."]\n' } : {}),
+		...(docker ? { Dockerfile: 'FROM node:24\nCOPY . .\nCMD ["node", "src/index.ts"]\n' } : {}),
 	},
 });
