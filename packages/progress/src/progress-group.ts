@@ -17,6 +17,7 @@ import {
 	frameAt,
 	HIDE_CURSOR,
 	listenForSigint,
+	reflowedRows,
 	renderFinal,
 	resolveSpinner,
 	SHOW_CURSOR,
@@ -61,8 +62,8 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 
 	const running = new Set<Item>();
 	let frameIndex = 0;
-	// The display width of each row on screen.
-	let drawn: number[] = [];
+	// The rows on screen, as written.
+	let drawn: string[] = [];
 	let timerId: ReturnType<typeof setInterval> | undefined;
 	let removeSigint: (() => void) | undefined;
 	let releaseFrame: (() => void) | undefined;
@@ -93,7 +94,7 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 	// screen leaves the cursor at its start. A terminal narrowed since then reflowed each row.
 	function erase(): string {
 		const columns = sink.columns || 80;
-		const height = drawn.reduce((sum, width) => sum + Math.max(1, Math.ceil(width / columns)), 0);
+		const height = drawn.reduce((sum, line) => sum + reflowedRows(line, columns), 0);
 		drawn = [];
 		return `\r${height > 0 ? `${ESC}${height}A` : ""}${ESC}J`;
 	}
@@ -117,7 +118,7 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 	function draw(above = ""): void {
 		const lines = rows();
 		sink.write(erase() + above + lines.map((line) => `${line}\n`).join(""));
-		drawn = lines.map(stringWidth);
+		drawn = lines;
 	}
 
 	function begin(): void {

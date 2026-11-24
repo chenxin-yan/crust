@@ -187,6 +187,39 @@ export function fitRow(text: string, width: number): string {
 	return text;
 }
 
+/**
+ * The rows a row drawn by {@link fitRow} takes once a terminal `columns` wide has reflowed it. A
+ * tab stops every 8 columns, a carriage return goes back to the first, and a wide character that
+ * does not fit the last column moves down.
+ */
+export function reflowedRows(line: string, columns: number): number {
+	graphemes ??= new Intl.Segmenter();
+	// The row as the terminal holds it: the width of the character that starts at each column.
+	const cells: number[] = [];
+	let column = 0;
+	for (const { segment } of graphemes.segment(line.replace(ESCAPE, ""))) {
+		const width = stringWidth(segment);
+		if (segment === "\r") column = 0;
+		else if (segment === "\t") column += 8 - (column % 8);
+		else if (width > 0) {
+			cells[column] = width;
+			column += width;
+		}
+	}
+	let rows = 1;
+	let used = 0;
+	// A column nothing was written to (a tab skipped it) is one blank cell.
+	for (let index = 0; index < cells.length; index += cells[index] ?? 1) {
+		const width = cells[index] ?? 1;
+		if (used > 0 && used + width > columns) {
+			rows++;
+			used = 0;
+		}
+		used += width;
+	}
+	return rows;
+}
+
 export function renderFinal(
 	message: string,
 	theme: ProgressTheme,

@@ -119,6 +119,26 @@ describe("progressGroup on a terminal", () => {
 		}
 	});
 
+	it.each([
+		["tabs", "a\tb\tc", 13],
+		["wide characters", "界".repeat(9), 9],
+		["a carriage return", `${"a".repeat(30)}\r${"b".repeat(30)}`, 40],
+	])("erases every row a message with %s takes", async (_, message, columns) => {
+		const { terminal, group, screen } = setup();
+		const a = group.add({ total: 2, message });
+		try {
+			terminal.write("log line\n");
+			a.start();
+			await screen();
+			terminal.resize(columns, 20);
+			a.advance();
+			a.stop("success", "ok");
+			expect(await screen()).toEqual(["log line", "✓ ok (1/2)"]);
+		} finally {
+			terminal.dispose();
+		}
+	});
+
 	it("keeps the lines above when a narrowed terminal cuts its last row", async () => {
 		const { terminal, group, screen } = setup();
 		const a = group.add({ total: 2, message: "s" });
