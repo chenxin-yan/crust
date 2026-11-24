@@ -1684,7 +1684,10 @@ export class Crust<
 			this._node.meta.sections = validateCommandSections(name, meta.sections);
 		}
 		// Keys packages add through `CommandExtras` pass through, as `defineCommand()` passes them.
-		Object.assign(this._node.meta, Object.fromEntries(extraEntries(meta, CORE_COMMAND_KEYS)));
+		this._node.meta = {
+			...this._node.meta,
+			...Object.fromEntries(extraEntries(meta, CORE_COMMAND_KEYS)),
+		};
 		this._ancestorOwnedFlags = {};
 	}
 
