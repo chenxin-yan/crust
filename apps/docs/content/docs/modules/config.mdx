@@ -118,8 +118,8 @@ $ acme deploy                                   # acme.config.json is not JSON
 Error: Malformed config file: /home/me/repo/acme.config.json
 ```
 
-- A file that cannot be read, such as a folder of that name or one without read permission, fails with `Cannot read config file: <path>` and exit code 2.
-- A value that does not convert fails as an invalid environment value does, naming the setting and the file, with exit code 2. The message never repeats the value or the parser's message, which may quote the file.
+- A file that cannot be read, such as a folder of that name, a device, a file above 16 MiB or one without read permission, fails with `Cannot read config file: <path>` and exit code 2.
+- A value that does not convert fails as an invalid environment value does, naming the setting and the file, with exit code 2. The built-in conversions never repeat the value; a setting's own `parse` error is shown as on the command line.
 - A file is read only for the settings a command takes and its run did not give: `acme serve --listen 8080` works whatever the files hold.
 - `--help` works whatever the files hold.
 
@@ -129,8 +129,8 @@ Error: Malformed config file: /home/me/repo/acme.config.json
 
 - `await config.get(key)` reads a setting as a flag would get it, without the command line: its variable, the project file, the user's file, its default. It throws a `VALIDATION` `CrustError` for a `required` setting that none of them gives.
 - `await config.list()` returns every setting with its value and source: `{ key, value, source }`, where `source` is `{ kind: "env", name }`, `{ kind: "file", path }`, `{ kind: "default" }` or `{ kind: "unset" }`.
-- `await config.set(values)` saves settings in the user's file; `config.set(values, { project: true })` saves them in the nearest project file, or a new one in the working directory. A value is what a file holds (the text of a `parse` setting), and `undefined` removes a setting. The keys and values are checked at compile time, and the project form takes only the keys in `project`.
-- Saving keeps the other keys and the mode of the file, creates the folder when needed, and replaces the file in one step. Saves of one config run one at a time, each reading what the one before wrote. A linked user file stays a link; a linked project file is replaced, never written through.
+- `await config.set(values)` saves settings in the user's file; `config.set(values, { project: true })` saves them in the nearest project file, or a new one in the working directory. A value is what a file holds (the text of a `parse` setting), and `undefined` removes a setting. The keys and values are checked at compile time, a value the setting's rules refuse (`min`, `choices`, `parse`) throws before anything is saved, and the project form takes only the keys in `project`.
+- Saving keeps the other keys and the mode of the file, creates the folder when needed, and replaces the file in one step. Saves of one config run one at a time, each reading what the one before wrote. A linked user file stays a link; saving in a linked project file is refused.
 - `get()` and `list()` print the project file's warnings on the process's stderr.
 
 ## The `config` command

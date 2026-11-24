@@ -1,10 +1,13 @@
 import {
 	chmodSync,
+	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,7 +55,8 @@ function acme(options: { files?: Parameters<typeof defineConfig>[0]["files"] } =
 		name: "acme",
 		settings: {
 			region: { type: "string", choices: ["us", "eu"], default: "us", env: "ACME_REGION" },
-			replicas: { type: "number", min: 1 },
+			// "value" is the name a file's text is converted under: an alias of it must still work.
+			replicas: { type: "number", min: 1, aliases: ["value"] },
 			timeout: { type: "string", parse: (raw) => Number(raw) * 1000, default: "30" },
 			tags: { type: "string", multiple: true, delimiter: "," },
 			pager: { type: "string" },
@@ -139,10 +143,12 @@ describe("flags take the files' values", () => {
 	});
 
 	it("takes a value from the next file when a file's converts to nothing, as get() does", async () => {
-		write(projectFile(), { tags: [] });
 		write(userFile(), { tags: ["u"] });
-		expect((await deploy()).flags.tags).toEqual(["u"]);
-		expect(await acme().config.get("tags")).toEqual(["u"]);
+		for (const tags of [[], ","]) {
+			write(projectFile(), { tags });
+			expect((await deploy()).flags.tags).toEqual(["u"]);
+			expect(await acme().config.get("tags")).toEqual(["u"]);
+		}
 	});
 
 	it("keeps two configs' same-named settings apart", async () => {
@@ -268,6 +274,14 @@ describe("files", () => {
 		});
 	});
 
+	it.skipIf(process.platform === "win32")("refuses a file that is not a regular file", async () => {
+		symlinkSync("/dev/null", projectFile());
+		expect(await captureExecute(acme().app, ["deploy"])).toMatchObject({
+			exitCode: 2,
+			stderr: `Error: Cannot read config file: ${projectFile()}\n`,
+		});
+	});
+
 	it("names a file that does not hold an object", async () => {
 		write(userFile(), "[1]");
 		await expect(acme().config.get("pager")).rejects.toThrow(
@@ -280,10 +294,26 @@ describe("get, list and set", () => {
 	it("get() reads a setting from its variable, the files or its default", async () => {
 		const { config } = acme();
 		expect(await config.get("timeout")).toBe(30_000);
+		expect(await config.get("replicas")).toBeUndefined();
 		write(userFile(), { region: "eu" });
 		expect(await config.get("region")).toBe("eu");
 		await withEnv({ ...process.env, ACME_REGION: "us" }, async () => {
 			expect(await config.get("region")).toBe("us");
+		});
+	});
+
+	it("get() takes the first variable that is set, as the flag does, though it converts to nothing", async () => {
+		const config = defineConfig({
+			name: "acme",
+			settings: {
+				tags: { type: "string", multiple: true, delimiter: ",", env: ["A", "B"], default: ["d"] },
+			},
+		});
+		await withEnv({ ...process.env, A: ",", B: "later" }, async () => {
+			expect(await config.get("tags")).toEqual(["d"]);
+			expect(await config.list()).toEqual([
+				{ key: "tags", value: ["d"], source: { kind: "default" } },
+			]);
 		});
 	});
 
@@ -335,6 +365,31 @@ describe("get, list and set", () => {
 		});
 		if (process.platform !== "win32") expect(statSync(userFile()).mode & 0o777).toBe(0o600);
 	});
+
+	it("set() refuses a value the setting's rules refuse, saving nothing", async () => {
+		const { config } = acme();
+		await expect(config.set({ region: "eu", replicas: 0 })).rejects.toThrow(
+			'Expected a number of at least 1 for "replicas".',
+		);
+		await expect(config.set({ replicas: Number.NaN })).rejects.toThrow(
+			'Expected a number for "replicas".',
+		);
+		expect(existsSync(userFile())).toBe(false);
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"set(values, { project: true }) refuses a linked project file",
+		async () => {
+			const target = join(root, "secrets.json");
+			write(target, { region: "us", token: "secret" });
+			symlinkSync(target, projectFile());
+			await expect(acme().config.set({ region: "eu" }, { project: true })).rejects.toThrow(
+				`${projectFile()} is a symbolic link; replace it with a file to save in it`,
+			);
+			expect(lstatSync(projectFile()).isSymbolicLink()).toBe(true);
+			expect(JSON.parse(readFileSync(target, "utf8"))).toEqual({ region: "us", token: "secret" });
+		},
+	);
 
 	it("set(values, { project: true }) writes the nearest project file, or one here", async () => {
 		const { config } = acme();

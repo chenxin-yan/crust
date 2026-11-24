@@ -158,9 +158,15 @@ export interface Config<
 	get<K extends keyof S & string>(key: K): Promise<SettingValue<S[K]>>;
 	/** Every setting with its value and where it comes from. */
 	list(): Promise<ConfigEntry<S>[]>;
-	/** Save settings in the user's file; `undefined` removes one. */
+	/**
+	 * Save settings in the user's file; `undefined` removes one. Throws for a value the setting's
+	 * rules refuse, before anything is saved.
+	 */
 	set(values: ConfigValues<S, keyof S>): Promise<void>;
-	/** Save settings in the project file, the nearest, or a new one in the working directory. */
+	/**
+	 * Save settings in the project file, the nearest, or a new one in the working directory. Throws
+	 * for a linked project file.
+	 */
 	set(
 		values: [P] extends [never] ? never : ConfigValues<S, P>,
 		options: { readonly project: true },
@@ -187,7 +193,8 @@ async function convert(
 	variable: string,
 	label: string,
 ): Promise<unknown> {
-	const { default: _default, required: _required, ...flag } = def;
+	// The flag is never read from argv: its spellings could only collide with its name `value`.
+	const { default: _default, required: _required, aliases: _aliases, ...flag } = def;
 	try {
 		return (await parseFlagValues({ value: { ...flag, env: variable } }, env)).value;
 	} catch (error) {
@@ -216,7 +223,13 @@ function fileWords(key: string, def: ConfigSetting, value: unknown, path: string
 async function readValues(path: string, parse: (text: string) => unknown): Promise<FileValues> {
 	let text: string;
 	try {
-		text = await process.getBuiltinModule("node:fs/promises").readFile(path, "utf8");
+		const fs = process.getBuiltinModule("node:fs/promises");
+		// A device or a FIFO, which a project file can link to, would never finish reading.
+		const stats = await fs.stat(path);
+		if (!stats.isFile() || stats.size > 16 * 1024 * 1024) {
+			throw new Error("not a regular file of at most 16 MiB");
+		}
+		text = await fs.readFile(path, "utf8");
 	} catch (error) {
 		const code = (error as { code?: unknown }).code;
 		if (code === "ENOENT" || code === "ENOTDIR") return {};
@@ -245,7 +258,10 @@ async function writeFile(path: string, text: string): Promise<void> {
 	const existing = await fs.stat(path).catch(() => undefined);
 	const temporary = `${path}.${crypto.randomUUID()}.tmp`;
 	try {
-		await fs.writeFile(temporary, text, { flag: "wx" });
+		await fs.writeFile(temporary, text, {
+			flag: "wx",
+			mode: existing === undefined ? undefined : existing.mode & 0o7777,
+		});
 		if (existing !== undefined) await fs.chmod(temporary, existing.mode & 0o7777);
 		await fs.rename(temporary, path);
 	} catch (error) {
@@ -340,7 +356,9 @@ export function defineConfig<
 			const converted = await Promise.all(
 				words.map((word) => convert(def, { [TEXT]: word }, TEXT, `"${key}" in ${path}`)),
 			);
-			const value = def.multiple ? converted.flat() : converted[0];
+			const value = def.multiple
+				? converted.flat().filter((item) => item !== undefined)
+				: converted[0];
 			if (value !== undefined && !(Array.isArray(value) && value.length === 0)) {
 				return { path, words, value };
 			}
@@ -353,14 +371,19 @@ export function defineConfig<
 		files: () => Promise<ConfigFile[]>,
 	): Promise<{ value: unknown; source: ConfigSource }> => {
 		const def = settings[key]!;
-		for (const variable of [def.env ?? []].flat()) {
+		// The first variable that is set, as core picks it, whatever its text converts to.
+		const variable = [def.env ?? []].flat().find((candidate) => {
+			const raw = Object.hasOwn(process.env, candidate) ? process.env[candidate] : undefined;
+			return raw !== undefined && !(raw === "" && def.type === "boolean");
+		});
+		if (variable !== undefined) {
 			const value = await convert(def, process.env, variable, `"${key}" (from $${variable})`);
 			if (value !== undefined) return { value, source: { kind: "env", name: variable } };
 		}
 		const file = await fromFiles(key, await files());
 		if (file !== undefined) return { value: file.value, source: { kind: "file", path: file.path } };
 		// Core's own default: a `parse` setting's default is parsed, as on the flag.
-		const { env: _env, required: _required, ...withDefault } = def;
+		const { env: _env, required: _required, aliases: _aliases, ...withDefault } = def;
 		const value = (await parseFlagValues({ value: withDefault }, {})).value;
 		return { value, source: value === undefined ? { kind: "unset" } : { kind: "default" } };
 	};
@@ -377,11 +400,17 @@ export function defineConfig<
 		}
 		const fs = process.getBuiltinModule("node:fs/promises");
 		// A linked user file, such as one from a dotfiles repository, stays a link; a project file
-		// arrives with a clone, so a link there is replaced, never written through.
+		// arrives with a clone, and saving in it would copy its target's keys into the working tree.
 		const path = inProject
 			? (nearest(projectName) ??
 				process.getBuiltinModule("node:path").join(process.cwd(), projectName))
 			: await userPath().then((user) => fs.realpath(user).catch(() => user));
+		if (inProject && (await fs.lstat(path).catch(() => undefined))?.isSymbolicLink()) {
+			throw new CrustError(
+				"VALIDATION",
+				`${path} is a symbolic link; replace it with a file to save in it`,
+			);
+		}
 		const next: Record<string, unknown> = { ...(await readValues(path, parse)) };
 		for (const [key, value] of Object.entries(values)) {
 			if (value === undefined) delete next[key];
@@ -553,6 +582,14 @@ export function defineConfig<
 			return Promise.all(keys.map(async (key) => ({ key, ...(await resolve(key, files)) })));
 		},
 		set: async (values: Record<string, unknown>, target?: { readonly project?: true }) => {
+			// A value the setting's rules refuse would fail every command that reads it.
+			for (const [key, value] of Object.entries(values)) {
+				if (value === undefined) continue;
+				const def = settings[key]!;
+				for (const word of fileWords(key, def, value, "set()")) {
+					await convert(def, { [TEXT]: word }, TEXT, `"${key}"`);
+				}
+			}
 			await save(values, target?.project === true);
 		},
 		extension: options.command ? extension.add(configCommand()) : extension,
