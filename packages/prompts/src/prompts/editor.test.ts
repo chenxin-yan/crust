@@ -1,7 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { setTimeout } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -12,13 +14,15 @@ import { nonTTYIO } from "./test-helpers.ts";
 
 const fixture = mkdtempSync(join(tmpdir(), "crust-editor-test-"));
 const script = join(fixture, "fake-editor.mjs");
-// Records its PID and the file it was given, then appends to it, fails, or waits to be stopped.
+// Records its PID and the file it was given, then appends to it, fails, waits to be stopped, or
+// prints a line and appends.
 writeFileSync(
 	script,
 	`import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 const file = process.argv[2];
 writeFileSync(process.env.EDITOR_SEEN, process.pid + "\\n" + file + "\\n" + readFileSync(file, "utf8"));
 if (process.env.EDITOR_MODE === "fail") process.exit(3);
+if (process.env.EDITOR_MODE === "print") console.log("editor line");
 if (process.env.EDITOR_MODE === "hang") setInterval(() => {}, 1000);
 else appendFileSync(file, " edited");
 `,
@@ -105,6 +109,25 @@ describe("editor", () => {
 		vi.stubEnv("EDITOR_MODE", "fail");
 		await expect(editor({}, createPromptIO().io)).rejects.toThrow("exited with status 3");
 		expect(existsSync(dirname(seen().file))).toBe(false);
+	});
+
+	// A subprocess, so the editor's stdout is the test's to read.
+	it("sends the editor's output to stderr, so stdout holds only what the app prints", () => {
+		const editorModule = JSON.stringify(pathToFileURL(join(import.meta.dirname, "editor.ts")).href);
+		const script = `
+			import { editor } from ${editorModule};
+			const terminal = { isTTY: true };
+			process.stdout.write(await editor({ initial: "x" }, { input: terminal, output: terminal }));
+		`;
+		const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+			env: { ...process.env, EDITOR_MODE: "print" },
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stdout).toBe("x edited");
+		expect(run.stderr).toContain("editor line");
+		expect(run.status).toBe(0);
 	});
 
 	it("stops the editor and rejects with the reason when the signal aborts", async () => {

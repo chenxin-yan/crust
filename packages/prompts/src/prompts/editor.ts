@@ -36,7 +36,8 @@ export interface EditorOptions {
  *
  * @param options - Editor prompt configuration
  * @param io - Optional streams that decide {@link canPrompt}, and the cancellation signal. The
- * editor itself runs on the process's own terminal.
+ * editor itself runs on the process's own stdin and stderr: its output goes to stderr, so a
+ * redirected stdout stays clean.
  * @returns The text of the file after the editor exits
  * @throws {NonInteractiveError} when {@link canPrompt} is `false`
  * @throws when `filename` is not a single file name, neither variable is set, or the editor
@@ -71,7 +72,7 @@ export async function editor(options: EditorOptions = {}, io?: TerminalIO): Prom
 				? `${command} "%CRUST_EDITOR_FILE%"`
 				: `exec ${command} "$CRUST_EDITOR_FILE"`,
 			[],
-			{ shell: true, stdio: "inherit", env: { ...process.env, CRUST_EDITOR_FILE: file }, signal },
+			{ shell: true, stdio: "stderr", env: { ...process.env, CRUST_EDITOR_FILE: file }, signal },
 		);
 		if (exitCode !== 0) throw new Error(`The editor (${command}) exited with status ${exitCode}.`);
 		const text = await readFile(file, "utf8");
