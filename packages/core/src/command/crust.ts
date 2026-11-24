@@ -1802,12 +1802,16 @@ export class Crust<
 	 * between the two calls, for flags of Contexts the earlier one's hooks `.use()`, and
 	 * when an explicit `MetaKeys` argument (`defineExtension<"version">(id)`) widened the
 	 * id to `string`; removed command paths can remain statically
-	 * visible and reject with `COMMAND_NOT_FOUND`. A command both registrations
+	 * visible and reject with `COMMAND_NOT_FOUND`. When a registration that is not
+	 * certain does replace the id, an action reads `undefined` for the earlier flags
+	 * the types kept, and typed input that names them fails with `Unknown flag`.
+	 * A command both registrations
 	 * contribute in one call is typed as either one's result. An `.action()` bound
 	 * before the later registration keeps the earlier flag types, so register
 	 * Extensions before `.action()`. When two Extensions with different ids
 	 * contribute the same flag and a later registration removes one of them, the
-	 * flag keeps the later Extension's type, whichever is left. An Extension with
+	 * flag keeps the later Extension's type in one call, whichever is left, and
+	 * leaves the types when a later call retires an id's flags. An Extension with
 	 * runtime-only command names makes `run()` results `unknown` for Extension
 	 * commands registered up to and in that call, since it may replace their
 	 * registration; app commands keep their types.
