@@ -374,7 +374,7 @@ function effectiveBody(
 			)
 		) {
 			problems.push(
-				`the body field "${field.name}" must be ${multiple ? "a list of " : type === "integer" ? "an " : "a "}${type}`,
+				`the body field "${field.name}" must be ${multiple ? "a list of " : type === "integer" ? "an " : "a "}${type}${type === "integer" ? ` from ${Number.MIN_SAFE_INTEGER} to ${Number.MAX_SAFE_INTEGER}` : ""}`,
 			);
 		} else if (
 			choices &&

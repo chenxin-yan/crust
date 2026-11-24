@@ -303,14 +303,21 @@ describe("generated commands", () => {
 			"--limit <integer>",
 		);
 		// A body field from --request-body is checked the same way.
-		expect(
-			await captureExecute(app, [
-				"users",
-				"create-user",
-				"--request-body",
-				'{"name":"Ada","age":1.5}',
-			]),
-		).toMatchObject({ exitCode: 2 });
+		for (const age of ["1.5", "9007199254740993"]) {
+			expect(
+				await captureExecute(app, [
+					"users",
+					"create-user",
+					"--request-body",
+					`{"name":"Ada","age":${age}}`,
+				]),
+			).toMatchObject({
+				stderr: expect.stringContaining(
+					'the body field "age" must be an integer from -9007199254740991 to 9007199254740991',
+				),
+				exitCode: 2,
+			});
+		}
 		expect(calls).toEqual([]);
 	});
 
