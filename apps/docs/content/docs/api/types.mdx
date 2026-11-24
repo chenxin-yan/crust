@@ -172,7 +172,7 @@ Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
+`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name or names, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 
