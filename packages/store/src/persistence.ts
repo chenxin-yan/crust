@@ -492,7 +492,8 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
 
 /**
  * Runs `fn` while holding `<filePath>.lock`, an advisory lock shared by every
- * process that uses this function on the same file.
+ * process that uses this function on the same file. A store that is not `strict` holds it
+ * around each mutation of its file. It does not reenter: `fn` must not take it again.
  *
  * The lock file is created exclusively (`wx`) and holds the owner's pid and host.
  * Waiters retry with a growing, jittered delay and remove a lock whose process

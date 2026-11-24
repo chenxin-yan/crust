@@ -11,6 +11,9 @@ export { withLock } from "./lock.ts";
 // Path
 export type { PlatformEnv } from "./path.ts";
 export { cacheDir, configDir, dataDir, stateDir } from "./path.ts";
+// Persistence
+export type { FileLockOptions } from "./persistence.ts";
+export { withFileLock } from "./persistence.ts";
 // Store
 export { createStore } from "./store.ts";
 // Types
