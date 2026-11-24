@@ -434,7 +434,7 @@ function _typecheckOmitsUndefinedInputSections() {
 	type Shape = (typeof app)["_types"]["shape"];
 	type _build = Expect<Equal<keyof RunInput<CommandShapeAt<Shape, readonly ["build"]>>, "flags">>;
 	type _bare = Expect<
-		Equal<RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, Record<string, never>>
+		Equal<RunInput<CommandShapeAt<Shape, readonly ["bare"]>>, Record<string, undefined>>
 	>;
 
 	// @ts-expect-error -- no args section
@@ -453,6 +453,11 @@ function _typecheckOmitsUndefinedInputSections() {
 	void app.run(["bare"]);
 	void app.run(["bare"], {});
 	void app.run(["bare"], undefined);
+	// Keys set to `undefined` count as omitted.
+	void app.run(["bare"], { flags: undefined });
+	const heldUndefined = { args: undefined, flags: undefined };
+	void app.at(["bare"]).run(heldUndefined);
+	void new Crust("bare").run([], { flags: undefined });
 	// @ts-expect-error -- a primitive is no input
 	void app.run(["bare"], 42);
 	// @ts-expect-error -- a primitive is no input, through a handle

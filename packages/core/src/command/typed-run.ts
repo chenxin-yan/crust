@@ -181,7 +181,7 @@ type RunSection<Name extends string, Values> = keyof Values extends never
 /** Structured values bound directly against the selected command's definitions; no argv is produced. */
 export type RunInput<Shape extends CommandShape> = [keyof RunSections<Shape>] extends [never]
 	? // A bare `{}` would accept any value, primitives included.
-		Record<string, never>
+		Record<string, undefined>
 	: RunSections<Shape>;
 
 type RunSections<Shape extends CommandShape> = RunSection<
