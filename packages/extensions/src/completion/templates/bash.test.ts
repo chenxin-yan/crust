@@ -460,6 +460,25 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 				subCommands: [],
 			},
 			{
+				name: "box",
+				flags: [
+					{ name: "rm", spellings: ["--rm"], type: "boolean", takesValue: false },
+					{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
+				],
+				args: [
+					{ name: "image", type: "string", required: true, variadic: false, choices: ["img"] },
+					{ name: "command", type: "string", required: false, variadic: false, choices: ["cmd"] },
+					{
+						name: "tail",
+						type: "string",
+						required: false,
+						variadic: "passthrough",
+						choices: ["tail"],
+					},
+				],
+				subCommands: [],
+			},
+			{
 				name: "wrap",
 				flags: [],
 				args: [
@@ -538,6 +557,17 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 		expect(await complete(["mycli", "docker", "alpine", "--"])).toEqual([]);
 		expect(await complete(["mycli", "docker", "alpine", ""])).toEqual(["sh"]);
 		expect(await complete(["mycli", "docker", "--rm", "alpine", "-x", ""])).toEqual(["sh"]);
+
+		// From the first positional on, every word fills a slot, as Core binds it.
+		expect(await complete(["mycli", "box", "img", ""])).toEqual(["cmd"]);
+		expect(await complete(["mycli", "box", "img", "--rm", ""])).toEqual(["tail"]);
+		expect(await complete(["mycli", "box", "img", "--name", "x", ""])).toEqual(["tail"]);
+		expect(await complete(["mycli", "box", "img", "--", ""])).toEqual(["tail"]);
+		expect(await complete(["mycli", "box", "--", "img", "--", ""])).toEqual(["tail"]);
+		expect(await complete(["mycli", "box", "--rm", "--name", "x", "img", ""])).toEqual(["cmd"]);
+		// A lone `-` (stdin) is a positional.
+		expect(await complete(["mycli", "box", "-", ""])).toEqual(["cmd"]);
+		expect(await complete(["mycli", "box", "-", "--r"])).toEqual([]);
 	});
 
 	it('still offers subcommands before `--` when an "afterDoubleDash" argument is the only one', async () => {

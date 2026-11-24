@@ -382,6 +382,9 @@ export function renderBash(
 
 	const passthroughPaths: string[] = [];
 	collectPassthroughPaths("", spec, passthroughPaths);
+	const passthroughAlts = passthroughPaths
+		.map((path) => `"${bashDoubleQuoteInner(path)}"`)
+		.join("|");
 
 	const lines: string[] = [];
 
@@ -486,8 +489,8 @@ export function renderBash(
 	lines.push('\t\tif [[ "$w" == --*=* ]]; then');
 	lines.push("\t\t\t((i++)); continue");
 	lines.push("\t\tfi");
-	// Bare flag: if it's a value-taking flag, skip the value too.
-	lines.push('\t\tif [[ "$w" == -* ]]; then');
+	// Bare flag: if it's a value-taking flag, skip the value too. A lone `-` (stdin) is a positional.
+	lines.push('\t\tif [[ "$w" == -?* ]]; then');
 	lines.push("\t\t\tlocal candidate");
 	lines.push("\t\t\tlocal _was_value_flag=0");
 	lines.push("\t\t\tfor candidate in $valueFlags; do");
@@ -521,9 +524,8 @@ export function renderBash(
 	// Routing stopped at the first positional: before the cursor, a `"passthrough"`
 	// argument has taken it and every word since, flags included.
 	if (passthroughPaths.length > 0) {
-		const alts = passthroughPaths.map((path) => `"${bashDoubleQuoteInner(path)}"`).join("|");
 		lines.push('\tcase "$cmd_path" in');
-		lines.push(`\t\t${alts}) if (( i < cword )); then end_of_options=1; fi ;;`);
+		lines.push(`\t\t${passthroughAlts}) if (( i < cword )); then end_of_options=1; fi ;;`);
 		lines.push("\tesac");
 	}
 	lines.push("");
@@ -596,7 +598,7 @@ export function renderBash(
 		lines.push('\t\t\tif [[ "$_pidx_w" == --*=* ]]; then');
 		lines.push("\t\t\t\t((_pidx_j++)); continue");
 		lines.push("\t\t\tfi");
-		lines.push('\t\t\tif [[ "$_pidx_w" == -* ]]; then');
+		lines.push('\t\t\tif [[ "$_pidx_w" == -?* ]]; then');
 		lines.push("\t\t\t\tlocal _pidx_cand");
 		lines.push("\t\t\t\tfor _pidx_cand in $valueFlags; do");
 		lines.push('\t\t\t\t\tif [[ "$_pidx_cand" == "$_pidx_w" ]]; then _pidx_skip_next=1; break; fi');
@@ -632,6 +634,15 @@ export function renderBash(
 				lines.push("\t\t\t\t;;");
 			}
 			lines.push("\t\t\t*) pos_idx=$((pos_idx + pos_after)) ;;");
+			lines.push("\t\tesac");
+		}
+		// A `"passthrough"` argument's command binds every word from its first positional
+		// on, flags and `--` included; a leading `--` is counted by the walk above.
+		if (passthroughPaths.length > 0) {
+			lines.push('\t\tcase "$cmd_path" in');
+			lines.push(
+				`\t\t\t${passthroughAlts}) if (( i < cword )) && [[ "\${words[i]}" != "--" ]]; then pos_idx=$((cword - i)); fi ;;`,
+			);
 			lines.push("\t\tesac");
 		}
 		lines.push('\t\tlocal pos_choices=""');
