@@ -20,6 +20,7 @@ Booleans, numbers, and environment variables follow common CLI conventions, and 
 - New `type: "count"` for flags: `-vvv` is `3` and an omitted flag is `0`, typed `number`. It takes no value, negation, `default`, `required`, `multiple`, or `env`.
 - Boolean text, from an environment variable or a positional argument, is `true`, `1`, `yes`, or `on`, or `false`, `0`, `no`, or `off`, in any letter case. Any other text is a `PARSE` error naming the variable (`Expected a boolean (true, false, 1, 0, yes, no, on, off) for --frozen (from $FROZEN).`) instead of `false`. An empty boolean variable counts as unset, in `@crustjs/env` too.
 - `env` on a flag or setting is a variable name or a list of names, where the first one that is set wins: `env: "ACME_ORG"`, `env: ["CPNPM_REGISTRY", "npm_config_registry"]`. The `{ name, delimiter }` object is removed; the flag's own `delimiter` now also splits the variable's text. `FlagSnapshot.env` and `DocumentationFlag.env` hold the name or list, help shows `[env: A, B]`, and `FlagSnapshot.noNegate` is removed.
+- `defineEnv()` rejects a key a variable definition does not have, such as `noNegate` or a misspelling, at compile time; it was accepted and ignored.
 - `@crustjs/utils/primitive`: `coerceBooleanString()` is replaced by `tryCoerceBoolean()`, which reads the words above and returns `undefined` for any other text.
 
 ```ts

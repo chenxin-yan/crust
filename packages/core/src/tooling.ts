@@ -38,4 +38,4 @@ export { standardJsonSchema } from "./parsing/schema.ts";
 export type { FlagEnvironment } from "./parsing/parser.ts";
 export { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
 export type { RunInputPayload, RunInputValue } from "./types.ts";
-export type { LocalValueBrand } from "./validation/shared.ts";
+export type { LocalValueBrand, UnknownKeysBrand } from "./validation/shared.ts";

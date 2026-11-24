@@ -7,7 +7,12 @@ import {
 	type FlagDef,
 	type ValidatedInput,
 } from "@crustjs/core";
-import { formatDescription, type LocalValueBrand, parseFlagValues } from "@crustjs/core/tooling";
+import {
+	formatDescription,
+	type LocalValueBrand,
+	parseFlagValues,
+	type UnknownKeysBrand,
+} from "@crustjs/core/tooling";
 
 type FlagOnlyKey = "short" | "aliases" | "negatable" | "hidden" | "env";
 
@@ -175,8 +180,10 @@ export function defineEnv<
 	const O extends EnvOptions | undefined = undefined,
 >(
 	name: Name,
-	// Same value brands as defineFlag (default within choices, synchronous parse), per variable.
-	vars: V & { readonly [K in keyof V]: LocalValueBrand<V[K]> },
+	// Same value and unknown-key brands as defineFlag (default within choices, synchronous parse), per variable.
+	vars: V & {
+		readonly [K in keyof V]: LocalValueBrand<V[K]> & UnknownKeysBrand<V[K], EnvVarDef>;
+	},
 	// A required tuple member keeps `undefined` in O, so omittable options stay honest.
 	...[options]: undefined extends O ? [] | [options: O] : [options: O]
 ): ContextFactory<Name, void, EnvValue<V, O>> {

@@ -113,6 +113,11 @@ function _typecheckDefineEnvRejectsFlagOnlyKeys() {
 	defineEnv("env", declared);
 	// @ts-expect-error -- a count counts argv occurrences
 	defineEnv("env", { VERBOSE: { type: "count" } });
+	// @ts-expect-error -- FIX_UNKNOWN_PROPERTY: nothing reads a key EnvVarDef does not have
+	defineEnv("env", { DEBUG: { type: "boolean", noNegate: true } });
+	const unknownKey = { DEBUG: { type: "boolean", bogus: 1 } } as const;
+	// @ts-expect-error -- a pre-declared record is checked at the call too
+	defineEnv("env", unknownKey);
 	defineEnv("env", { PORT: { type: "integer", min: 1 } });
 }
 
