@@ -136,6 +136,7 @@ describe("snapshotCommand", () => {
 						},
 					},
 				},
+				endpoint: { type: "url", default: new URL("https://a.example") },
 			})
 			.action(({ command }) => {
 				void command.meta.name;

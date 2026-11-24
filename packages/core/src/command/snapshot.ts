@@ -325,7 +325,7 @@ function effectiveRequired(def: ArgDef | FlagDef, missing: undefined | []): bool
 	return undefined;
 }
 
-function snapshotArg(def: ArgDef): ArgSnapshot {
+function snapshotArg(def: ArgDef, declared: SerializableDefault): ArgSnapshot {
 	return freezeCompact({
 		// Extras first, so a same-named extra never overrides a core field (also in snapshotFlag and projectMeta).
 		...Object.fromEntries(extraEntries(def, CORE_ARG_KEYS)),
@@ -335,7 +335,7 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		required: effectiveRequired(def, def.variadic ? [] : undefined),
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
-		default: serializableDefault(def.default),
+		default: declared,
 		min: def.min,
 		max: def.max,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
@@ -346,6 +346,7 @@ function snapshotFlag(
 	def: FlagDef,
 	extension: ExtensionId | undefined,
 	inherited?: true,
+	declared = serializableDefault(def.default),
 ): FlagSnapshot {
 	return freezeCompact({
 		...Object.fromEntries(extraEntries(def, CORE_FLAG_KEYS)),
@@ -358,7 +359,7 @@ function snapshotFlag(
 		multiple: def.multiple,
 		negatable: isFlagNegatable(def),
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
-		default: serializableDefault(def.default),
+		default: declared,
 		env: def.env,
 		min: def.min,
 		max: def.max,
@@ -543,13 +544,17 @@ export function createSnapshotProjector(
 	return project;
 }
 
-function snapshotFlags(node: CommandNode): Record<string, FlagSnapshot> {
+function snapshotFlags(
+	node: CommandNode,
+	defaults: ReadonlyMap<ArgDef | FlagDef, SerializableDefault>,
+): Record<string, FlagSnapshot> {
 	const flags: Record<string, FlagSnapshot> = {};
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		flags[name] = snapshotFlag(
 			def,
 			node.extensionFlags?.get(name),
 			Object.hasOwn(node.localFlags, name) || node.rootOnlyFlags?.has(name) ? undefined : true,
+			defaults.get(def),
 		);
 	}
 	return flags;
@@ -585,17 +590,24 @@ function projectNode(
 		? [...(node.meta.sections ?? []), ...contributed]
 		: node.meta.sections;
 	const outputSchema = node.outputSchema && standardJsonSchema(node.outputSchema, "output");
+	// Defaults are copied now, so the snapshot agrees with what this invocation parsed.
+	const defaults = new Map<ArgDef | FlagDef, SerializableDefault>(
+		[...node.args, ...Object.values(node.effectiveFlags)].map((def) => [
+			def,
+			serializableDefault(def.default),
+		]),
+	);
 	// Projecting an argument or flag calls its schema, so both wait for a reader.
 	let args: CommandSnapshot["args"] | undefined;
 	let flags: CommandSnapshot["flags"] | undefined;
-	const snapshot: CommandSnapshot = Object.freeze({
+	return Object.freeze({
 		meta: projectMeta(node.meta, sections),
 		hasAction: node.run !== undefined,
 		get args() {
-			return (args ??= Object.freeze(node.args.map(snapshotArg)));
+			return (args ??= Object.freeze(node.args.map((def) => snapshotArg(def, defaults.get(def)))));
 		},
 		get flags() {
-			return (flags ??= Object.freeze(snapshotFlags(node)));
+			return (flags ??= Object.freeze(snapshotFlags(node, defaults)));
 		},
 		...(outputSchema ? { outputSchema } : {}),
 		...(node.outputSchema ? { output: true as const } : {}),
@@ -603,7 +615,4 @@ function projectNode(
 		...(node.groups ? { groups: node.groups } : {}),
 		subCommands,
 	});
-	// A mutable default is read now, so the snapshot agrees with what this invocation parsed.
-	if (hasMutableDefault(node)) void [snapshot.args, snapshot.flags];
-	return snapshot;
 }
