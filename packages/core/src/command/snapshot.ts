@@ -390,7 +390,7 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 	for (const [name, sub] of Object.entries(node.subCommands)) {
 		subCommands[name] = snapshotCommand(sub);
 	}
-	return projectNode(node, snapshotFlags(node), Object.freeze(subCommands));
+	return projectNode(node, Object.freeze(subCommands));
 }
 
 /**
@@ -401,6 +401,13 @@ function isMutableDefault(value: DeclaredDefault): boolean {
 	if (value instanceof URL) return true;
 	if (Array.isArray(value)) return !Object.isFrozen(value) || value.some(isMutableDefault);
 	return false;
+}
+
+function hasMutableDefault(node: CommandNode): boolean {
+	return (
+		node.args.some((def) => isMutableDefault(def.default)) ||
+		Object.values(node.effectiveFlags).some((def) => isMutableDefault(def.default))
+	);
 }
 
 /**
@@ -428,9 +435,7 @@ const shared = new WeakMap<CommandNode, CommandSnapshot>();
 function isReusable(node: CommandNode): boolean | undefined {
 	const known = reusable.get(node);
 	if (known !== undefined) return known;
-	let verdict =
-		!node.args.some((def) => isMutableDefault(def.default)) &&
-		!Object.values(node.effectiveFlags).some((def) => isMutableDefault(def.default));
+	let verdict = !hasMutableDefault(node);
 	if (verdict) {
 		const children = builtChildrenOf(node);
 		if (!children) return undefined;
@@ -469,7 +474,7 @@ export function createSnapshotProjector(
 		if (existing) return existing;
 		const subCommands: Record<string, CommandSnapshot> = {};
 		for (const [name, sub] of Object.entries(node.subCommands)) subCommands[name] = share(sub);
-		const snapshot = projectNode(node, snapshotFlags(node), Object.freeze(subCommands));
+		const snapshot = projectNode(node, Object.freeze(subCommands));
 		shared.set(node, snapshot);
 		return snapshot;
 	};
@@ -493,7 +498,7 @@ export function createSnapshotProjector(
 				get: () => (child ??= projectChild(node, name, meta)),
 			});
 		}
-		return projectNode(node, snapshotFlags(node), Object.freeze(subCommands), authored);
+		return projectNode(node, Object.freeze(subCommands), authored);
 	};
 	/**
 	 * A child that is not built yet is projected from its static metadata. Only
@@ -572,7 +577,6 @@ function projectMeta(
 
 function projectNode(
 	node: CommandNode,
-	flags: Record<string, FlagSnapshot>,
 	subCommands: Readonly<Record<string, CommandSnapshot>>,
 	authored = false,
 ): CommandSnapshot {
@@ -581,15 +585,25 @@ function projectNode(
 		? [...(node.meta.sections ?? []), ...contributed]
 		: node.meta.sections;
 	const outputSchema = node.outputSchema && standardJsonSchema(node.outputSchema, "output");
-	return Object.freeze({
+	// Projecting an argument or flag calls its schema, so both wait for a reader.
+	let args: CommandSnapshot["args"] | undefined;
+	let flags: CommandSnapshot["flags"] | undefined;
+	const snapshot: CommandSnapshot = Object.freeze({
 		meta: projectMeta(node.meta, sections),
 		hasAction: node.run !== undefined,
-		args: Object.freeze(node.args.map(snapshotArg)),
-		flags: Object.freeze(flags),
+		get args() {
+			return (args ??= Object.freeze(node.args.map(snapshotArg)));
+		},
+		get flags() {
+			return (flags ??= Object.freeze(snapshotFlags(node)));
+		},
 		...(outputSchema ? { outputSchema } : {}),
 		...(node.outputSchema ? { output: true as const } : {}),
 		...(node.extension ? { extension: node.extension } : {}),
 		...(node.groups ? { groups: node.groups } : {}),
 		subCommands,
 	});
+	// A mutable default is read now, so the snapshot agrees with what this invocation parsed.
+	if (hasMutableDefault(node)) void [snapshot.args, snapshot.flags];
+	return snapshot;
 }

@@ -119,6 +119,33 @@ describe("snapshotCommand", () => {
 		expect(snapshot.flags.broken).not.toHaveProperty("required");
 	});
 
+	it("calls no schema with a missing value when an action reads only command metadata", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("cli")
+			.flags({
+				tag: {
+					type: "string",
+					schema: {
+						"~standard": {
+							version: 1 as const,
+							vendor: "test",
+							validate: (value: unknown) => {
+								seen.push(value);
+								return typeof value === "string" ? { value } : { issues: [{ message: "missing" }] };
+							},
+						},
+					},
+				},
+			})
+			.action(({ command }) => {
+				void command.meta.name;
+			});
+
+		await app.run([], { flags: { tag: "real" } });
+
+		expect(seen).toEqual(["real"]);
+	});
+
 	it("is serializable: no functions, URL defaults become strings", () => {
 		const snapshot = snapshotCommand(buildTree());
 
