@@ -64,7 +64,11 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			},
 		])
 		.renderer(async (ctx) => {
-			if (ctx.flags.json !== true) return undefined;
+			if (ctx.flags.json !== true) {
+				// Flags were bound, so `onError` must not go back to raw argv.
+				flushHeld.set(ctx, () => {});
+				return undefined;
+			}
 			// Loaded only under --json, keeping it out of every CLI's startup.
 			const { parseJsonValue, jsonErrorDetails } = await import("@crustjs/utils/json");
 			/** JSON text for `value`, or a clear failure naming `what` when JSON cannot represent it exactly. */
@@ -149,7 +153,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 		// Argv that fails to parse never selects the renderer, but the person still asked for JSON.
 		.onError((error, ctx) => {
 			if (flushHeld.has(ctx) || !(error instanceof CrustError) || !error.is("PARSE")) return;
-			// shortcut: a `--json` meant for a passthrough argument also selects JSON here, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
+			// shortcut: on a `PARSE` failure before binding, a `--json` meant for a passthrough argument also selects JSON here, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
 			const end = ctx.argv.indexOf("--");
 			const words = end === -1 ? ctx.argv : ctx.argv.slice(0, end);
 			if (!words.includes("--json")) return;

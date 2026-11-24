@@ -408,6 +408,20 @@ describe("json", () => {
 		expect((await captureExecute(app, argv)).stderr).toBe('Error: Unknown flag "--unknown"\n');
 	});
 
+	it("leaves an action's PARSE error as text when --json was a passthrough argument", async () => {
+		const app = new Crust("app").extend(json()).command("exec", (cmd) =>
+			cmd.args({ name: "words", type: "string", variadic: "passthrough" }).action(() => {
+				throw new CrustError("PARSE", "bad input");
+			}),
+		);
+
+		expect(await captureExecute(app, ["exec", "boom", "--json"])).toEqual({
+			stdout: "",
+			stderr: "Error: bad input\n",
+			exitCode: 2,
+		});
+	});
+
 	describe("commands with .output()", () => {
 		it("prints only the JSON result, dropping stdout() text", async () => {
 			const app = outputAppReturning(() => ({ id: 7 }));
