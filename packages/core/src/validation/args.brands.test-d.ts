@@ -1,4 +1,5 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { Crust } from "../command/crust.ts";
 import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.brands.ts";
 
 // ValidateArgs type inference
@@ -127,6 +128,32 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 	>;
 	type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
+}
+
+{
+	// .args() rejects a conditional tuple when either branch is invalid, even if the invalid
+	// branch is assignable to the valid one
+	const cond = Math.random() > 0.5;
+	const typo = cond
+		? ([{ name: "x", type: "string", requried: true }] as const)
+		: ([{ name: "x", type: "string" }] as const);
+	// @ts-expect-error `requried` is not an argument property
+	new Crust("cli").args(...typo);
+	const position = cond
+		? ([
+				{ name: "a", type: "string", variadic: true },
+				{ name: "b", type: "string" },
+			] as const)
+		: ([
+				{ name: "a", type: "string" },
+				{ name: "b", type: "string" },
+			] as const);
+	// @ts-expect-error a variadic that is not last
+	new Crust("cli").args(...position);
+	const valid = cond
+		? ([{ name: "x", type: "string", required: true }] as const)
+		: ([{ name: "y", type: "boolean" }] as const);
+	new Crust("cli").args(...valid);
 }
 
 {
