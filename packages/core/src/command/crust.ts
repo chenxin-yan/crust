@@ -625,8 +625,10 @@ type AppShape<
 // Literal keys only: an open record's index signature names no entry to replace.
 type LiteralKeys<T> = keyof { [K in keyof T as string extends K ? never : K]: 0 };
 
-// An Extension entry that overlaps an earlier one passes preparation only as a same-id
-// re-registration, where the later Extension replaces the earlier, so its entries win.
+// An Extension entry that overlaps an earlier one passes preparation as a same-id
+// re-registration, where the later Extension replaces the earlier, so its entries win. It also
+// passes when a later registration removes one of two different Extensions; the later entry still
+// wins here, though the earlier one may be what runs.
 type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extends [never]
 	? Base & Next
 	: { [K in keyof Base as K extends LiteralKeys<Next> ? never : K]: Base[K] } & Next;
@@ -1685,9 +1687,12 @@ export class Crust<
 	 * visible and reject with `COMMAND_NOT_FOUND`. A command both registrations
 	 * contribute in one call is typed as either one's result. An `.action()` bound
 	 * before the later registration keeps the earlier flag types, so register
-	 * Extensions before `.action()`. An Extension with runtime-only command names makes
-	 * `run()` results `unknown` for Extension commands registered up to and in that
-	 * call, since it may replace their registration; app commands keep their types.
+	 * Extensions before `.action()`. When two Extensions with different ids
+	 * contribute the same flag and a later registration removes one of them, the
+	 * flag keeps the later Extension's type, whichever is left. An Extension with
+	 * runtime-only command names makes `run()` results `unknown` for Extension
+	 * commands registered up to and in that call, since it may replace their
+	 * registration; app commands keep their types.
 	 * Required root metadata keys are checked against the constructor's inferred
 	 * metadata by TypeScript, not at runtime.
 	 * Recipe builders cannot call this root-only method.
