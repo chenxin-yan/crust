@@ -119,6 +119,26 @@ describe("progressGroup on a terminal", () => {
 		}
 	});
 
+	it("keeps the lines above when a narrowed terminal cuts its last row", async () => {
+		const { terminal, group, screen } = setup();
+		const a = group.add({ total: 2, message: "s" });
+		const b = group.add({ total: 2, message: "layer one with a long name here" });
+		try {
+			terminal.write("log one\nlog two\n");
+			a.start();
+			b.start();
+			await screen();
+			// xterm.js cuts the row holding the cursor instead of reflowing it.
+			terminal.resize(15, 20);
+			a.advance();
+			expect(await screen()).toEqual(["log one", "log two", "- s (1/2)", "- layer… (0/2)"]);
+		} finally {
+			a.stop();
+			b.stop();
+			terminal.dispose();
+		}
+	});
+
 	it.skipIf(process.platform === "win32")(
 		"moves its rows below a line written through Crust's process output",
 		async () => {
@@ -237,6 +257,79 @@ describe("progressGroup on a terminal", () => {
 		const written = writes.length;
 		await new Promise((resolve) => setTimeout(resolve, 200));
 		expect(writes).toHaveLength(written);
+	});
+
+	it("stops every aborted indicator when one final line throws", () => {
+		const { sink, writes } = createFakeSink();
+		const controller = new AbortController();
+		const themeError = new Error("theme boom");
+		let thrown = false;
+		const group = progressGroup({
+			sigint: false,
+			sink,
+			signal: controller.signal,
+			theme: {
+				error: (text) => {
+					if (thrown) return text;
+					thrown = true;
+					throw themeError;
+				},
+			},
+		});
+		const a = group.add({ total: 1, message: "a" });
+		const b = group.add({ total: 1, message: "b" });
+		// Run the deferred stop here so its rethrow does not reach the runner as an uncaught error.
+		let deferred: (() => void) | undefined;
+		const setImmediate = vi.spyOn(globalThis, "setImmediate").mockImplementation(((
+			callback: () => void,
+		) => {
+			deferred = callback;
+		}) as unknown as typeof globalThis.setImmediate);
+
+		a.start();
+		b.start();
+		controller.abort();
+		setImmediate.mockRestore();
+
+		expect(() => deferred?.()).toThrow(themeError);
+		expect(writes.some((text) => text.includes("✗ b (0/1)"))).toBe(true);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+	});
+
+	it("leaves no item or listener behind when the first cursor write throws", () => {
+		const writes: string[] = [];
+		let failNext = true;
+		const controller = new AbortController();
+		const addListener = vi.spyOn(controller.signal, "addEventListener");
+		const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+		const sinkError = new Error("sink boom");
+		const group = progressGroup({
+			sigint: false,
+			signal: controller.signal,
+			spinner: { frames: ["-"], interval: 60_000 },
+			sink: {
+				isTTY: true,
+				columns: 40,
+				write: (text) => {
+					if (failNext) {
+						failNext = false;
+						throw sinkError;
+					}
+					writes.push(text);
+				},
+			},
+		});
+		const a = group.add({ total: 1, message: "failed-item" });
+		const b = group.add({ total: 1, message: "second" });
+
+		expect(() => a.start()).toThrow(sinkError);
+		expect(removeListener).toHaveBeenCalledTimes(addListener.mock.calls.length);
+		const written = writes.length;
+		b.start();
+		b.stop();
+
+		expect(writes[written]).toBe("\x1B[?25l");
+		expect(writes.some((text) => text.includes("failed-item"))).toBe(false);
 	});
 
 	it("restores the cursor when the last final line throws", () => {

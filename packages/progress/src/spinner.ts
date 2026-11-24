@@ -171,7 +171,11 @@ export function fitRow(text: string, width: number): string {
 		for (const { segment, index } of graphemes.segment(text.slice(start, end))) {
 			// A carriage return rewinds to the start of the current row; the text after it overwrites.
 			if (segment === "\r") column = 0;
-			else if (LINE_BREAK.test(segment) || (column += stringWidth(segment)) > width) {
+			// A tab advances at most 8 columns; `stringWidth` counts it as none.
+			else if (
+				LINE_BREAK.test(segment) ||
+				(column += segment === "\t" ? 8 : stringWidth(segment)) > width
+			) {
 				const escapes = text.slice(cut).match(ESCAPE)?.join("") ?? "";
 				return `${text.slice(0, cut)}${width > 0 ? "…" : ""}${escapes}`;
 			}

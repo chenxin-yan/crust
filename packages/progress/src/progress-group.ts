@@ -72,20 +72,30 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 	const onAbort = () => {
 		const aborted = [...running];
 		setImmediate(() => {
-			for (const item of aborted) stopItem(item, "error");
+			// One throwing final line must not leave its siblings running; the first failure wins.
+			let failure: { error: unknown } | undefined;
+			for (const item of aborted) {
+				try {
+					stopItem(item, "error");
+				} catch (error) {
+					failure ??= { error };
+				}
+			}
+			if (failure) throw failure.error;
 		});
 	};
 
 	const count = (item: Item) => ` (${item.current}/${item.total})`;
 
-	// Rows are drawn short of the last column and the cursor stays at the end of the last one, so
-	// moving up one less than the rows they take lands on the first; erasing to the end of the
+	// Rows are drawn short of the last column, each ended by a newline, so the cursor rests on the
+	// empty row below them (a terminal may cut the row holding the cursor on resize instead of
+	// reflowing it). Moving up the rows they take lands on the first; erasing to the end of the
 	// screen leaves the cursor at its start. A terminal narrowed since then reflowed each row.
 	function erase(): string {
 		const columns = sink.columns || 80;
 		const height = drawn.reduce((sum, width) => sum + Math.max(1, Math.ceil(width / columns)), 0);
 		drawn = [];
-		return `\r${height > 1 ? `${ESC}${height - 1}A` : ""}${ESC}J`;
+		return `\r${height > 0 ? `${ESC}${height}A` : ""}${ESC}J`;
 	}
 
 	function rows(): string[] {
@@ -106,7 +116,7 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 	// `above` is printed in place of the old rows, above the new ones.
 	function draw(above = ""): void {
 		const lines = rows();
-		sink.write(erase() + above + lines.join("\n"));
+		sink.write(erase() + above + lines.map((line) => `${line}\n`).join(""));
 		drawn = lines.map(stringWidth);
 	}
 
@@ -178,9 +188,9 @@ export function progressGroup(options: ProgressGroupOptions = {}): ProgressGroup
 					if (item.state !== "idle") return;
 					item.state = "running";
 					running.add(item);
-					if (running.size === 1) begin();
-					if (!isInteractive) return;
 					try {
+						if (running.size === 1) begin();
+						if (!isInteractive) return;
 						draw();
 					} catch (error) {
 						// A throwing theme or sink must not leave the item to the timer or the session open.

@@ -209,6 +209,15 @@ describe("spinner — terminal sink", () => {
 		expect(writes[1]).toBe("\x1B[2K\r⠋ abcdef\rghijkl");
 	});
 
+	it("counts a tab as the most columns it can advance toward the row width", () => {
+		const { sink, writes } = createFakeSink(true, 10);
+		const handle = spinner({ message: "a\tb", sigint: false, sink });
+		handle.start();
+		handle.stop();
+
+		expect(writes[1]).toBe("\x1B[2K\r⠋ a…");
+	});
+
 	it("keeps the styles a cut frame opened closed", () => {
 		const { sink, writes } = createFakeSink(true, 10);
 		const handle = spinner({
