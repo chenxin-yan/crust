@@ -154,6 +154,9 @@ Register-ArgumentCompleter -Native -CommandName ${bin} -ScriptBlock {
 	}
 
 	$word = [string]$wordToComplete
+	# PowerShell hands over a quoted word with its quotes; the tree has its value.
+	$typed = $commandAst.CommandElements | Where-Object { $_.Extent.StartOffset -lt $cursorPosition -and $_.Extent.EndOffset -ge $cursorPosition } | Select-Object -Last 1
+	if ($typed -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $typed.StringConstantType -ne 'BareWord') { $word = $typed.Value }
 	$prefix = ''
 	$def = $null
 	$offerSubs = $false

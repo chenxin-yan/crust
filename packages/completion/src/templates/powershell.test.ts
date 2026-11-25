@@ -194,6 +194,16 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 		]);
 	});
 
+	it("completes a quoted current word by its value", async () => {
+		expect(await complete(scriptPath, "mycli build --target 'br")).toEqual(["browser"]);
+		expect(await complete(scriptPath, 'mycli "dep')).toEqual(["dep", "deploy"]);
+		expect(await complete(completeScriptPath, "mycli deploy --region 'us")).toEqual([
+			"'us’’s'",
+			"us-one",
+			"us-two",
+		]);
+	});
+
 	it('offers no flags after the first positional of a command with a "passthrough" argument', async () => {
 		expect(await complete(passthroughScriptPath, "mycli box --")).toEqual(["--name", "--rm"]);
 		expect(await complete(passthroughScriptPath, "mycli box img ")).toEqual(["cmd"]);
