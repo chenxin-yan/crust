@@ -1,15 +1,16 @@
-import type { ExecuteOptions, OutputSink } from "@crustjs/core";
+import type { OutputSink } from "@crustjs/core";
 
-import { type CaptureOptions, captureText, joinChunks } from "./capture.ts";
+import {
+	type CaptureOptions,
+	type CapturedExecute,
+	captureText,
+	type ExecutableApp,
+	executeInProcess,
+	isolate,
+} from "./capture.ts";
 
-export type { CaptureOptions } from "./capture.ts";
-
-/** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
-export interface ExecutableApp {
-	// Core's own options type: a copy of its members drifts, and stops matching under
-	// `exactOptionalPropertyTypes`.
-	execute(options?: ExecuteOptions): Promise<number>;
-}
+export type { CaptureOptions, CapturedExecute, Environment, ExecutableApp } from "./capture.ts";
+export { withEnv } from "./capture.ts";
 
 /** {@link CaptureOptions} plus the streams the action sees. */
 export type CaptureExecuteOptions = CaptureOptions & {
@@ -28,26 +29,12 @@ export type CaptureExecuteOptions = CaptureOptions & {
 		| { isTTY?: false | undefined; columns?: undefined }
 	);
 
-export interface CapturedExecute {
-	readonly stdout: string;
-	readonly stderr: string;
-	/**
-	 * The exit code `execute()` resolved to: `0` or the action's `exitCode(n)`, `1` or a thrown
-	 * value's non-zero integer `exitCode`, `2` for a usage error, `130` for cancellation, `143` after `SIGTERM`.
-	 */
-	readonly exitCode: number;
-}
-
-// Overlapping captures share process-global exit state, so only the outermost can restore it safely.
-let activeExecuteCaptures = 0;
-let exitCodeBeforeExecuteCaptures: typeof process.exitCode;
-
 /**
- * Drive the terminal `execute()` path in-process: exit-code protocol,
+ * Run `argv` through `app.execute()` in-process and capture exactly what it wrote: exit codes,
  * Extension `onError` rendering, and cancellation (130, or 143 after SIGTERM) are all observable
- * without spawning a subprocess. Flags' `env` fallbacks read `options.env` when given, and
- * captured text is plain unless `options.raw` is set. The action's streams are no terminal
- * unless `options.isTTY` is set, and its `stdin` holds `options.stdin`, else nothing.
+ * without spawning a subprocess. `options.env` and `options.cwd` replace the process's for the
+ * run, and captured text is plain unless `options.raw` is set. The action's streams are no
+ * terminal unless `options.isTTY` is set, and its `stdin` holds `options.stdin`, else nothing.
  */
 export async function captureExecute(
 	app: ExecutableApp,
@@ -70,24 +57,15 @@ export async function captureExecute(
 		})(),
 		{ isTTY: isTTY && input === undefined },
 	);
-	if (activeExecuteCaptures === 0) exitCodeBeforeExecuteCaptures = process.exitCode;
-	activeExecuteCaptures++;
-	try {
-		const exitCode = await app.execute({
+	const exitCode = await isolate(options, () =>
+		executeInProcess(app, {
 			argv,
-			...(options?.env !== undefined && { env: options.env }),
 			io: { stdin, stdout: sink(stdoutChunks), stderr: sink(stderrChunks) },
-		});
-		return {
-			stdout: captureText(joinChunks(stdoutChunks), options),
-			stderr: captureText(joinChunks(stderrChunks), options),
-			exitCode,
-		};
-	} finally {
-		activeExecuteCaptures--;
-		if (activeExecuteCaptures === 0) {
-			// Bun cannot clear a numeric exitCode back to undefined, so zero is the equivalent success state.
-			process.exitCode = exitCodeBeforeExecuteCaptures ?? 0;
-		}
-	}
+		}),
+	);
+	return {
+		stdout: captureText(stdoutChunks, options),
+		stderr: captureText(stderrChunks, options),
+		exitCode,
+	};
 }

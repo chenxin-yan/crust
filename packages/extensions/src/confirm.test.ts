@@ -39,7 +39,7 @@ describe("confirm", () => {
 
 	it("resolves without asking under --yes", async () => {
 		expect(await captureExecute(app, ["drop", "--yes"])).toEqual({
-			stdout: "dropped",
+			stdout: "dropped\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -52,7 +52,7 @@ describe("confirm", () => {
 		const withInput = new Crust("app").extend(...extensions()).add(drop);
 
 		expect(await captureExecute(withInput, ["drop", "--input", '{"yes":true}'])).toEqual({
-			stdout: "dropped",
+			stdout: "dropped\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -61,7 +61,7 @@ describe("confirm", () => {
 	it("fails with ConfirmationRequiredError naming --yes without a terminal", async () => {
 		expect(await captureExecute(app, ["drop"])).toEqual({
 			stdout: "",
-			stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.",
+			stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.\n",
 			exitCode: 1,
 		});
 		const outcome = await app.run(["drop"]);
@@ -77,7 +77,7 @@ describe("confirm", () => {
 		try {
 			expect(await captureExecute(app, ["drop"])).toEqual({
 				stdout: "",
-				stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.",
+				stderr: "Error: Confirmation required: Drop the database? Pass --yes to confirm.\n",
 				exitCode: 1,
 			});
 		} finally {
@@ -107,7 +107,7 @@ describe("confirm", () => {
 	it("prompts on an injected terminal even under CI", async () => {
 		vi.stubEnv("CI", "true");
 		const { screen: _screen, ...result } = await answer("y", "enter");
-		expect(result).toEqual({ stdout: "dropped", stderr: "", exitCode: 0 });
+		expect(result).toEqual({ stdout: "dropped\n", stderr: "", exitCode: 0 });
 	});
 
 	it("is driven by runInteractive() under CI", async () => {
@@ -116,14 +116,14 @@ describe("confirm", () => {
 		await run.waitFor(/Drop the database\?/);
 		run.type("y");
 		run.keys("return");
-		expect((await run.done).stdout).toBe("dropped");
+		expect((await run.done).stdout).toBe("dropped\n");
 	});
 
 	it("defaults to No and fails without changing anything when declined", async () => {
 		const { screen: _screen, ...result } = await answer("enter");
 		expect(result).toEqual({
 			stdout: "",
-			stderr: "Error: Not confirmed: Drop the database? Nothing was changed.",
+			stderr: "Error: Not confirmed: Drop the database? Nothing was changed.\n",
 			exitCode: 1,
 		});
 	});
@@ -146,12 +146,12 @@ describe("confirm", () => {
 		expect(inputKeys("list")).not.toContain("yes");
 		expect(await captureExecute(scoped, ["list", "--input", '{"yes":true}'])).toEqual({
 			stdout: "",
-			stderr: 'Error: Unknown flag "--yes"',
+			stderr: 'Error: Unknown flag "--yes"\n',
 			exitCode: 2,
 		});
 		expect(await captureExecute(scoped, ["list", "--yes"])).toEqual({
 			stdout: "",
-			stderr: 'Error: Unknown flag "--yes"',
+			stderr: 'Error: Unknown flag "--yes"\n',
 			exitCode: 2,
 		});
 	});

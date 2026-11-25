@@ -19,7 +19,7 @@ describe("version", () => {
 			["--version", "--port", "abc"],
 		]) {
 			expect(await captureExecute(app, argv), argv.join(" ")).toMatchObject({
-				stdout: "app v1.2.3",
+				stdout: "app v1.2.3\n",
 				stderr: "",
 				exitCode: 0,
 			});
@@ -27,7 +27,7 @@ describe("version", () => {
 
 		const env = { PORT: "abc" };
 		expect(await captureExecute(app, ["--version"], { env })).toMatchObject({
-			stdout: "app v1.2.3",
+			stdout: "app v1.2.3\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -50,7 +50,7 @@ describe("version", () => {
 		expect(calls).toBe(0);
 		const { stdout } = await captureExecute(app, ["--version"]);
 		expect(calls).toBe(1);
-		expect(stdout).toBe("app v2.0.0");
+		expect(stdout).toBe("app v2.0.0\n");
 	});
 
 	it("version extension supports plain format", async () => {
@@ -58,7 +58,7 @@ describe("version", () => {
 
 		const { stdout } = await captureExecute(app, ["--version"]);
 
-		expect(stdout).toBe("1.2.3");
+		expect(stdout).toBe("1.2.3\n");
 	});
 
 	it("version extension supports a custom format function", async () => {
@@ -72,6 +72,6 @@ describe("version", () => {
 
 		const { stdout } = await captureExecute(app, ["--version"]);
 
-		expect(stdout).toBe("app/1.2.3");
+		expect(stdout).toBe("app/1.2.3\n");
 	});
 });

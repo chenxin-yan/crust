@@ -1890,9 +1890,8 @@ export class Crust<
 	 * @param input - Structured argument, flag, and raw values
 	 * @param options - Optional `stdout(text)` / `stderr(text)` callbacks (also
 	 *                  exposed to Command Actions and Extensions), an `onEvent(event)`
-	 *                  callback for an async generator action's events, an
-	 *                  `AbortSignal` that cancels the invocation, and the `env` that
-	 *                  omitted flags' `env` bindings read (`process.env` by default)
+	 *                  callback for an async generator action's events, and an
+	 *                  `AbortSignal` that cancels the invocation
 	 */
 	// `Path` is only constrained to strings, and the parameter is not intersected with `Path`:
 	// either would erase the partial literal editors use for completions (see `KnownCommandPath`).
@@ -1995,8 +1994,7 @@ export class Crust<
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,
 	 *                   an `onEvent(event)` callback for an async generator action's
-	 *                   events, a caller `signal` that cancels the invocation, and the
-	 *                   `env` that flags' `env` bindings read (`process.env` by default)
+	 *                   events, and a caller `signal` that cancels the invocation
 	 * @returns The terminal exit code
 	 */
 	execute(

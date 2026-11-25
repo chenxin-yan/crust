@@ -75,14 +75,14 @@ describe("nextSteps", () => {
 	it("prints the steps the action added on stderr after it completes", async () => {
 		expect(await captureExecute(appWith(), ["deploy", "prod"])).toEqual({
 			stdout: "",
-			stderr: "Next steps:\n  Check the deployment:\n    app status prod\n  app logs",
+			stderr: "Next steps:\n  Check the deployment:\n    app status prod\n  app logs\n",
 			exitCode: 0,
 		});
 	});
 
 	it("prints nothing when no step was added", async () => {
 		expect(await captureExecute(appWith(), ["login"])).toEqual({
-			stdout: "logged in",
+			stdout: "logged in\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -92,7 +92,7 @@ describe("nextSteps", () => {
 		expect(await captureExecute(appWith(recovery), ["deploy", "prod", "--fail"])).toEqual({
 			stdout: "",
 			stderr:
-				"Error: not logged in\nNext steps:\n  Log in:\n    app login --sso\n  Check the deployment:\n    app status prod\n  app logs",
+				"Error: not logged in\nNext steps:\n  Log in:\n    app login --sso\n  Check the deployment:\n    app status prod\n  app logs\n",
 			exitCode: 1,
 		});
 	});
@@ -105,7 +105,7 @@ describe("nextSteps", () => {
 		]);
 
 		expect(stderr).toBe(
-			"Error: not logged in\nNext steps:\n  Check the deployment:\n    app status prod\n  app logs",
+			"Error: not logged in\nNext steps:\n  Check the deployment:\n    app status prod\n  app logs\n",
 		);
 	});
 
@@ -121,7 +121,7 @@ describe("nextSteps", () => {
 		const { stderr, exitCode } = await captureExecute(app, ["deploy"]);
 
 		expect(exitCode).toBe(2);
-		expect(stderr).toMatch(/^Error: .*\nNext steps:\n {2}app deploy staging$/);
+		expect(stderr).toMatch(/^Error: .*\nNext steps:\n {2}app deploy staging\n$/);
 		expect(seen).toHaveLength(1);
 	});
 
@@ -138,7 +138,7 @@ describe("nextSteps", () => {
 
 		expect(await captureExecute(app, ["run"])).toEqual({
 			stdout: "",
-			stderr: "Error: setup failed\nNext steps:\n  app doctor",
+			stderr: "Error: setup failed\nNext steps:\n  app doctor\n",
 			exitCode: 1,
 		});
 	});
@@ -211,6 +211,7 @@ describe("nextSteps", () => {
 				`  app copy --message 'hello world' --count 3 --tag x --tag y --force --no-cache --meta '{"a":1}' --offset=-5 --url 'https://example.com/a?b=1' 'a b.txt' 'it'\\''s' c`,
 				"  app exec -- --watch src",
 				"  app seek -- -5",
+				"",
 			].join("\n"),
 		);
 	});
@@ -227,7 +228,7 @@ describe("nextSteps", () => {
 				}),
 			);
 
-		expect((await captureExecute(app, ["suggest"])).stderr).toBe("Next steps:\n  app db migrate");
+		expect((await captureExecute(app, ["suggest"])).stderr).toBe("Next steps:\n  app db migrate\n");
 	});
 
 	it("skips an invalid step with a note on stderr and never fails the invocation", async () => {
@@ -264,6 +265,7 @@ describe("nextSteps", () => {
 				"Next steps:",
 				"  Check prod:",
 				"    app status prod",
+				"",
 			].join("\n"),
 			exitCode: 0,
 		});
@@ -288,7 +290,7 @@ describe("nextSteps", () => {
 
 		const { stderr, exitCode } = await captureExecute(app, ["suggest"]);
 		expect(exitCode).toBe(0);
-		expect(stderr).toBe('nextSteps(): skipped "nope": recipe failed\nNext steps:\n  app logs');
+		expect(stderr).toBe('nextSteps(): skipped "nope": recipe failed\nNext steps:\n  app logs\n');
 	});
 
 	it("skips an onError step whose boolean flag value is not a boolean", async () => {
@@ -309,6 +311,7 @@ describe("nextSteps", () => {
 				"  Check the deployment:",
 				"    app status prod",
 				"  app logs",
+				"",
 			].join("\n"),
 			exitCode: 1,
 		});
@@ -324,7 +327,7 @@ describe("nextSteps", () => {
 		expect(await captureExecute(app, ["deploy", "prod", "--fail"])).toEqual({
 			stdout: "",
 			stderr:
-				"Error: not logged in\nnextSteps(): onError: boom\nNext steps:\n  Check the deployment:\n    app status prod\n  app logs",
+				"Error: not logged in\nnextSteps(): onError: boom\nNext steps:\n  Check the deployment:\n    app status prod\n  app logs\n",
 			exitCode: 1,
 		});
 	});
@@ -366,7 +369,7 @@ describe("nextSteps", () => {
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		const lines = stderr.split("\n").slice(1);
+		const lines = stderr.split("\n").slice(1, -1);
 		expect(lines).toEqual([
 			"  app group -- delete",
 			"  app group -- rm",
@@ -417,7 +420,7 @@ describe("nextSteps", () => {
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		const all = stderr.split("\n");
+		const all = stderr.split("\n").slice(0, -1);
 		expect(all.slice(0, 3)).toEqual([
 			'nextSteps(): skipped "app run": argument value "-x" starts with "-" before "--"',
 			'nextSteps(): skipped "app run": raw tokens would fill argument "extra"',
@@ -460,7 +463,7 @@ describe("nextSteps", () => {
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		const lines = stderr.split("\n");
+		const lines = stderr.split("\n").slice(0, -1);
 		expect(lines).toEqual([
 			'nextSteps(): skipped "app wait": "--timeout" value NaN has no argv spelling',
 			"Next steps:",
@@ -493,7 +496,7 @@ describe("nextSteps", () => {
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		const lines = stderr.split("\n");
+		const lines = stderr.split("\n").slice(0, -1);
 		expect(lines).toEqual([
 			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (Not JSON data)',
 			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (Not JSON data)',
@@ -524,6 +527,7 @@ describe("nextSteps", () => {
 			[
 				'nextSteps(): skipped "app tag": "--tags" value "a,b" contains its delimiter ","',
 				'nextSteps(): skipped "app tag": "--tags" value "" is dropped by its delimiter ","',
+				"",
 			].join("\n"),
 		);
 	});
@@ -547,7 +551,7 @@ describe("nextSteps", () => {
 			);
 
 		const { stderr } = await captureExecute(app, ["suggest"]);
-		const lines = stderr.split("\n").slice(1);
+		const lines = stderr.split("\n").slice(1, -1);
 		expect(lines).toEqual(["  app target", "  app target x"]);
 		await replay(app, lines);
 		const omitted: unknown = {};

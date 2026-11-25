@@ -153,8 +153,7 @@ const startedAt = /* @__PURE__ */ new WeakMap<ExtensionContext, number>();
 /**
  * Which setting wins, for `postRun` and the command alike: `DO_NOT_TRACK`, the app's variable,
  * the saved choice, then `enabled`. `readSaved` runs only when neither variable decides, so most
- * runs never load the store. The variables are read from `process.env`: `execute({ env })` only
- * feeds flags' `env` fallbacks.
+ * runs never load the store. The variables are read from `process.env`.
  */
 async function decide(
 	options: TelemetryOptions,

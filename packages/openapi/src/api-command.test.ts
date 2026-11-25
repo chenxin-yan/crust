@@ -124,6 +124,7 @@ describe("api --list and --spec", () => {
 			"GET /users/{id} getUser",
 			"DELETE /users/{id}",
 			"GET /teams listTeams List teams",
+			"",
 		]);
 		expect(calls).toEqual([]);
 	});
@@ -239,7 +240,7 @@ describe("api --list and --spec", () => {
 		expect(await captureExecute(app, ["api", "--spec", "dup"])).toEqual({
 			stdout: "",
 			stderr:
-				'Error: The operationId "dup" is ambiguous in the OpenAPI spec (GET /a, POST /a): pass a path instead',
+				'Error: The operationId "dup" is ambiguous in the OpenAPI spec (GET /a, POST /a): pass a path instead\n',
 			exitCode: 1,
 		});
 	});
@@ -261,13 +262,13 @@ describe("api --list and --spec", () => {
 			},
 		});
 
-		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe("GET /users users");
+		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe("GET /users users\n");
 		expect((await captureExecute(app, ["api", "--spec", "users"])).stdout).toBe(
-			'{"method":"GET","path":"/users","operationId":"users"}',
+			'{"method":"GET","path":"/users","operationId":"users"}\n',
 		);
 		for (const target of ["fake", "x-meta"]) {
 			expect(await captureExecute(app, ["api", "--spec", target])).toMatchObject({
-				stderr: `Error: No operation or path "${target}" in the OpenAPI spec`,
+				stderr: `Error: No operation or path "${target}" in the OpenAPI spec\n`,
 				exitCode: 1,
 			});
 		}
@@ -326,7 +327,7 @@ describe("the spec", () => {
 		expect((await captureExecute(app, ["api", "/users"])).exitCode).toBe(0);
 		writeFileSync(file, jsonc);
 		expect(await captureExecute(app, ["api", "--list"])).toEqual({
-			stdout: "GET /users listUsers List // users /* all */ ,}",
+			stdout: "GET /users listUsers List // users /* all */ ,}\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -340,7 +341,7 @@ describe("the spec", () => {
 		);
 
 		expect(await captureExecute(buildApp({ spec: url }), ["api", "--list"])).toEqual({
-			stdout: 'GET /users listUsers a "//" b /*,}*/',
+			stdout: 'GET /users listUsers a "//" b /*,}*/\n',
 			stderr: "",
 			exitCode: 0,
 		});
@@ -388,7 +389,7 @@ describe("the spec", () => {
 			);
 
 			expect({ stderr, exitCode }).toEqual({
-				stderr: `Error: api: the OpenAPI data was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.`,
+				stderr: `Error: api: the OpenAPI data was not found at "${join(dir, "spec.json")}". Run \`crust build\` first, and ship its "acme-not-built" directory with the CLI.\n`,
 				exitCode: 1,
 			});
 		} finally {
@@ -426,7 +427,7 @@ describe("api <path>", () => {
 		const { stdout, stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users"]);
 
 		expect({ stdout, stderr, exitCode }).toEqual({
-			stdout: '[{"name":"ada"}]',
+			stdout: '[{"name":"ada"}]\n',
 			stderr: "",
 			exitCode: 0,
 		});
@@ -553,7 +554,7 @@ describe("api <path>", () => {
 
 		expect({ stdout, stderr, exitCode }).toEqual({
 			stdout: '{"message":"not found"}',
-			stderr: "Error: GET /users/9: HTTP 404 Not Found",
+			stderr: "Error: GET /users/9: HTTP 404 Not Found\n",
 			exitCode: 1,
 		});
 	});
@@ -567,7 +568,7 @@ describe("api <path>", () => {
 			flags: { method: "GET", field: ["access_token=s3cr3t"] },
 		});
 
-		expect(stderr).toBe("Error: GET /me: HTTP 401 Unauthorized");
+		expect(stderr).toBe("Error: GET /me: HTTP 401 Unauthorized\n");
 		const error = outcome.status === "failed" ? outcome.error : undefined;
 		expect(error).toBeInstanceOf(ApiResponseError);
 		expect(error).toMatchObject({ status: 401, message: "GET /me: HTTP 401 Unauthorized" });
@@ -609,7 +610,7 @@ describe("api <path>", () => {
 		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/x", "-X", "connect"]);
 
 		expect({ stderr, exitCode }).toEqual({
-			stderr: "Error: -X CONNECT: this runtime's fetch() cannot send it.",
+			stderr: "Error: -X CONNECT: this runtime's fetch() cannot send it.\n",
 			exitCode: 2,
 		});
 		expect(calls).toEqual([]);
@@ -720,7 +721,7 @@ describe("api <path>", () => {
 		expect(await captureExecute(buildApp(), ["api", "/file.zip"], { isTTY: true })).toEqual({
 			stdout: "",
 			stderr:
-				"Error: api: the response body is binary (application/octet-stream); redirect or pipe stdout to save it instead of printing it to the terminal",
+				"Error: api: the response body is binary (application/octet-stream); redirect or pipe stdout to save it instead of printing it to the terminal\n",
 			exitCode: 1,
 		});
 	});
@@ -730,9 +731,9 @@ describe("api <path>", () => {
 		const app = buildApp({ paginate: () => undefined }).extend(json());
 
 		for (const [flag, stdout] of [
-			[[], "a,b\n1,2"],
-			[["--paginate"], '"a,b\\n1,2\\n"'],
-			[["--json"], '"a,b\\n1,2\\n"'],
+			[[], "a,b\n1,2\n"],
+			[["--paginate"], '"a,b\\n1,2\\n"\n'],
+			[["--json"], '"a,b\\n1,2\\n"\n'],
 		] as const) {
 			expect(await captureExecute(app, ["api", "/export.csv", ...flag])).toEqual({
 				stdout,
@@ -757,7 +758,11 @@ describe("api <path>", () => {
 		const { stdout, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
 
 		expect(exitCode).toBe(0);
-		expect(stdout.split("\n")).toEqual(['{"items":[1],"next":"/users?page=2"}', '{"items":[2]}']);
+		expect(stdout.split("\n")).toEqual([
+			'{"items":[1],"next":"/users?page=2"}',
+			'{"items":[2]}',
+			"",
+		]);
 		expect(calls.map(({ url, headers }) => [url, headers.authorization])).toEqual([
 			["https://api.example.com/v1/users", "Bearer secret"],
 			["https://api.example.com/v1/users?page=2", "Bearer secret"],
@@ -774,9 +779,9 @@ describe("api <path>", () => {
 		const { stdout, stderr, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
 
 		expect({ stdout, stderr, exitCode }).toEqual({
-			stdout: '{"items":[1]}',
+			stdout: '{"items":[1]}\n',
 			stderr:
-				"Error: --paginate: page 2 repeats the previous request (GET https://api.example.com/v1/users)",
+				"Error: --paginate: page 2 repeats the previous request (GET https://api.example.com/v1/users)\n",
 			exitCode: 1,
 		});
 		expect(calls).toHaveLength(1);
@@ -817,7 +822,7 @@ describe("api <path>", () => {
 			'{"cursor":1}',
 		]);
 
-		expect({ stdout, exitCode }).toEqual({ stdout: '{"cursor":1}\n{"cursor":2}', exitCode: 0 });
+		expect({ stdout, exitCode }).toEqual({ stdout: '{"cursor":1}\n{"cursor":2}\n', exitCode: 0 });
 		expect(calls).toHaveLength(2);
 	});
 
@@ -830,7 +835,7 @@ describe("api <path>", () => {
 		const { stdout, exitCode } = await captureExecute(app, ["api", "/ids", "--paginate"]);
 
 		expect(exitCode).toBe(0);
-		expect(stdout).toBe('{"id":9007199254740993,"large":1e309,"text":"a \\" b","n":-0.10}');
+		expect(stdout).toBe('{"id":9007199254740993,"large":1e309,"text":"a \\" b","n":-0.10}\n');
 	});
 
 	it("sends a --paginate page on another origin without auth or credential headers the request set", async () => {
@@ -857,7 +862,7 @@ describe("api <path>", () => {
 			"X-Trace: 1",
 		]);
 
-		expect({ stdout, exitCode }).toEqual({ stdout: '{"page":1}\n{"page":2}', exitCode: 0 });
+		expect({ stdout, exitCode }).toEqual({ stdout: '{"page":1}\n{"page":2}\n', exitCode: 0 });
 		expect(calls.map(({ url, headers }) => [url, headers])).toEqual([
 			[
 				"https://api.example.com/v1/users",
@@ -876,7 +881,7 @@ describe("api <path>", () => {
 		const { stderr, exitCode } = await captureExecute(app, ["api", "/users", "--paginate"]);
 
 		expect(exitCode).toBe(1);
-		expect(stderr).toBe("Error: Cannot request data:text/plain,x: only http: and https: URLs");
+		expect(stderr).toBe("Error: Cannot request data:text/plain,x: only http: and https: URLs\n");
 		expect(calls).toHaveLength(1);
 	});
 
@@ -890,7 +895,12 @@ describe("api <path>", () => {
 		const { stdout, exitCode } = await captureExecute(app, ["api", "/notes?page=0", "--paginate"]);
 
 		expect(exitCode).toBe(0);
-		expect(stdout.split("\n").map((line) => JSON.parse(line))).toEqual(["first\nsecond", ""]);
+		expect(
+			stdout
+				.split("\n")
+				.slice(0, -1)
+				.map((line) => JSON.parse(line)),
+		).toEqual(["first\nsecond", ""]);
 	});
 
 	it("fails on a binary --paginate page instead of printing it decoded", async () => {
@@ -907,9 +917,9 @@ describe("api <path>", () => {
 		});
 
 		expect(await captureExecute(app, ["api", "/users", "--paginate"])).toEqual({
-			stdout: "[1]",
+			stdout: "[1]\n",
 			stderr:
-				"Error: api: a --paginate page body is binary (application/octet-stream); --paginate prints only text and JSON bodies",
+				"Error: api: a --paginate page body is binary (application/octet-stream); --paginate prints only text and JSON bodies\n",
 			exitCode: 1,
 		});
 	});
@@ -935,21 +945,24 @@ describe("api <path>", () => {
 		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users", "--paginate"]);
 
 		expect(exitCode).toBe(1);
-		expect(stderr).toBe("Error: --paginate: this CLI does not configure pagination");
+		expect(stderr).toBe("Error: --paginate: this CLI does not configure pagination\n");
 		expect(calls).toEqual([]);
 	});
 
 	it.each([
-		[["api"], 'Error: Missing required argument "<path>" (or pass --list or --spec)'],
-		[["api", "/users", "-F", "s3cr3t"], "Error: Invalid -F value: expected key=value."],
-		[["api", "/users", "-H", "Bearer s3cr3t"], 'Error: Invalid -H value: expected "Name: value".'],
+		[["api"], 'Error: Missing required argument "<path>" (or pass --list or --spec)\n'],
+		[["api", "/users", "-F", "s3cr3t"], "Error: Invalid -F value: expected key=value.\n"],
+		[
+			["api", "/users", "-H", "Bearer s3cr3t"],
+			'Error: Invalid -H value: expected "Name: value".\n',
+		],
 		[
 			["api", "/users", "-F", "amount=1e309"],
-			'Error: Invalid -F value for "amount": the number is out of range.',
+			'Error: Invalid -F value for "amount": the number is out of range.\n',
 		],
 		[
 			["api", "/users", "-H", "Bad Header: s3cr3t"],
-			"Error: Invalid -H value: the header name or value has characters HTTP does not allow.",
+			"Error: Invalid -H value: the header name or value has characters HTTP does not allow.\n",
 		],
 	])("fails before any request for %j", async (argv, message) => {
 		const calls = stubFetch();
@@ -1002,7 +1015,7 @@ describe("api <path>", () => {
 				});
 				expect(await captureExecute(app, ["api", path, "-H", "Authorization: x"])).toEqual({
 					stdout: "",
-					stderr: `Error: ${message}`,
+					stderr: `Error: ${message}\n`,
 					exitCode: 2,
 				});
 			}
@@ -1146,10 +1159,10 @@ describe("api preview <path>", () => {
 			(await captureExecute(buildApp(), ["api", "preview", ...argv])).stderr;
 
 		expect(await preview("/users", "--body", "-")).toBe(
-			"Error: api preview: --body - would read stdin; pass the body inline or as @file",
+			"Error: api preview: --body - would read stdin; pass the body inline or as @file\n",
 		);
 		expect(await preview("/users", "/teams")).toBe(
-			'Error: api preview: "/users /teams" is neither one request path nor a generated command',
+			'Error: api preview: "/users /teams" is neither one request path nor a generated command\n',
 		);
 	});
 
@@ -1203,7 +1216,7 @@ describe("api preview <path>", () => {
 		});
 		expect(paginate).not.toHaveBeenCalled();
 		expect((await preview({})).stderr).toBe(
-			"Error: --paginate: this CLI does not configure pagination",
+			"Error: --paginate: this CLI does not configure pagination\n",
 		);
 	});
 
@@ -1242,8 +1255,8 @@ describe("api with json()", () => {
 		);
 
 		for (const [path, stdout] of [
-			["/users", '[{"name":"ada","lng":0}]'],
-			["/text", '"plain\\n"'],
+			["/users", '[{"name":"ada","lng":0}]\n'],
+			["/text", '"plain\\n"\n'],
 			["/empty", ""],
 		]) {
 			expect(await captureExecute(jsonApp(), ["api", path as string, "--json"])).toEqual({
@@ -1267,7 +1280,7 @@ describe("api with json()", () => {
 			{ method: "GET", path: "/teams", operationId: "listTeams", summary: "List teams" },
 		]);
 		expect(operation).toEqual({
-			stdout: '{"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}',
+			stdout: '{"method":"GET","path":"/users","operationId":"listUsers","summary":"List users"}\n',
 			stderr: "",
 			exitCode: 0,
 		});
@@ -1283,6 +1296,7 @@ describe("api with json()", () => {
 			stderr: [
 				'{"message":"not found"}',
 				'{"message":"GET /users/9: HTTP 404 Not Found","details":{"status":404}}',
+				"",
 			].join("\n"),
 			exitCode: 1,
 		});
@@ -1307,8 +1321,9 @@ describe("api with json()", () => {
 			'{"type":"event","data":{"page":1}}',
 			'{"type":"event","data":{"page":2}}',
 			'{"type":"error","error":{"message":"GET /users: HTTP 410 Gone","details":{"status":410}}}',
+			"",
 		]);
-		expect({ stderr, exitCode }).toEqual({ stderr: "gone", exitCode: 1 });
+		expect({ stderr, exitCode }).toEqual({ stderr: "gone\n", exitCode: 1 });
 	});
 
 	it("ends --paginate pages with a result line", async () => {
@@ -1321,7 +1336,7 @@ describe("api with json()", () => {
 		]);
 
 		expect({ stdout, exitCode }).toEqual({
-			stdout: '{"type":"event","data":[1]}\n{"type":"result"}',
+			stdout: '{"type":"event","data":[1]}\n{"type":"result"}\n',
 			exitCode: 0,
 		});
 	});
@@ -1350,6 +1365,7 @@ describe("api with json()", () => {
 				stdout: [
 					'{"type":"event","data":[1]}',
 					`{"type":"error","error":{"message":"api: a --paginate page body is binary (${contentType}); --paginate prints only text and JSON bodies"}}`,
+					"",
 				],
 				exitCode: 1,
 			});
@@ -1386,7 +1402,7 @@ describe("api with json()", () => {
 		expect(await captureExecute(jsonApp(), ["api", "/logo.gif", "--json"])).toEqual({
 			stdout: "",
 			stderr:
-				'{"message":"api: the response body is binary (image/gif); --json prints only text and JSON bodies, so run without it to write the bytes to stdout"}',
+				'{"message":"api: the response body is binary (image/gif); --json prints only text and JSON bodies, so run without it to write the bytes to stdout"}\n',
 			exitCode: 1,
 		});
 	});
@@ -1408,7 +1424,7 @@ describe("the api client", () => {
 		const { stdout, exitCode } = await captureExecute(app, ["whoami"]);
 
 		expect({ stdout, exitCode }).toEqual({
-			stdout: 'https://api.example.com/v1/ {"id":"u1"}',
+			stdout: 'https://api.example.com/v1/ {"id":"u1"}\n',
 			exitCode: 0,
 		});
 		expect(calls[0]).toMatchObject({
@@ -1513,7 +1529,7 @@ describe("the api client", () => {
 			21,
 			{
 				stdout: "",
-				stderr: "Error: fetch https://other.example.com/r/20: too many redirects",
+				stderr: "Error: fetch https://other.example.com/r/20: too many redirects\n",
 				exitCode: 1,
 			},
 		],
@@ -1538,7 +1554,7 @@ describe("the api client", () => {
 		const { stderr, exitCode } = await captureExecute(buildApp(), ["api", "/users"]);
 
 		expect({ stderr, exitCode }).toEqual({
-			stderr: "Error: Cannot request data:text/plain,x: only http: and https: URLs",
+			stderr: "Error: Cannot request data:text/plain,x: only http: and https: URLs\n",
 			exitCode: 1,
 		});
 		expect(calls).toHaveLength(1);
@@ -1623,7 +1639,7 @@ describe("the api client", () => {
 			const { stdout, stderr } = await captureExecute(app, ["probe"]);
 
 			expect({ stdout, stderr }).toEqual({
-				stdout: "200 ok\n200 ok\n200 ok\n200 ok\n200 ok",
+				stdout: "200 ok\n200 ok\n200 ok\n200 ok\n200 ok\n",
 				stderr: "",
 			});
 		} finally {

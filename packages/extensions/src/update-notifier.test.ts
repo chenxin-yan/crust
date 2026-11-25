@@ -653,7 +653,7 @@ describe("updateNotifier post-run hook", () => {
 				});
 
 			expect(await captureExecute(app, [], { isTTY: true })).toMatchObject({
-				stderr: "Error: command failed",
+				stderr: "Error: command failed\n",
 				exitCode: 1,
 			});
 

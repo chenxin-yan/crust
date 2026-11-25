@@ -75,6 +75,9 @@ const api = defineApi({
 
 const app = new Crust("acme").extend(config.extension, api.extension).add(...api.commands);
 
+/** The shell's environment without the setting's variable, so only the file or flag can give it. */
+const withoutAccount = () => ({ env: { ...process.env, ACME_ACCOUNT: undefined } });
+
 /** The URLs the generated command requested. */
 function requests(): string[] {
 	const urls: string[] = [];
@@ -88,11 +91,11 @@ function requests(): string[] {
 it("a generated command binds a setting from the project file, or from its flag", async () => {
 	writeFileSync(join(root, "acme.config.json"), JSON.stringify({ account: "from-file" }));
 	const urls = requests();
-	expect(await captureExecute(app, ["zones", "list-zones"], { env: {} })).toMatchObject({
+	expect(await captureExecute(app, ["zones", "list-zones"], withoutAccount())).toMatchObject({
 		exitCode: 0,
 	});
 	expect(
-		await captureExecute(app, ["zones", "list-zones", "--account", "from-flag"], { env: {} }),
+		await captureExecute(app, ["zones", "list-zones", "--account", "from-flag"], withoutAccount()),
 	).toMatchObject({ exitCode: 0 });
 	expect(urls).toEqual([
 		"https://api.acme.example/v1/accounts/from-file/zones",
@@ -103,7 +106,7 @@ it("a generated command binds a setting from the project file, or from its flag"
 it("a generated command fails a missing setting before any request", async () => {
 	mkdirSync(join(root, "xdg"));
 	const urls = requests();
-	const { exitCode, stderr } = await captureExecute(app, ["zones", "list-zones"], { env: {} });
+	const { exitCode, stderr } = await captureExecute(app, ["zones", "list-zones"], withoutAccount());
 	expect(exitCode).toBe(2);
 	expect(stderr).toContain('Missing setting "account" of acme: pass --account, set ACME_ACCOUNT');
 	expect(urls).toEqual([]);

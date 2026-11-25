@@ -30,7 +30,7 @@ describe("built-in extensions", () => {
 			.extend(...extensions())
 			.command("build", (command) => command.action(() => {}));
 
-		expect((await captureExecute(app, ["--version"])).stdout).toBe("app v1.2.3");
+		expect((await captureExecute(app, ["--version"])).stdout).toBe("app v1.2.3\n");
 		expect(stripAnsi((await captureExecute(app, ["--help"])).stdout)).toContain("Usage:");
 		expect(stripAnsi((await captureExecute(app, [])).stdout)).toContain("Usage:");
 	});

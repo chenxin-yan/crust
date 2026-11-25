@@ -109,7 +109,7 @@ describe("search() at startup", () => {
 		expect(state.rankingLoaded).toBe(false);
 
 		const found = await captureExecute(app, ["search", "deploy"]);
-		expect(found.stdout).toBe("acme deploy  Deploy the app");
+		expect(found.stdout).toBe("acme deploy  Deploy the app\n");
 		expect(state.rankingLoaded).toBe(true);
 	});
 });

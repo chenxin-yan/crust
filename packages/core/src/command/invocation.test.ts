@@ -539,6 +539,8 @@ describe("Invocation pipeline — commandPathOf", () => {
 });
 
 describe("Invocation pipeline — parseCommandArgv", () => {
+	afterEach(() => vi.unstubAllEnvs());
+
 	function setUp() {
 		const ran: string[] = [];
 		const trace = defineExtension(defineExtensionId("trace"))
@@ -578,10 +580,11 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 
 	it("parses, checks and transforms argv for the command at a path without running it", async () => {
 		const { ran, parsed, app } = setUp();
+		vi.stubEnv("REGION", "eu");
 		const outcome = await app(
 			["app", "u", "delete"],
 			["u_1", "--force", "--tag", "a", "--trace", "--", "rest"],
-		).run(["preview"], {}, { env: { REGION: "eu" } });
+		).run(["preview"], {});
 
 		expect(outcome).toMatchObject({ status: "completed" });
 		expect(parsed).toEqual([

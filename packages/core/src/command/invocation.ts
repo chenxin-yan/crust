@@ -25,7 +25,6 @@ import {
 	parseStructured,
 	validateParsed,
 	type ArgvParseResult,
-	type FlagEnvironment,
 } from "../parsing/parser.ts";
 import { applyOutputSchema, applySchemas } from "../parsing/schema.ts";
 import type {
@@ -716,13 +715,9 @@ export function prepareInvocation(
 }
 
 /** An invocation starts from terminal argv or a typed path plus structured values. */
-type InvocationInput = (
+type InvocationInput =
 	| { readonly argv: readonly string[] }
-	| { readonly path: readonly string[]; readonly input: RunInputPayload }
-) & {
-	/** Fallbacks for omitted flags' `env` bindings; `process.env` unless the caller gave one. */
-	readonly env?: FlagEnvironment | undefined;
-};
+	| { readonly path: readonly string[]; readonly input: RunInputPayload };
 
 interface ResolvedInput {
 	argv: readonly string[];
@@ -730,13 +725,9 @@ interface ResolvedInput {
 	parsed: ArgvParseResult;
 }
 
-function resolveArgvInput(
-	root: CommandNode,
-	argv: readonly string[],
-	env: FlagEnvironment,
-): ResolvedInput {
+function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
 	const route = resolveCommand(root, argv);
-	return { argv, route, parsed: parseArgs(route.command, route.argv, env) };
+	return { argv, route, parsed: parseArgs(route.command, route.argv) };
 }
 
 /** Resolve a typed path, rejecting any element the router cannot consume as a command. */
@@ -755,7 +746,6 @@ async function parseCommandArgv(
 	root: CommandNode,
 	path: readonly string[],
 	argv: readonly string[],
-	env: FlagEnvironment,
 ): Promise<ParsedCommandArgv> {
 	if (path[0] !== root.meta.name) {
 		throw new CrustError(
@@ -764,7 +754,7 @@ async function parseCommandArgv(
 		);
 	}
 	const { command, commandPath } = resolveTypedPath(root, path.slice(1));
-	const parsed = parseArgs(command, [...argv], env);
+	const parsed = parseArgs(command, [...argv]);
 	validateParsed(command, parsed);
 	const { args, flags } = await applySchemas(command, parsed);
 	return { path: Object.freeze([...commandPath]), args, flags, rawArgs: parsed.rawArgs };
@@ -774,10 +764,9 @@ function resolveStructuredInput(
 	root: CommandNode,
 	path: readonly string[],
 	input: RunInputPayload,
-	env: FlagEnvironment,
 ): ResolvedInput {
 	const route = resolveTypedPath(root, path);
-	return { argv: path, route, parsed: parseStructured(route.command, input, env) };
+	return { argv: path, route, parsed: parseStructured(route.command, input, process.env) };
 }
 
 /**
@@ -876,11 +865,10 @@ async function dispatch(
 
 	// Routing and syntax parsing — failures flow directly to the caller. Value errors
 	// wait in `parsed.valueErrors` for `terminal()`, so a `--help` handler still wins.
-	const env = input.env ?? process.env;
 	const { argv, route, parsed } =
 		"argv" in input
-			? resolveArgvInput(rootNode, input.argv, env)
-			: resolveStructuredInput(rootNode, input.path, input.input, env);
+			? resolveArgvInput(rootNode, input.argv)
+			: resolveStructuredInput(rootNode, input.path, input.input);
 	const resolvedNode = route.command;
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
@@ -913,7 +901,7 @@ async function dispatch(
 		commandPath: Object.freeze([...route.commandPath]),
 		commandPathOf: (definition: CommandDefinition) => commandPathOf(rootNode, definition),
 		parseCommandArgv: (path: readonly string[], commandArgv: readonly string[]) =>
-			parseCommandArgv(rootNode, path, commandArgv, env),
+			parseCommandArgv(rootNode, path, commandArgv),
 		get args() {
 			return bound.args;
 		},
@@ -1114,7 +1102,6 @@ async function renderFailure(
 	prepared: PreparedInvocation,
 	output: InvocationOutput,
 	signal: AbortSignal,
-	env: FlagEnvironment,
 	extensionContext: ExtensionContext | undefined,
 ): Promise<ExtensionId | undefined> {
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
@@ -1162,7 +1149,7 @@ async function renderFailure(
 			commandPath: Object.freeze(route ? [...route.commandPath] : [prepared.rootNode.meta.name]),
 			commandPathOf: (definition) => commandPathOf(prepared.rootNode, definition),
 			parseCommandArgv: (path, commandArgv) =>
-				parseCommandArgv(prepared.rootNode, path, commandArgv, env),
+				parseCommandArgv(prepared.rootNode, path, commandArgv),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
@@ -1245,7 +1232,7 @@ export async function runInvocation(
 	let failed: { error: CaughtError; exitCode: number } | undefined;
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
-		const { signal = new AbortController().signal, env, ...live } = options ?? {};
+		const { signal = new AbortController().signal, ...live } = options ?? {};
 		// Captured output is no terminal; input stays the process's.
 		const resolvedIO: InvocationIO = {
 			stdin: inputStream(undefined, signal).stdin,
@@ -1267,7 +1254,7 @@ export async function runInvocation(
 			async () => {
 				const prepared = prepareInvocation(node, materializeCommandDefinition);
 				return await dispatch(
-					{ ...input, env },
+					input,
 					prepared,
 					createInvocationOutput(resolvedIO),
 					signal,
@@ -1306,7 +1293,6 @@ export async function executeInvocation(
 	// arrives as `--x` (https://github.com/oven-sh/bun/issues/13984). Crust cannot recover it here;
 	// guide/arguments-and-flags.mdx documents the `-- --` workaround. Drop that callout once fixed.
 	const argv = options?.argv ?? process.argv.slice(2);
-	const env = options?.env ?? process.env;
 	const stdoutSink = options?.io?.stdout ?? processOutput(1);
 	const stderr = outputStream(options?.io?.stderr ?? processOutput(2));
 	// One controller per invocation so SIGINT, SIGTERM and a caller signal share `ctx.signal`.
@@ -1410,7 +1396,7 @@ export async function executeInvocation(
 		let exitCode = 0;
 		try {
 			({ exitCode } = await dispatch(
-				{ argv, env },
+				{ argv },
 				prepared,
 				output,
 				signal,
@@ -1423,7 +1409,7 @@ export async function executeInvocation(
 					onStdoutClosed(error);
 					// Recorded before the hooks run: an `onError` hook that rewrites `exitCode` changes only the output.
 					rendered = { error, exitCode: failureExitCode(error, cancelledExitCode) };
-					return renderFailure(error, argv, prepared, output, signal, env, context);
+					return renderFailure(error, argv, prepared, output, signal, context);
 				},
 			));
 		} catch (error) {
@@ -1453,7 +1439,7 @@ export async function executeInvocation(
 					? rendered.exitCode
 					: failureExitCode(error, cancelledExitCode);
 			if (!rendered) {
-				await renderFailure(error, argv, prepared, output, signal, env, extensionContext);
+				await renderFailure(error, argv, prepared, output, signal, extensionContext);
 			}
 		} finally {
 			await input.close();

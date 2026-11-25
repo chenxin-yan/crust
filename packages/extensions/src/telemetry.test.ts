@@ -453,28 +453,28 @@ describe("telemetry", () => {
 
 		it("shows, saves, and reports the state under its configured name", async () => {
 			expect(await captureExecute(app(), ["analytics"])).toEqual({
-				stdout: "Telemetry is on (the default). Turn it off with: acme analytics disable",
+				stdout: "Telemetry is on (the default). Turn it off with: acme analytics disable\n",
 				stderr: "",
 				exitCode: 0,
 			});
 			expect((await captureExecute(app(), ["analytics", "disable"])).stdout).toBe(
-				"Saved telemetry preference: off.",
+				"Saved telemetry preference: off.\n",
 			);
 			expect(JSON.parse(readFileSync(savedFile(), "utf8"))).toEqual({ telemetry: "off" });
 			expect((await captureExecute(app(), ["analytics", "status"])).stdout).toBe(
-				"Telemetry is off (saved preference). Turn it on with: acme analytics enable",
+				"Telemetry is off (saved preference). Turn it on with: acme analytics enable\n",
 			);
 			expect((await captureExecute(app(), ["analytics", "--json"])).stdout).toBe(
-				'{"sending":false,"decidedBy":"saved","saved":"off","default":"on"}',
+				'{"sending":false,"decidedBy":"saved","saved":"off","default":"on"}\n',
 			);
 			expect((await captureExecute(app(), ["analytics", "enable"])).stdout).toBe(
-				"Saved telemetry preference: on.",
+				"Saved telemetry preference: on.\n",
 			);
 			expect((await captureExecute(app(), ["analytics", "enable", "--json"])).stdout).toBe(
-				'{"sending":true,"decidedBy":"saved","saved":"on","default":"on"}',
+				'{"sending":true,"decidedBy":"saved","saved":"on","default":"on"}\n',
 			);
 			expect((await captureExecute(app(), ["analytics"])).stdout).toBe(
-				"Telemetry is on (saved preference). Turn it off with: acme analytics disable",
+				"Telemetry is on (saved preference). Turn it off with: acme analytics disable\n",
 			);
 		});
 
@@ -483,7 +483,7 @@ describe("telemetry", () => {
 				telemetry({ env: ENV, enabled: "opt-in", send: recorder() }),
 			);
 			expect((await captureExecute(optIn, ["telemetry"])).stdout).toBe(
-				"Telemetry is off (the default). Turn it on with: acme telemetry enable",
+				"Telemetry is off (the default). Turn it on with: acme telemetry enable\n",
 			);
 		});
 
@@ -492,36 +492,36 @@ describe("telemetry", () => {
 			vi.stubEnv(ENV, sentinel);
 			const outputs = [await captureExecute(app(), ["analytics"])];
 			expect(outputs[0]!.stdout).toBe(
-				"Telemetry is on for this run because ACME_TELEMETRY is set.",
+				"Telemetry is on for this run because ACME_TELEMETRY is set.\n",
 			);
 			outputs.push(await captureExecute(app(), ["analytics", "disable"]));
 			expect(outputs[1]!.stdout).toBe(
-				"Saved telemetry preference: off.\nTelemetry stays on for this run because ACME_TELEMETRY is set.",
+				"Saved telemetry preference: off.\nTelemetry stays on for this run because ACME_TELEMETRY is set.\n",
 			);
 			expect(JSON.parse(readFileSync(savedFile(), "utf8"))).toEqual({ telemetry: "off" });
 			outputs.push(await captureExecute(app(), ["analytics"]));
 			expect(outputs[2]!.stdout).toBe(
-				"Telemetry is on for this run because ACME_TELEMETRY is set.\nThe saved preference is off.",
+				"Telemetry is on for this run because ACME_TELEMETRY is set.\nThe saved preference is off.\n",
 			);
 			vi.stubEnv(ENV, "0");
 			outputs.push(await captureExecute(app(), ["analytics"]));
 			expect(outputs[3]!.stdout).toBe(
-				"Telemetry is off for this run because ACME_TELEMETRY is set.\nThe saved preference is off.",
+				"Telemetry is off for this run because ACME_TELEMETRY is set.\nThe saved preference is off.\n",
 			);
 			vi.stubEnv(ENV, sentinel);
 
 			vi.stubEnv("DO_NOT_TRACK", "1");
 			outputs.push(await captureExecute(app(), ["analytics"]));
 			expect(outputs[4]!.stdout).toBe(
-				"Telemetry is off because DO_NOT_TRACK is set.\nThe saved preference is off.",
+				"Telemetry is off because DO_NOT_TRACK is set.\nThe saved preference is off.\n",
 			);
 			outputs.push(await captureExecute(app(), ["analytics", "enable", "--json"]));
 			expect(outputs[5]!.stdout).toBe(
-				'{"sending":false,"decidedBy":"do-not-track","saved":"on","default":"on"}',
+				'{"sending":false,"decidedBy":"do-not-track","saved":"on","default":"on"}\n',
 			);
 			outputs.push(await captureExecute(app(), ["analytics", "enable"]));
 			expect(outputs[6]!.stdout).toBe(
-				"Saved telemetry preference: on.\nTelemetry stays off for this run because DO_NOT_TRACK is set.",
+				"Saved telemetry preference: on.\nTelemetry stays off for this run because DO_NOT_TRACK is set.\n",
 			);
 			expect(JSON.stringify(outputs)).not.toContain(sentinel);
 		});
@@ -583,7 +583,7 @@ describe("telemetry", () => {
 				symlinkSync(join(configHome, "gone.json"), savedFile());
 				const send = recorder();
 				expect((await captureExecute(app(send), ["analytics", "--json"])).stdout).toBe(
-					'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}',
+					'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}\n',
 				);
 				await captureExecute(app(send), ["deploy"]);
 				expect(send).not.toHaveBeenCalled();
@@ -612,7 +612,7 @@ describe("telemetry", () => {
 			expect((await captureExecute(app(), ["analytics", "disable"])).exitCode).toBe(1);
 			expect(readdirSync(dirname(savedFile()))).toEqual(["telemetry.json"]);
 			expect((await captureExecute(app(), ["analytics", "--json"])).stdout).toBe(
-				'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}',
+				'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}\n',
 			);
 		});
 	});
@@ -676,23 +676,23 @@ describe("telemetry", () => {
 				expect(send).not.toHaveBeenCalled();
 				const fix = `Run "acme telemetry enable" or "acme telemetry disable" to rewrite ${savedFile()}.`;
 				expect(await captureExecute(app, ["telemetry"])).toEqual({
-					stdout: `Telemetry is off: the saved preference could not be read.\n${fix}`,
+					stdout: `Telemetry is off: the saved preference could not be read.\n${fix}\n`,
 					stderr: "",
 					exitCode: 0,
 				});
 				expect((await captureExecute(app, ["telemetry", "--json"])).stdout).toBe(
-					'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}',
+					'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}\n',
 				);
 
 				// A variable that decides the run still shows the note.
 				vi.stubEnv("DO_NOT_TRACK", "1");
 				expect((await captureExecute(app, ["telemetry"])).stdout).toBe(
-					`Telemetry is off because DO_NOT_TRACK is set.\nThe saved preference could not be read. ${fix}`,
+					`Telemetry is off because DO_NOT_TRACK is set.\nThe saved preference could not be read. ${fix}\n`,
 				);
 				vi.stubEnv("DO_NOT_TRACK", undefined);
 
 				expect((await captureExecute(app, ["telemetry", "enable"])).stdout).toBe(
-					"Saved telemetry preference: on.",
+					"Saved telemetry preference: on.\n",
 				);
 				expect(JSON.parse(readFileSync(savedFile(), "utf8"))).toEqual({ telemetry: "on" });
 				await app.run(["deploy"]);
@@ -715,11 +715,11 @@ describe("telemetry", () => {
 			const status = await captureExecute(app, ["telemetry"]);
 			expect(status.exitCode).toBe(0);
 			expect(status.stdout).toMatch(
-				/^Telemetry is off: the saved preference could not be read\.\nCannot resolve the config directory: .*not absolute.*\.$/,
+				/^Telemetry is off: the saved preference could not be read\.\nCannot resolve the config directory: .*not absolute.*\.\n$/,
 			);
 			expect(status.stdout).not.toContain("enable");
 			expect((await captureExecute(app, ["telemetry", "--json"])).stdout).toBe(
-				'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}',
+				'{"sending":false,"decidedBy":"saved","saved":"unreadable","default":"on"}\n',
 			);
 			const disable = await captureExecute(app, ["telemetry", "disable"]);
 			expect(disable.exitCode).toBe(1);

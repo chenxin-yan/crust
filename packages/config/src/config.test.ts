@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { help, input, version } from "@crustjs/extensions";
-import { captureExecute, type ExecutableApp } from "@crustjs/testing";
+import { captureExecute, type ExecutableApp, withEnv } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { defineConfig } from "./config.ts";
@@ -25,6 +25,8 @@ const saved = {
 	appData: process.env.APPDATA,
 	telemetry: process.env.ACME_TELEMETRY,
 	noCache: process.env.ACME_NO_CACHE,
+	level: process.env.ACME_LEVEL,
+	org: process.env.ACME_ORG,
 };
 
 beforeEach(() => {
@@ -32,9 +34,11 @@ beforeEach(() => {
 	// configDir() reads XDG_CONFIG_HOME on Linux and macOS, APPDATA on Windows: both point here.
 	process.env.XDG_CONFIG_HOME = join(root, "xdg");
 	process.env.APPDATA = join(root, "xdg");
-	// flag: false settings read process.env: the fixtures' variables come only from each case.
+	// The fixtures' variables come only from each case, never from the shell running the tests.
 	delete process.env.ACME_TELEMETRY;
 	delete process.env.ACME_NO_CACHE;
+	delete process.env.ACME_LEVEL;
+	delete process.env.ACME_ORG;
 	cwd = join(root, "repo", "sub");
 	mkdirSync(cwd, { recursive: true });
 	process.chdir(cwd);
@@ -47,6 +51,8 @@ afterEach(() => {
 		["APPDATA", saved.appData],
 		["ACME_TELEMETRY", saved.telemetry],
 		["ACME_NO_CACHE", saved.noCache],
+		["ACME_LEVEL", saved.level],
+		["ACME_ORG", saved.org],
 	] as const) {
 		if (value === undefined) delete process.env[name];
 		else process.env[name] = value;
@@ -128,23 +134,27 @@ function shows(
 	);
 }
 
-/** `show` through typed `run()` with no environment: the settings, or the failure's error. */
+/** `show` through typed `run()`: the settings, or the failure's error. */
 async function result(app: LooseApp, flags = {}) {
-	const outcome = await app.run(["show"], { flags }, { env: {} });
+	const outcome = await app.run(["show"], { flags });
 	if (outcome.status !== "completed") throw outcome.error;
 	return outcome.result as Record<string, unknown>;
 }
 
 /** `acme show` through argv: the settings it printed. */
 async function viaArgv(argv: readonly string[] = [], env: Record<string, string> = {}) {
-	const { stdout, stderr, exitCode } = await captureExecute(acme().app, ["show", ...argv], { env });
+	const { stdout, stderr, exitCode } = await captureExecute(acme().app, ["show", ...argv], {
+		env: { ...process.env, ...env },
+	});
 	expect(exitCode, stderr).toBe(0);
 	return JSON.parse(stdout) as Record<string, unknown>;
 }
 
 /** `acme show` through typed `run()`: the settings it returned. */
 async function viaRun(flags: { level?: string } = {}, env: Record<string, string> = {}) {
-	const outcome = await acme().app.run(["show"], { flags }, { env });
+	const outcome = await withEnv({ ...process.env, ...env }, () =>
+		acme().app.run(["show"], { flags }),
+	);
 	if (outcome.status !== "completed") throw outcome.status === "failed" ? outcome.error : outcome;
 	return outcome.result;
 }
@@ -288,12 +298,12 @@ describe("settings", () => {
 			token: { type: "string", flag: false, required: true },
 		});
 		const app = shows(config);
-		const { exitCode, stderr } = await captureExecute(app, ["show"], { env: {} });
+		const { exitCode, stderr } = await captureExecute(app, ["show"]);
 		expect(exitCode).toBe(2);
 		expect(stderr).toContain(
 			`Missing setting "org" of acme: pass --org, set ACME_ORG, or set "org" in acme.config.json or ${globalFile()}.`,
 		);
-		const token = await captureExecute(app, ["show", "--org", "o"], { env: {} });
+		const token = await captureExecute(app, ["show", "--org", "o"]);
 		expect(token.stderr).toContain(
 			`Missing setting "token" of acme: set "token" in acme.config.json or ${globalFile()}.`,
 		);
@@ -312,7 +322,7 @@ describe("errors", () => {
 		expect(show.stderr).toContain(`Malformed JSON in store file: ${projectFile()}`);
 		expect(await captureExecute(acme().app, ["ping"])).toMatchObject({
 			exitCode: 0,
-			stdout: "pong",
+			stdout: "pong\n",
 		});
 		expect(await captureExecute(acme().app, ["show", "--help"])).toMatchObject({ exitCode: 0 });
 		expect(await captureExecute(acme().app, ["--version"])).toMatchObject({ exitCode: 0 });
@@ -436,7 +446,7 @@ describe("one Context per setting", () => {
 		expect(unknown.exitCode).toBe(2);
 		expect(unknown.stderr).toContain('Unknown flag "--org"');
 		write(projectFile(), { org: "file" });
-		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ result: "file" });
+		expect(await app.run(["deploy"], {})).toMatchObject({ result: "file" });
 	});
 
 	it("reads the files for each setting read from them, and not for one its flag gave", async () => {
@@ -457,7 +467,7 @@ describe("one Context per setting", () => {
 					.action(async ({ ctx }) => [await ctx.org, await ctx.region, await ctx.port]),
 			);
 			const app = new Crust("acme").extend(config.extension).add(show);
-			expect(await app.run(["show"], {}, { env: {} })).toMatchObject({
+			expect(await app.run(["show"], {})).toMatchObject({
 				result: ["o", "eu", 1],
 			});
 			// No snapshot is shared: each setting read from the files reads them.
@@ -495,10 +505,10 @@ describe("one Context per setting", () => {
 		);
 		const app = new Crust("acme").extend(config.extension).add(hold, deploy);
 		await config.global.patch({ org: "old" });
-		const first = app.run(["hold"], {}, { env: {} });
+		const first = app.run(["hold"], {});
 		await read;
 		await config.global.patch({ org: "new" });
-		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ result: "new" });
+		expect(await app.run(["deploy"], {})).toMatchObject({ result: "new" });
 		release();
 		expect(await first).toMatchObject({ result: "old" });
 	});
@@ -511,13 +521,13 @@ describe("one Context per setting", () => {
 		const app = new Crust("acme").extend(config.extension).add(deploy);
 		const { signal } = new AbortController();
 		write(projectFile(), { org: "first" });
-		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ result: "first" });
+		expect(await app.run(["deploy"], {}, { signal })).toMatchObject({ result: "first" });
 		write(projectFile(), { org: "second" });
-		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ result: "second" });
+		expect(await app.run(["deploy"], {}, { signal })).toMatchObject({ result: "second" });
 		write(projectFile(), "{ broken");
-		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ status: "failed" });
+		expect(await app.run(["deploy"], {}, { signal })).toMatchObject({ status: "failed" });
 		write(projectFile(), { org: "fixed" });
-		expect(await app.run(["deploy"], {}, { env: {}, signal })).toMatchObject({ result: "fixed" });
+		expect(await app.run(["deploy"], {}, { signal })).toMatchObject({ result: "fixed" });
 	});
 
 	it("reads no file for a setting its flag or variable gave", async () => {
@@ -531,10 +541,10 @@ describe("one Context per setting", () => {
 			status: "completed",
 			result: "flag",
 		});
-		expect(await app.run(["deploy"], {}, { env: { ACME_ORG: "env" } })).toMatchObject({
-			result: "env",
-		});
-		expect(await app.run(["deploy"], {}, { env: {} })).toMatchObject({ status: "failed" });
+		expect(
+			await withEnv({ ...process.env, ACME_ORG: "env" }, () => app.run(["deploy"], {})),
+		).toMatchObject({ result: "env" });
+		expect(await app.run(["deploy"], {})).toMatchObject({ status: "failed" });
 	});
 
 	it("replaces one setting in a test with its .of() double", async () => {
@@ -731,7 +741,7 @@ describe("flag: false settings and parsers", () => {
 		});
 		write(projectFile(), { "no-proxy": "local", "no-cache": "file" });
 		expect(await result(shows(config))).toEqual({ "no-proxy": "local", "no-cache": "file" });
-		const outcome = await shows(config).run(["show"], {}, { env: {} });
+		const outcome = await shows(config).run(["show"], {});
 		expect(outcome).toMatchObject({ status: "completed" });
 		process.env.ACME_NO_CACHE = "env";
 		try {

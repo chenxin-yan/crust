@@ -254,7 +254,7 @@ describe("generated commands", () => {
 		const fetched = await captureExecute(app, ["users", "get-user", "4 2"]);
 
 		expect(listed).toEqual({
-			stdout: JSON.stringify([{ id: "1" }], null, 2),
+			stdout: `${JSON.stringify([{ id: "1" }], null, 2)}\n`,
 			stderr: "",
 			exitCode: 0,
 		});
@@ -278,7 +278,7 @@ describe("generated commands", () => {
 		const app = new Crust("acme").extend(json(), acme.extension).add(...acme.commands);
 
 		expect(await captureExecute(app, ["users", "get-user", "42", "--json"])).toEqual({
-			stdout: JSON.stringify({ id: "42", name: "Ada" }),
+			stdout: `${JSON.stringify({ id: "42", name: "Ada" })}\n`,
 			stderr: "",
 			exitCode: 0,
 		});
@@ -390,7 +390,7 @@ describe("generated commands", () => {
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
 
 		expect(await captureExecute(app, ["get-status"])).toEqual({
-			stdout: "all good",
+			stdout: "all good\n",
 			stderr: "",
 			exitCode: 0,
 		});
@@ -483,7 +483,7 @@ describe("generated commands", () => {
 		const { app } = appFor({ "/anonymous": { get: {} } });
 
 		expect((await captureExecute(app, ["api", "--list"])).stdout).toBe(
-			"GET /anonymous Probe [unavailable: missing-operation-id]",
+			"GET /anonymous Probe [unavailable: missing-operation-id]\n",
 		);
 	});
 
@@ -557,11 +557,12 @@ describe("a missing required value", () => {
 
 		const run = runInteractive(app, ["users", "get-user"]);
 
-		await expect(run.done).rejects.toMatchObject({
-			code: "VALIDATION",
-			message: 'Missing required argument "<id>"',
+		expect(await run.done).toEqual({
+			stdout: "",
+			stderr: 'Error: Missing required argument "<id>"\n',
+			exitCode: 2,
 		});
-		expect(run.screen().trim()).toBe("");
+		expect(run.screen()).toBe('Error: Missing required argument "<id>"');
 		expect(calls).toEqual([]);
 	});
 });
@@ -607,7 +608,7 @@ describe("generated --paginate", () => {
 		const data = await captureExecute(app, ["users", "list-users", "--paginate", "--json"]);
 
 		expect(human).toEqual({
-			stdout: JSON.stringify([{ id: "1" }, { id: "2" }], null, 2),
+			stdout: `${JSON.stringify([{ id: "1" }, { id: "2" }], null, 2)}\n`,
 			stderr: "",
 			exitCode: 0,
 		});
@@ -774,17 +775,17 @@ describe("api preview", () => {
 		const preview = (...argv: string[]) => captureExecute(app, ["api", "preview", ...argv]);
 
 		expect((await preview("users", "get-user")).stderr).toBe(
-			'Error: Missing required argument "<id>"',
+			'Error: Missing required argument "<id>"\n',
 		);
 		expect((await preview("users", "create-user")).stderr).toBe(
-			'Error: createUser: missing the body field "name" (--name)',
+			'Error: createUser: missing the body field "name" (--name)\n',
 		);
 		expect((await preview("users", "nope")).stderr).toContain('Unknown command "nope"');
 		expect((await preview("api")).stderr).toBe(
-			'Error: api preview: "api" is not a command generated from the OpenAPI spec',
+			'Error: api preview: "api" is not a command generated from the OpenAPI spec\n',
 		);
 		expect((await preview("users", "get-user", "-X", "PUT", "--", "1")).stderr).toBe(
-			"Error: api preview: --method is for a request path; put the command's own flags after --",
+			"Error: api preview: --method is for a request path; put the command's own flags after --\n",
 		);
 	});
 
@@ -838,7 +839,7 @@ describe("api preview", () => {
 			(await captureExecute(app, ["api", "preview", "n", "users", "list-users", "--paginate"]))
 				.stderr,
 		).toBe(
-			"Error: api preview: --paginate is for a request path; put the command's own flags after --",
+			"Error: api preview: --paginate is for a request path; put the command's own flags after --\n",
 		);
 	});
 
@@ -856,7 +857,7 @@ describe("api preview", () => {
 			'{"name":"Ada"}',
 		]);
 
-		expect(stderr).toBe('Error: createUser: missing the body field "name" (--name)');
+		expect(stderr).toBe('Error: createUser: missing the body field "name" (--name)\n');
 	});
 
 	it("gives generated commands no --dry-run flag", async () => {
@@ -1470,7 +1471,7 @@ describe("generated command bindings, positionals and confirmation", () => {
 		expect(calls).toHaveLength(sent ? 1 : 0);
 		expect(result.exitCode).toBe(sent ? 0 : 1);
 		if (outcome === "resolves to false") {
-			expect(result.stderr).toBe("Error: probe: not confirmed: Delete it? Nothing was sent.");
+			expect(result.stderr).toBe("Error: probe: not confirmed: Delete it? Nothing was sent.\n");
 		}
 	});
 
