@@ -770,7 +770,7 @@ async function parseCommandArgv(
 	const parsed = parseArgs(command, [...argv]);
 	validateParsed(command, parsed);
 	const { args, flags } = await applySchemas(command, parsed);
-	return { path: Object.freeze([...commandPath]), args, flags, rawArgs: parsed.rawArgs };
+	return { path: Object.freeze([...commandPath]), args, flags };
 }
 
 function resolveStructuredInput(
@@ -925,9 +925,6 @@ async function dispatch(
 		get flags() {
 			return bound.flags;
 		},
-		get rawArgs() {
-			return bound.rawArgs;
-		},
 		get sources() {
 			return bound.sources;
 		},
@@ -971,7 +968,6 @@ async function dispatch(
 				args: validated.args,
 				flags: validated.flags,
 				ctx: resolver.bag(contexts),
-				rawArgs: bound.rawArgs,
 				signal,
 				get command() {
 					return snapshots.command;
@@ -1186,8 +1182,7 @@ async function renderFailure(
 				parseCommandArgv(prepared.rootNode, path, commandArgv),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
-			rawArgs: [],
-			sources: Object.freeze({ args: Object.freeze({}), flags: Object.freeze({}), raw: undefined }),
+			sources: Object.freeze({ args: Object.freeze({}), flags: Object.freeze({}) }),
 			signal,
 			stdin: output.io.stdin,
 			stdout: output.io.stdout,

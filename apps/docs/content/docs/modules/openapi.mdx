@@ -365,7 +365,6 @@ An operation that does not fit is left out of `acme.commands`, so a CLI run from
 | `unsupported-body-type`      | A required request body that is not JSON                                                                                 | Skips it      |
 | `command-collision`          | Two commands, or a command and a group, with one path, also against a command you `.add()` or the `api` command          | Fails         |
 | `flag-collision`             | Two inputs of a command with one name                                                                                    | Fails         |
-| `reserved-input-name`        | An input named `raw`, which holds passthrough values                                                                     | Fails         |
 | `unflaggable-name`           | A flag name core rejects, such as `no-cache` or an empty one                                                             | Fails         |
 | `unusable-name`              | A command, group or argument name core rejects, such as the empty name of an operationId without ASCII letters or digits | Fails         |
 | `positional-order`           | An optional positional before a required one, or a list positional that is not last                                      | Fails         |

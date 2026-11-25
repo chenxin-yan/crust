@@ -1,6 +1,8 @@
 import type { JsonValue } from "@crustjs/utils/json";
 import type { InferInput, StandardSchema } from "@crustjs/utils/schema";
 
+import type { VariadicMode } from "../types.ts";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Shared type helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ export type IsClosedName<N extends string> = false extends (
 // repeatable flag has at least one occurrence; a variadic may be empty.
 type SchemaTokenName<T> = T extends { type: "boolean" } ? "boolean" : "string";
 type SchemaToken<T> = { boolean: boolean; string: string }[SchemaTokenName<T>];
-type SchemaTokens<T> = T extends { variadic: true }
+type SchemaTokens<T> = T extends { variadic: VariadicMode }
 	? string[]
 	: T extends { multiple: true }
 		? [SchemaToken<T>, ...SchemaToken<T>[]]
@@ -226,7 +228,7 @@ type AcceptsJsonElements<
 
 type SchemaInputMessage<T> = T extends { type: "json" }
 	? "schema input must accept JSON data"
-	: T extends { variadic: true } | { multiple: true }
+	: T extends { variadic: VariadicMode } | { multiple: true }
 		? `schema input must accept ${SchemaTokenName<T>}[]; use an array schema`
 		: T extends { type: "boolean" }
 			? "schema input must accept boolean"

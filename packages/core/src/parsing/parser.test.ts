@@ -179,7 +179,7 @@ describe("parseArgs — variadic args", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — '--' separator", () => {
-	it("fills the remaining positionals after the ones before --", () => {
+	it("fills the remaining positionals after the ones before --, and rejects a word none takes", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [
@@ -189,8 +189,10 @@ describe("parseArgs — '--' separator", () => {
 		});
 		const result = parseArgs(cmd, ["a", "--", "-5", "rest"]);
 		expect(result.args).toEqual({ name: "a", offset: -5 });
-		expect(result.excessArgs).toEqual([]);
-		expect(result.rawArgs).toEqual(["rest"]);
+		expect(result.excessArgs).toEqual(["rest"]);
+		expect(() => validateParsed(cmd, result)).toThrow(
+			new CrustError("VALIDATION", 'Unexpected positional argument: "rest"'),
+		);
 	});
 
 	it("lets a variadic positional consume every token after --", () => {
@@ -200,7 +202,7 @@ describe("parseArgs — '--' separator", () => {
 		});
 		const result = parseArgs(cmd, ["a", "--", "-b", "--", "c"]);
 		expect(result.args.files).toEqual(["a", "-b", "--", "c"]);
-		expect(result.rawArgs).toEqual([]);
+		expect(result.excessArgs).toEqual([]);
 	});
 
 	it("treats flag spellings after -- as values", () => {
@@ -212,28 +214,32 @@ describe("parseArgs — '--' separator", () => {
 		const result = parseArgs(cmd, ["--", "--verbose", "--help"]);
 		expect(result.args.pattern).toBe("--verbose");
 		expect(result.flags.verbose).toBeUndefined();
-		expect(result.rawArgs).toEqual(["--help"]);
+		expect(result.excessArgs).toEqual(["--help"]);
 	});
 
-	it("still reports excess positionals before -- once every declared one is filled", () => {
+	it("reports excess positionals on both sides of -- once every declared one is filled", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
 			args: [{ name: "file", type: "string" }],
 		});
 		const result = parseArgs(cmd, ["a", "b", "--", "c"]);
 		expect(result.args.file).toBe("a");
-		expect(result.excessArgs).toEqual(["b"]);
-		expect(result.rawArgs).toEqual(["c"]);
+		expect(result.excessArgs).toEqual(["b", "c"]);
+		// A command without arguments takes nothing after `--` either.
+		const bare = makeNode({ meta: { name: "ps" } });
+		expect(() => validateParsed(bare, parseArgs(bare, ["--", "anything"]))).toThrow(
+			'Unexpected positional argument: "anything"',
+		);
 	});
 });
 
-describe("parseArgs — afterDoubleDash", () => {
+describe('parseArgs — variadic: "afterDoubleDash"', () => {
 	const run = makeNode({
 		meta: { name: "run" },
 		args: [
 			{ name: "task", type: "string", required: true },
 			{ name: "pkgs", type: "string", variadic: true },
-			{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+			{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 		],
 		flags: { watch: { type: "boolean" } },
 	});
@@ -246,7 +252,7 @@ describe("parseArgs — afterDoubleDash", () => {
 			extra: ["--watch", "-5", "--"],
 		});
 		expect(result.flags.watch).toBe(true);
-		expect(result.rawArgs).toEqual([]);
+		expect(result.excessArgs).toEqual([]);
 		expect(result.sources.args).toEqual({ task: "argv", pkgs: "argv", extra: "argv" });
 	});
 
@@ -257,43 +263,86 @@ describe("parseArgs — afterDoubleDash", () => {
 		expect(parseArgs(run, ["build"]).args).toEqual({ task: "build", pkgs: [], extra: [] });
 	});
 
-	it("takes one token when single and passes the rest to rawArgs", () => {
-		const cmd = makeNode({
-			meta: { name: "exec" },
-			args: [
-				{ name: "pod", type: "string", required: true },
-				{ name: "command", type: "string", afterDoubleDash: true },
-			],
-		});
-		const result = parseArgs(cmd, ["web", "--", "ls", "-la"]);
-		expect(result.args).toEqual({ pod: "web", command: "ls" });
-		expect(result.rawArgs).toEqual(["-la"]);
-		expect(result.excessArgs).toEqual([]);
-		// Tokens before `--` never reach it.
-		expect(parseArgs(cmd, ["web", "ls"]).excessArgs).toEqual(["ls"]);
-	});
-
 	it("reports a required one given before -- as missing, with a hint", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
-			args: [{ name: "script", type: "string", required: true, afterDoubleDash: true }],
+			args: [{ name: "script", type: "string", required: true, variadic: "afterDoubleDash" }],
 		});
 		const result = parseArgs(cmd, ["build"]);
 		expect(result.excessArgs).toEqual(["build"]);
 		expect(() => validateParsed(cmd, { ...result, excessArgs: [] })).toThrow(
 			'Missing required argument "<script>" (pass it after "--")',
 		);
-		expect(parseArgs(cmd, ["--", "build"]).args).toEqual({ script: "build" });
+		expect(parseArgs(cmd, ["--", "build"]).args).toEqual({ script: ["build"] });
 	});
 
 	it("binds structured input by name, even with an earlier argument omitted", () => {
-		const result = parseStructured(run, {
-			args: { task: "build", extra: ["--watch"] },
-			raw: ["x"],
-		});
+		const result = parseStructured(run, { args: { task: "build", extra: ["--watch"] } });
 		expect(result.args).toEqual({ task: "build", pkgs: [], extra: ["--watch"] });
-		expect(result.rawArgs).toEqual(["x"]);
 		expect(result.sources.args).toEqual({ task: "run", extra: "run" });
+	});
+});
+
+describe('parseArgs — variadic: "passthrough"', () => {
+	const run = makeNode({
+		meta: { name: "run" },
+		args: [
+			{ name: "image", type: "string", required: true },
+			{ name: "command", type: "string", variadic: "passthrough" },
+		],
+		flags: { rm: { type: "boolean" }, name: { type: "string" } },
+	});
+
+	it("reads flags only before the first positional and keeps every later word as typed", () => {
+		expect(parseArgs(run, ["--rm", "alpine", "ls", "-la", "--color"])).toMatchObject({
+			args: { image: "alpine", command: ["ls", "-la", "--color"] },
+			flags: { rm: true },
+			excessArgs: [],
+		});
+		// A flag value is not the first positional; a later declared flag spelling is the child's.
+		expect(parseArgs(run, ["--name", "run", "alpine", "echo", "--rm"])).toMatchObject({
+			args: { image: "alpine", command: ["echo", "--rm"] },
+			flags: { name: "run", rm: undefined },
+		});
+	});
+
+	it("keeps a -- after the first positional, and lets one before it end flags", () => {
+		expect(parseArgs(run, ["alpine", "--", "x"]).args).toEqual({
+			image: "alpine",
+			command: ["--", "x"],
+		});
+		expect(parseArgs(run, ["--rm", "--", "--image", "-x"])).toMatchObject({
+			args: { image: "--image", command: ["-x"] },
+			flags: { rm: true },
+		});
+	});
+
+	it("still rejects an unknown flag before the first positional", () => {
+		expect(() => parseArgs(run, ["--bogus", "alpine"])).toThrow('Unknown flag "--bogus"');
+	});
+
+	it("starts at the first positional when it is the only argument", () => {
+		const exec = makeNode({
+			meta: { name: "exec" },
+			args: [{ name: "argv", type: "string", variadic: "passthrough", required: true }],
+			flags: { verbose: { type: "boolean", short: "v" } },
+		});
+		expect(parseArgs(exec, ["-v", "sh", "-c", "echo $HOME", "-v"])).toMatchObject({
+			args: { argv: ["sh", "-c", "echo $HOME", "-v"] },
+			flags: { verbose: true },
+		});
+		// `-` (stdin) is a positional, so it starts the passthrough too.
+		expect(parseArgs(exec, ["-", "-v"]).args).toEqual({ argv: ["-", "-v"] });
+	});
+
+	it("keeps an argv tail longer than the call stack's argument limit", () => {
+		const words = Array.from({ length: 150_000 }, () => "x");
+		expect(parseArgs(run, ["alpine", ...words]).args.command).toHaveLength(150_000);
+		const list = makeNode({
+			meta: { name: "list" },
+			args: [{ name: "files", type: "string", variadic: true }],
+		});
+		expect(parseArgs(list, ["--", ...words]).args.files).toHaveLength(150_000);
 	});
 });
 
@@ -903,21 +952,16 @@ describe("parseStructured", () => {
 		).rejects.toThrow("occurrence array");
 	});
 
-	it("keeps scalar JSON arrays intact and passes raw input verbatim", () => {
+	it("keeps scalar JSON arrays intact", () => {
 		const command = makeNode({
 			meta: "test",
 			args: [{ name: "data", type: "json" }],
 			flags: { data: { type: "json" } },
 		});
 		const data = [1, 2];
-		const result = parseStructured(command, {
-			args: { data },
-			flags: { data },
-			raw: ["--", "--literal"],
-		});
+		const result = parseStructured(command, { args: { data }, flags: { data } });
 		expect(result.args.data).toBe(data);
 		expect(result.flags.data).toBe(data);
-		expect(result.rawArgs).toEqual(["--", "--literal"]);
 		expect(result.excessArgs).toEqual([]);
 	});
 

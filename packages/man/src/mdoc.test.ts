@@ -317,11 +317,11 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain("Target environment [choices: dev, staging, prod]");
 	});
 
-	it("renders an afterDoubleDash argument after -- in SYNOPSIS and ARGUMENTS", async () => {
+	it('renders an "afterDoubleDash" argument after -- in SYNOPSIS and ARGUMENTS', async () => {
 		const root = await new Crust("run", { description: "Run." })
 			.args(
 				{ name: "task", type: "string", required: true },
-				{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+				{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 			)
 			.snapshot();
 		const mdoc = renderManPageMdoc({ root, section: 1 });

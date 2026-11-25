@@ -31,7 +31,7 @@ export interface McpTool {
 	readonly path: readonly string[];
 	/** Arg and flag names declared as `type: "url"`; their strings become `URL`s before `run()`. */
 	readonly urlFields: readonly string[];
-	/** Arg names; every other input property except `raw` is a flag. */
+	/** Arg names; every other input property is a flag. */
 	readonly argNames: readonly string[];
 }
 
@@ -48,8 +48,6 @@ export interface McpToolsOptions {
 
 /** Name of the command `mcpExtension` contributes; never exposed as a tool. */
 export const MCP_COMMAND_NAME = "mcp";
-/** Passthrough values land here and reach the action as `rawArgs`. */
-export { RAW_INPUT_PROPERTY as RAW_PROPERTY } from "@crustjs/core/tooling";
 
 /** MCP specification 2026-07-28, "Tool Names". */
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;

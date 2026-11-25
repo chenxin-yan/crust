@@ -68,7 +68,6 @@ export interface Diagnostic {
 		| "unsupported-body-type"
 		| "command-collision"
 		| "flag-collision"
-		| "reserved-input-name"
 		| "unflaggable-name"
 		| "unusable-name"
 		| "positional-order"

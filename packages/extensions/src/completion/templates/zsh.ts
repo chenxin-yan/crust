@@ -123,7 +123,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 function renderArgSpecs(node: CompletionCommand): string[] {
 	return node.args.flatMap((arg, idx) => {
 		// Rendered on its own, after `--`; see renderHelper.
-		if (arg.afterDoubleDash) return [];
+		if (arg.variadic === "afterDoubleDash") return [];
 		const idxToken = arg.variadic ? "*" : String(idx + 1);
 		return [bashSingleQuote(`${idxToken}:${arg.name}:${valueAction(arg)}`)];
 	});
@@ -226,28 +226,28 @@ function renderHelper(
 		out.push("\t\t\t;;");
 		out.push("\tesac");
 	} else {
-		// An `afterDoubleDash` argument reads only the words after `--`: complete
+		// An `"afterDoubleDash"` argument reads only the words after `--`: complete
 		// it against those alone, keeping `--` so `-S` treats them as arguments.
 		const dd = node.args.at(-1);
-		if (dd?.afterDoubleDash) {
+		if (dd?.variadic === "afterDoubleDash") {
 			out.push("\tlocal -i dd=${words[(i)--]}");
 			out.push("\tif (( dd < CURRENT )); then");
 			out.push('\t\twords=("$words[1]" -- "${(@)words[dd+1,-1]}")');
 			out.push("\t\t(( CURRENT -= dd - 2 ))");
-			out.push(
-				`\t\t_arguments -S ${bashSingleQuote(`${dd.variadic ? "*" : "1"}:${dd.name}:${valueAction(dd)}`)}`,
-			);
+			out.push(`\t\t_arguments -S ${bashSingleQuote(`*:${dd.name}:${valueAction(dd)}`)}`);
 			out.push("\t\treturn");
 			out.push("\tfi");
 		}
 		// Leaf — flat _arguments call. `-S`: no options after `--`, and later
-		// words keep filling argument slots, as Core parses them.
+		// words keep filling argument slots, as Core parses them. `-A '-*'`: a
+		// `"passthrough"` argument keeps every word after the first positional.
 		if (flagSpecLines.length === 0 && argSpecLines.length === 0) {
 			// Pure noop helper — keep an empty body so the caller's `case`
 			// dispatch still has a target to jump to.
 			out.push("\t:");
 		} else {
-			out.push("\t_arguments -S \\");
+			const passthrough = dd?.variadic === "passthrough" ? " -A '-*'" : "";
+			out.push(`\t_arguments -S${passthrough} \\`);
 			const allSpecs: string[] = [...flagSpecLines, ...argSpecLines];
 			allSpecs.forEach((spec, idx) => {
 				const trailing = idx === allSpecs.length - 1 ? "" : " \\";

@@ -98,7 +98,7 @@ function renderRule(binName: string, parts: RuleParts): string {
  * positionals have been consumed past the path) or `*<N>` (fires when
  * N-or-more positionals have been consumed). A leading `<` counts only
  * positionals before `--` and fails after it; a leading `>` counts only
- * those after `--` and fails before it (an `afterDoubleDash` argument).
+ * those after `--` and fails before it (an `"afterDoubleDash"` argument).
  */
 function posPredicate(
 	ident: string,
@@ -134,7 +134,11 @@ function emitRules(
 	const condition = posPredicate(ident, path, current, "*0");
 	// Core routes nothing after `--`.
 	const subcommandCondition = posPredicate(ident, path, current, "<*0");
-	const split = current.args.at(-1)?.afterDoubleDash === true;
+	const lastVariadic = current.args.at(-1)?.variadic;
+	const split = lastVariadic === "afterDoubleDash";
+	// A `"passthrough"` argument keeps every word from the first positional on, flags included.
+	const flagCondition =
+		lastVariadic === "passthrough" ? posPredicate(ident, path, current, "<0") : condition;
 
 	// Subcommand rules: emit one rule per spelling so each can carry its
 	// own description in the menu. fishSingleQuote is applied via the
@@ -203,7 +207,7 @@ function emitRules(
 			if (spelling.startsWith("--no-")) {
 				out.push(
 					renderRule(binName, {
-						condition,
+						condition: flagCondition,
 						long: spelling.slice(2),
 						description: `disable: ${desc}`.trim(),
 					}),
@@ -211,8 +215,8 @@ function emitRules(
 				continue;
 			}
 			const rule: RuleParts = spelling.startsWith("--")
-				? { condition, long: spelling.slice(2), description: desc }
-				: { condition, short: spelling.slice(1), description: desc };
+				? { condition: flagCondition, long: spelling.slice(2), description: desc }
+				: { condition: flagCondition, short: spelling.slice(1), description: desc };
 			if (flag.takesValue) {
 				emitValueRule(rule);
 			} else {
@@ -232,11 +236,12 @@ function emitRules(
 	// `complete -c <bin> -f` already keeps file completion off, so the
 	// suppression is implicit.
 	current.args.forEach((arg, idx) => {
-		// With an `afterDoubleDash` argument, `--` splits the slots: it reads only
+		// With an `"afterDoubleDash"` argument, `--` splits the slots: it reads only
 		// tokens after `--`, the others only tokens before.
-		const posSpec = arg.afterDoubleDash
-			? `>${arg.variadic ? "*" : ""}0`
-			: `${split ? "<" : ""}${arg.variadic ? "*" : ""}${idx}`;
+		const posSpec =
+			arg.variadic === "afterDoubleDash"
+				? ">*0"
+				: `${split ? "<" : lastVariadic === "passthrough" ? "=" : ""}${arg.variadic ? "*" : ""}${idx}`;
 		if (arg.choices !== undefined) {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			for (const choice of arg.choices) {
@@ -338,8 +343,9 @@ function emitFlagScopeHelpers(ident: string, spec: CompletionCommand): string[] 
  * `*<N>` (variadic; fires when N-or-more positionals have been
  * consumed, used for variadic-with-choices args and path matching).
  * Tokens after `--` count as positionals; a `<` prefix rejects the line
- * once `--` was seen, and a `>` prefix requires `--` and counts only the
- * tokens after it.
+ * once `--` was seen, a `>` prefix requires `--` and counts only the
+ * tokens after it, and a `=` prefix (a `"passthrough"` argument's command)
+ * counts every token from the first positional on, flags and `--` included.
  */
 function emitPosHelper(ident: string): string[] {
 	const fn = `__${ident}_path_at_arg`;
@@ -350,7 +356,7 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\tset -l pos_spec $argv[(math $total_argv - 1)]");
 	lines.push("\tset -l n (math $total_argv - 2)");
 	lines.push("\tset -l mode");
-	lines.push("\tif string match -qr -- '^[<>]' $pos_spec");
+	lines.push("\tif string match -qr -- '^[<>=]' $pos_spec");
 	lines.push("\t\tset mode (string sub --length 1 -- $pos_spec)");
 	lines.push("\t\tset pos_spec (string sub --start 2 -- $pos_spec)");
 	lines.push("\tend");
@@ -374,6 +380,11 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\tset -l forwarded");
 	lines.push("\twhile test $j -le $total");
 	lines.push("\t\tset -l t $tokens[$j]");
+	lines.push('\t\tif test "$mode" = "="; and test $consumed -gt $n');
+	lines.push("\t\t\tset consumed (math $consumed + 1)");
+	lines.push("\t\t\tset j (math $j + 1)");
+	lines.push("\t\t\tcontinue");
+	lines.push("\t\tend");
 	// After `--` nothing routes: a path still incomplete never matches.
 	lines.push("\t\tif test $end_of_options -eq 1");
 	lines.push("\t\t\ttest $consumed -lt $n; and return 1");
@@ -386,7 +397,8 @@ function emitPosHelper(ident: string): string[] {
 	lines.push("\t\t\tset j (math $j + 1)");
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tend");
-	lines.push("\t\tif string match -q -- '-*' $t");
+	// A lone `-` (stdin) is a positional.
+	lines.push("\t\tif string match -qr -- '^-.' $t");
 	lines.push("\t\t\tset -l skip 1");
 	lines.push(`\t\t\tif __${ident}_takes_value $t $route`);
 	lines.push("\t\t\t\tset skip 2");

@@ -130,7 +130,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	if (model.args.length > 0) {
 		lines.push(".Sh ARGUMENTS", ".Bl -tag -width 12n");
 		for (const arg of model.args) {
-			const separator = arg.afterDoubleDash ? "Fl \\- " : "";
+			const separator = arg.variadic === "afterDoubleDash" ? "Fl \\- " : "";
 			lines.push(`.It ${separator}Ar ${arg.name}${arg.variadic ? " ..." : ""}`);
 			const body = formatDescription(arg.description, arg.default, arg.choices);
 			if (body) lines.push(...bodyLines(body));

@@ -179,7 +179,12 @@ type RunSection<Name extends string, Values> = keyof Values extends never
 		: { [K in Name]: Values };
 
 /** Structured values bound directly against the selected command's definitions; no argv is produced. */
-export type RunInput<Shape extends CommandShape> = RunSection<
+export type RunInput<Shape extends CommandShape> = [keyof RunSections<Shape>] extends [never]
+	? // A bare `{}` would accept any value, primitives included.
+		Record<string, undefined>
+	: RunSections<Shape>;
+
+type RunSections<Shape extends CommandShape> = RunSection<
 	"args",
 	ArgsDef extends Shape["args"] ? NonNullable<RunInputPayload["args"]> : InputArgs<Shape["args"]>
 > &
@@ -191,9 +196,7 @@ export type RunInput<Shape extends CommandShape> = RunSection<
 				? {}
 				: NonNullable<RunInputPayload["flags"]>
 			: InputFlags<Shape["flags"]>
-	> & {
-		readonly raw?: readonly string[] | undefined;
-	};
+	>;
 
 // Check each prefix separately so JSON compatibility cannot recombine positional branches.
 type CompatibleRunValue<Expected, Actual> = Actual extends Expected

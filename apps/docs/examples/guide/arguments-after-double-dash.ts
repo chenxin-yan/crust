@@ -5,7 +5,7 @@ const run = new Crust("run")
 		{ name: "task", type: "string", required: true },
 		{ name: "packages", type: "string", variadic: true },
 		// [!code highlight]
-		{ name: "extra", type: "string", variadic: true, afterDoubleDash: true },
+		{ name: "extra", type: "string", variadic: "afterDoubleDash" },
 	)
 	.action(({ args, stdout }) => {
 		const extra = args.extra;

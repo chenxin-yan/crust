@@ -28,7 +28,6 @@ type Outcome =
 	| {
 			flags: Record<string, unknown>;
 			positionals: readonly string[];
-			operands: readonly string[];
 	  }
 	| { error: string; details: unknown };
 
@@ -51,7 +50,7 @@ function spellingTable(flags: FlagsDef): Map<string, Spelling> {
 function crustOutcome(flags: FlagsDef, argv: string[]): Outcome {
 	try {
 		const parsed = parseArgs(makeNode({ meta: "t", flags }), argv, {});
-		return { flags: parsed.flags, positionals: parsed.excessArgs, operands: parsed.rawArgs };
+		return { flags: parsed.flags, positionals: parsed.excessArgs };
 	} catch (error) {
 		if (!(error instanceof CrustError)) throw error;
 		expect(error.code).toBe("PARSE");
@@ -90,11 +89,9 @@ function oracleOutcome(flags: FlagsDef, argv: string[]): Outcome {
 			Object.keys(flags).map((name) => [name, undefined]),
 		);
 		const positionals: string[] = [];
-		const operands: string[] = [];
-		let separated = false;
 		for (const token of tokens) {
-			if (token.kind === "option-terminator") separated = true;
-			else if (token.kind === "positional") (separated ? operands : positionals).push(token.value);
+			if (token.kind === "option-terminator") continue;
+			if (token.kind === "positional") positionals.push(token.value);
 			else {
 				const { canonical, def } = spellings.get(token.name)!;
 				const value = def.type === "boolean" ? !token.rawName.startsWith("--no-") : token.value;
@@ -104,7 +101,7 @@ function oracleOutcome(flags: FlagsDef, argv: string[]): Outcome {
 					: value;
 			}
 		}
-		return { flags: values, positionals, operands };
+		return { flags: values, positionals };
 	} catch (error) {
 		if (!(error instanceof Error)) throw error;
 		const unknown = /^Unknown option '(.*?)'\./.exec(error.message)?.[1];
@@ -266,7 +263,7 @@ describe("argv tokenizer vs node:util.parseArgs", () => {
 			error: 'Unknown flag "-v-"',
 			details: { flag: "-", reason: "unknown-flag" },
 		});
-		expect(oracleOutcome(flags, ["-v-", "x"])).toMatchObject({ operands: ["x"] });
+		expect(oracleOutcome(flags, ["-v-", "x"])).toMatchObject({ positionals: ["x"] });
 	});
 
 	it("matches on seeded random flag specs and argv", () => {

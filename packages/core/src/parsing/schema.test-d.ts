@@ -51,11 +51,22 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 		switches: { type: "boolean", multiple: true, schema: z.tuple([z.boolean(), z.literal(true)]) },
 	});
 	new Crust("cli").args({ name: "mixed", variadic: true, schema: mixedPair });
+	// every variadic mode hands its schema string[]
+	new Crust("cli").args({ name: "command", variadic: "passthrough", schema: z.array(z.string()) });
+	new Crust("cli").args({
+		name: "extra",
+		variadic: "afterDoubleDash",
+		schema: z.array(z.string()),
+	});
 
 	// @ts-expect-error -- receives a string token
 	new Crust("cli").args({ name: "n", schema: z.number() });
 	// @ts-expect-error -- a variadic receives string[]
 	new Crust("cli").args({ name: "files", variadic: true, schema: z.string().optional() });
+	// @ts-expect-error -- a passthrough argument receives string[]
+	new Crust("cli").args({ name: "command", variadic: "passthrough", schema: z.string() });
+	// @ts-expect-error -- an "afterDoubleDash" argument receives string[]
+	new Crust("cli").args({ name: "extra", variadic: "afterDoubleDash", schema: z.string() });
 	new Crust("cli").flags({
 		// @ts-expect-error -- forgot z.coerce: receives a string
 		n: { type: "string", schema: z.number().optional() },

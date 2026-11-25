@@ -14,7 +14,6 @@ export {
 	commandInputFields,
 	commandInputSchema,
 	parseCommandInput,
-	RAW_INPUT_PROPERTY,
 } from "./command/command-input.ts";
 export type {
 	CommandInputFields,

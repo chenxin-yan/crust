@@ -83,7 +83,6 @@ function walkArg(def: DocumentationArg): CompletionArg {
 		name: def.name,
 		required: def.required,
 		variadic: def.variadic,
-		...(def.afterDoubleDash ? { afterDoubleDash: true as const } : {}),
 		...(description === undefined ? {} : { description }),
 		...valueShape(def.type, def.choices),
 	};

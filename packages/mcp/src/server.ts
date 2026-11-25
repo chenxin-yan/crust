@@ -99,7 +99,7 @@ async function callCommandTool(
 	try {
 		input = parseCommandInput(command, values);
 	} catch (error) {
-		// Input shaping failures (bad URL, bad raw) surface like action failures.
+		// Input shaping failures (bad URL, non-JSON value) surface like action failures.
 		return toolResultFromOutcome({ status: "failed", error, exitCode: 2, stdout: "", stderr: "" });
 	}
 	const { signal, notify } = ctx.mcpReq;

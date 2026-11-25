@@ -137,8 +137,6 @@ export interface CrustCommandContext<
 	flags: InferFlags<F>;
 	/** Lazy Context values available on this command path. */
 	ctx: ContextBag<Ctx>;
-	/** Tokens after the `--` separator that no declared argument consumed, or the `raw` array passed to typed `run()` */
-	rawArgs: string[];
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
 	 * `run(path, input, { signal })`, the first `SIGINT` or `SIGTERM` under `execute()`, or a
@@ -1887,7 +1885,7 @@ export class Crust<
 	 * Use {@link execute} as the streaming terminal adapter.
 	 *
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)
-	 * @param input - Structured argument, flag, and raw values
+	 * @param input - Structured argument and flag values
 	 * @param options - Optional `stdout(text)` / `stderr(text)` callbacks (also
 	 *                  exposed to Command Actions and Extensions), an `onEvent(event)`
 	 *                  callback for an async generator action's events, and an

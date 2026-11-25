@@ -1,5 +1,8 @@
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
+import type { VariadicMode } from "../types.ts";
 import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.brands.ts";
 
 // ValidateArgs type inference
@@ -17,7 +20,7 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 	// brands the specific non-last arg that is variadic
 	type Args = readonly [
 		{ name: "files"; type: "string"; variadic: true },
-		{ name: "name"; type: "string"; required: true },
+		{ name: "name"; type: "string" },
 	];
 	type Result = ValidateArgs<Args>;
 	// First arg (variadic, non-last) gets branded error
@@ -25,7 +28,7 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 		Equal<
 			Result[0],
 			Args[0] & {
-				readonly FIX_VARIADIC_POSITION: "Only the last positional argument can be variadic";
+				readonly FIX_VARIADIC_POSITION: 'Only the last argument, or the one before a final "afterDoubleDash" argument, can be variadic';
 			}
 		>
 	>;
@@ -137,43 +140,66 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 }
 
 {
-	// afterDoubleDash: only on the last argument, and a variadic may precede it
-	type Message = 'Only the last positional argument can take the tokens after "--"';
+	// "afterDoubleDash" and "passthrough": only on the last argument; a plain variadic may precede "afterDoubleDash"
+	type Message = 'Only the last argument can be variadic "afterDoubleDash" or "passthrough"';
+	type VariadicMessage =
+		'Only the last argument, or the one before a final "afterDoubleDash" argument, can be variadic';
 	type TaskRunner = readonly [
 		{ name: "task"; type: "string"; required: true },
 		{ name: "pkgs"; type: "string"; variadic: true },
-		{ name: "extra"; type: "string"; variadic: true; afterDoubleDash: true },
+		{ name: "extra"; type: "string"; variadic: "afterDoubleDash" },
 	];
 	type _taskRunner = Expect<Equal<ValidateArgs<TaskRunner>, TaskRunner>>;
+	type Docker = readonly [
+		{ name: "image"; type: "string"; required: true },
+		{ name: "command"; type: "string"; variadic: "passthrough" },
+	];
+	type _docker = Expect<Equal<ValidateArgs<Docker>, Docker>>;
 
 	type NotLast = ValidateArgs<
 		readonly [
-			{ name: "extra"; type: "string"; afterDoubleDash: true },
+			{ name: "extra"; type: "string"; variadic: "afterDoubleDash" },
 			{ name: "file"; type: "string" },
 		]
 	>;
-	type _notLast = Expect<Equal<NotLast[0]["FIX_AFTER_DOUBLE_DASH_POSITION"], Message>>;
+	type _notLast = Expect<Equal<NotLast[0]["FIX_LAST_ARGUMENT_POSITION"], Message>>;
 	type _notLastSecond = Expect<Equal<Extract<keyof NotLast[1], `FIX_${string}`>, never>>;
+	type PassthroughNotLast = ValidateArgs<
+		readonly [
+			{ name: "command"; type: "string"; variadic: "passthrough" },
+			{ name: "extra"; type: "string"; variadic: "afterDoubleDash" },
+		]
+	>;
+	type _passthroughNotLast = Expect<
+		Equal<PassthroughNotLast[0]["FIX_LAST_ARGUMENT_POSITION"], Message>
+	>;
 
-	// The variadic must sit right before the afterDoubleDash argument.
+	// The variadic must sit right before the "afterDoubleDash" argument, and only that one.
 	type Gap = ValidateArgs<
 		readonly [
 			{ name: "pkgs"; type: "string"; variadic: true },
 			{ name: "file"; type: "string" },
-			{ name: "extra"; type: "string"; afterDoubleDash: true },
+			{ name: "extra"; type: "string"; variadic: "afterDoubleDash" },
 		]
 	>;
-	type _gap = Expect<
-		Equal<Gap[0]["FIX_VARIADIC_POSITION"], "Only the last positional argument can be variadic">
+	type _gap = Expect<Equal<Gap[0]["FIX_VARIADIC_POSITION"], VariadicMessage>>;
+	type BeforePassthrough = ValidateArgs<
+		readonly [
+			{ name: "pkgs"; type: "string"; variadic: true },
+			{ name: "command"; type: "string"; variadic: "passthrough" },
+		]
+	>;
+	type _beforePassthrough = Expect<
+		Equal<BeforePassthrough[0]["FIX_VARIADIC_POSITION"], VariadicMessage>
 	>;
 
 	// Across `.args()` calls
 	type AfterLast = AppendArgsChecks<
-		readonly [{ name: "extra"; type: "string"; afterDoubleDash: true }],
+		readonly [{ name: "extra"; type: "string"; variadic: "passthrough" }],
 		readonly [{ name: "file"; type: "string" }]
 	>;
-	type _afterLast = Expect<Equal<AfterLast[0]["FIX_AFTER_DOUBLE_DASH_POSITION"], Message>>;
-	type AfterVariadic = readonly [{ name: "extra"; type: "string"; afterDoubleDash: true }];
+	type _afterLast = Expect<Equal<AfterLast[0]["FIX_LAST_ARGUMENT_POSITION"], Message>>;
+	type AfterVariadic = readonly [{ name: "extra"; type: "string"; variadic: "afterDoubleDash" }];
 	type _afterVariadic = Expect<
 		Equal<
 			AppendArgsChecks<readonly [{ name: "pkgs"; type: "string"; variadic: true }], AfterVariadic>,
@@ -186,4 +212,85 @@ import type { AppendArgsChecks, AppendArgsErrors, ValidateArgs } from "./args.br
 			unknown
 		>
 	>;
+
+	// A mode typed as the whole union is illegal before another argument whichever member it holds.
+	const mode = "passthrough" as VariadicMode;
+	new Crust("wrap").args(
+		// @ts-expect-error a `VariadicMode` argument that is not last
+		{ name: "head", type: "string", variadic: mode },
+		{ name: "tail", type: "string" },
+	);
+	new Crust("wrap")
+		.args({ name: "head", type: "string", variadic: mode })
+		// @ts-expect-error an argument after a `VariadicMode` argument
+		.args({ name: "tail", type: "string" });
+	const listOrRest = true as true | "passthrough";
+	new Crust("wrap").args(
+		// @ts-expect-error `true | "passthrough"` is not last
+		{ name: "head", type: "string", variadic: listOrRest },
+		{ name: "tail", type: "string" },
+	);
+	new Crust("wrap").args(
+		{ name: "head", type: "string" },
+		{ name: "tail", type: "string", variadic: mode },
+	);
+}
+
+{
+	// a required argument cannot follow an optional one, except an "afterDoubleDash" one
+	type Message = "A required argument cannot follow an optional one";
+	type Tag = ValidateArgs<
+		readonly [
+			{ name: "source"; type: "string" },
+			{ name: "target"; type: "string"; required: true },
+		]
+	>;
+	type _tag = Expect<Equal<Tag[1]["FIX_REQUIRED_AFTER_OPTIONAL"], Message>>;
+	type _tagFirst = Expect<Equal<Extract<keyof Tag[0], `FIX_${string}`>, never>>;
+
+	// A default makes an argument optional, and a later required variadic counts too.
+	type Defaulted = ValidateArgs<
+		readonly [
+			{ name: "mode"; type: "string"; default: "fast" },
+			{ name: "files"; type: "string"; variadic: true; required: true },
+		]
+	>;
+	type _defaulted = Expect<Equal<Defaulted[1]["FIX_REQUIRED_AFTER_OPTIONAL"], Message>>;
+
+	// A schema that accepts absence is optional; one that rejects it is required.
+	type Optional = { "~standard": { types?: { input: string | undefined; output: string } } };
+	type Required = { "~standard": { types?: { input: string; output: string } } };
+	type Schemas = ValidateArgs<
+		readonly [
+			{ name: "a"; schema: Optional & StandardSchema },
+			{ name: "b"; schema: Required & StandardSchema },
+		]
+	>;
+	type _schemas = Expect<Equal<Schemas[1]["FIX_REQUIRED_AFTER_OPTIONAL"], Message>>;
+	// An `unknown` input (`z.coerce.number()`) says nothing about absence, so it opens no gap.
+	type Coerced = { "~standard": { types?: { input: unknown; output: number } } };
+	type CoercedFirst = readonly [
+		{ name: "port"; schema: Coerced & StandardSchema },
+		{ name: "host"; type: "string"; required: true },
+	];
+	type _coercedFirst = Expect<Equal<ValidateArgs<CoercedFirst>, CoercedFirst>>;
+
+	type Exec = readonly [
+		{ name: "pod"; type: "string" },
+		{ name: "command"; type: "string"; variadic: "afterDoubleDash"; required: true },
+	];
+	type _exec = Expect<Equal<ValidateArgs<Exec>, Exec>>;
+	type Ordered = readonly [
+		{ name: "src"; type: "string"; required: true },
+		{ name: "dest"; type: "string" },
+		{ name: "rest"; type: "string"; variadic: true },
+	];
+	type _ordered = Expect<Equal<ValidateArgs<Ordered>, Ordered>>;
+
+	// Across `.args()` calls
+	type Appended = AppendArgsChecks<
+		readonly [{ name: "source"; type: "string" }],
+		readonly [{ name: "target"; type: "string"; required: true }]
+	>;
+	type _appended = Expect<Equal<Appended[0]["FIX_REQUIRED_AFTER_OPTIONAL"], Message>>;
 }

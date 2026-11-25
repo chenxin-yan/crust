@@ -425,19 +425,35 @@ describeIfFish("renderFish · subprocess completion", () => {
 	});
 });
 
+describe('renderFish · "passthrough"', () => {
+	it("gates the command's flags on no positional before the cursor", () => {
+		const script = renderFish(
+			{
+				name: "mycli",
+				flags: [{ name: "rm", spellings: ["--rm", "--no-rm"], type: "boolean", takesValue: false }],
+				args: [{ name: "argv", type: "string", required: false, variadic: "passthrough" }],
+				subCommands: [],
+			},
+			"mycli",
+			"1.0.0",
+		);
+		expect(script).toContain(`-n '__mycli_path_at_arg \\'<0\\' \\'\\'' -l 'rm'`);
+		expect(script).toContain(`-n '__mycli_path_at_arg \\'<0\\' \\'\\'' -l 'no-rm'`);
+	});
+});
+
 describeIfFish("renderFish · afterDoubleDash", () => {
 	it("offers it only after `--`, the other arguments only before, and no flags after", async () => {
 		const choice = (
 			name: string,
 			choices: string[],
-			extra: { variadic?: boolean; afterDoubleDash?: true } = {},
+			variadic: CompletionCommand["args"][number]["variadic"] = false,
 		): CompletionCommand["args"][number] => ({
 			name,
 			type: "string",
 			required: false,
-			variadic: false,
+			variadic,
 			choices,
-			...extra,
 		});
 		const watch: CompletionCommand["flags"][number] = {
 			name: "watch",
@@ -455,15 +471,34 @@ describeIfFish("renderFish · afterDoubleDash", () => {
 					flags: [watch],
 					args: [
 						choice("task", ["lint"]),
-						choice("pkgs", ["cli"], { variadic: true }),
-						choice("extra", ["fix"], { variadic: true, afterDoubleDash: true }),
+						choice("pkgs", ["cli"], true),
+						choice("extra", ["fix"], "afterDoubleDash"),
 					],
 					subCommands: [],
 				},
 				{
 					name: "exec",
 					flags: [],
-					args: [choice("pod", ["web"]), choice("cmd", ["ls"], { afterDoubleDash: true })],
+					args: [choice("pod", ["web"]), choice("cmd", ["ls"], "afterDoubleDash")],
+					subCommands: [],
+				},
+				{
+					name: "docker",
+					flags: [{ ...watch, name: "rm", spellings: ["--rm"] }],
+					args: [choice("image", ["alpine"]), choice("command", ["sh"], "passthrough")],
+					subCommands: [],
+				},
+				{
+					name: "box",
+					flags: [
+						{ ...watch, name: "rm", spellings: ["--rm"] },
+						{ name: "name", spellings: ["--name"], type: "string", takesValue: true },
+					],
+					args: [
+						choice("image", ["img"]),
+						choice("command", ["cmd"]),
+						choice("tail", ["tail"], "passthrough"),
+					],
 					subCommands: [],
 				},
 			],
@@ -482,7 +517,21 @@ describeIfFish("renderFish · afterDoubleDash", () => {
 				["mycli run lint -- --w", []],
 				["mycli exec web ", []],
 				["mycli exec web -- ", ["ls"]],
-				["mycli exec web -- ls ", []],
+				["mycli exec web -- ls ", ["ls"]],
+				// A "passthrough" command offers no flags after its first positional.
+				["mycli docker --r", ["--rm"]],
+				["mycli docker alpine ", ["sh"]],
+				["mycli docker alpine --r", []],
+				// From the first positional on, every word fills a slot, as Core binds it.
+				["mycli box img ", ["cmd"]],
+				["mycli box img --rm ", ["tail"]],
+				["mycli box img --name x ", ["tail"]],
+				["mycli box img -- ", ["tail"]],
+				["mycli box -- img -- ", ["tail"]],
+				["mycli box --rm --name x img ", ["cmd"]],
+				// A lone `-` (stdin) is a positional.
+				["mycli box - ", ["cmd"]],
+				["mycli box - --r", []],
 			] as const) {
 				const candidates = await fishComplete(path, line);
 				expect({ line, candidates }).toEqual({ line, candidates: [...expected] });

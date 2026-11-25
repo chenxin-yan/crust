@@ -15,6 +15,15 @@ import { defineExtensionId } from "../identity.ts";
 	defineFlag({ type: "string", variadic: true });
 	// @ts-expect-error an unknown key set to `undefined` is still unknown
 	defineFlag({ type: "string", requried: undefined });
+	// @ts-expect-error a list mode is an argument's, not a flag's
+	new Crust("tool").flags({ cmd: { type: "string", variadic: "passthrough" } });
+}
+
+{
+	// The removed `afterDoubleDash` property: `variadic: "afterDoubleDash"` replaces it
+	new Crust("tool").args({ name: "extra", type: "string", variadic: "afterDoubleDash" });
+	// @ts-expect-error `afterDoubleDash` is not an argument property
+	new Crust("tool").args({ name: "extra", type: "string", afterDoubleDash: true });
 }
 
 {

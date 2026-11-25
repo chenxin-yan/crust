@@ -23,7 +23,6 @@ const MAX_ENCODE_ATTEMPTS = 100;
 /** What a Command Action would receive, without running it. */
 interface Bound extends ValidatedInput {
 	readonly commandPath: readonly string[];
-	readonly rawArgs: readonly string[];
 }
 
 type Attempt =
@@ -40,7 +39,7 @@ async function bind(
 		const { args, flags } = await applySchemas(route.command, parsed);
 		return {
 			ok: true,
-			bound: { commandPath: route.commandPath, args, flags, rawArgs: parsed.rawArgs },
+			bound: { commandPath: route.commandPath, args, flags },
 		};
 	} catch (error) {
 		if (error instanceof CrustError) return { ok: false, error };
@@ -158,7 +157,6 @@ const STRINGS = [
 ];
 const PATHS = ["src/index.ts", "./dist", "../shared", "~/projects", "/tmp/out", "a b/c.txt"];
 const URLS = ["https://example.com/", "http://localhost:3000/api?x=1", "file:///tmp/a.txt"];
-const RAW = ["--literal", "-x", "--", "plain", ""];
 const NUMBERS = [0, 1, 42, 3.5, 0.1, 1e21, -3, -0.5];
 
 function jsonScalar(random: Random): string | number | boolean | null {
@@ -312,15 +310,6 @@ function generateCase(
 	const argv = separated
 		? [...path, ...named.tokens, "--", ...positional.tokens]
 		: [...path, ...positional.tokens, ...named.tokens];
-	// Declared positionals take tokens after `--` first, so `raw` only follows a full, non-variadic set.
-	const last = command.args.at(-1);
-	const rawReachable =
-		last === undefined ||
-		(!last.variadic && Object.keys(positional.args).length === command.args.length);
-	if (rawReachable && random() < 0.3) {
-		const raw = Array.from({ length: int(random, 4) }, () => pick(random, RAW));
-		return { input: { ...input, raw }, argv: [...argv, ...(separated ? [] : ["--"]), ...raw] };
-	}
 	return { input, argv };
 }
 

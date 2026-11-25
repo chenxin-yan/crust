@@ -190,16 +190,6 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 			{ operationId: "b", message: expect.stringContaining("the request body") },
 		],
 	},
-	"reserved-input-name": {
-		input: {
-			spec: spec({
-				"/a": {
-					get: op("a", { parameters: [{ name: "raw", in: "query", schema: { type: "boolean" } }] }),
-				},
-			}),
-		},
-		expected: [{ message: expect.stringContaining('"raw"') }],
-	},
 	"unflaggable-name": {
 		input: {
 			spec: spec({

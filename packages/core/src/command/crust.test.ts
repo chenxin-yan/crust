@@ -827,7 +827,7 @@ describe("Extension named hooks", () => {
 			const received: unknown[] = [];
 			const binder = defineExtension(defineExtensionId("binder")).preRun((ctx) => {
 				for (const payload of payloads) ctx.bindInput(payload);
-				preRunSeen.push({ args: { ...ctx.args }, flags: { ...ctx.flags }, rawArgs: ctx.rawArgs });
+				preRunSeen.push({ args: { ...ctx.args }, flags: { ...ctx.flags } });
 			});
 			const app = new Crust("cli")
 				.flags({
@@ -839,7 +839,7 @@ describe("Extension named hooks", () => {
 				.args({ name: "source", type: "string" })
 				.args({ name: "target", type: "string", default: "out" })
 				.extend(binder)
-				.action(({ args, flags, rawArgs }) => void received.push({ args, flags, rawArgs }));
+				.action(({ args, flags }) => void received.push({ args, flags }));
 			async function execute(argv: string[]) {
 				const stderr: string[] = [];
 				const exitCode = await app.execute({
@@ -863,7 +863,6 @@ describe("Extension named hooks", () => {
 				{
 					args: { source: undefined, target: "out" },
 					flags: { name: "dflt", port: 1, verbose: false, tags: undefined },
-					rawArgs: [],
 				},
 			]);
 		});
@@ -873,13 +872,11 @@ describe("Extension named hooks", () => {
 			const { execute, preRunSeen, received } = bindingApp({
 				args: { source: "a", target: "b" },
 				flags: { name: "json", port: 1, tags: ["x"] },
-				raw: ["--dry"],
 			});
 			expect(await execute([])).toEqual({ exitCode: 0, stderr: "" });
 			const bound = {
 				args: { source: "a", target: "b" },
 				flags: { name: "json", port: 1, verbose: false, tags: ["x"] },
-				rawArgs: ["--dry"],
 			};
 			// ctx.args/ctx.flags reflect the bound values for later hooks.
 			expect(preRunSeen).toEqual([bound]);
@@ -919,14 +916,8 @@ describe("Extension named hooks", () => {
 			expect(await execute(["--", "src", "dst"])).toEqual({ exitCode: 0, stderr: "" });
 			expect(received).toMatchObject([
 				{ args: { source: "src", target: "dest" } },
-				{ args: { source: "src", target: "dst" }, rawArgs: [] },
+				{ args: { source: "src", target: "dst" } },
 			]);
-		});
-
-		it("keeps argv passthrough tokens over structured raw values", async () => {
-			const { execute, received } = bindingApp({ raw: ["json"] });
-			expect(await execute(["a", "b", "--", "argv"])).toEqual({ exitCode: 0, stderr: "" });
-			expect(received).toMatchObject([{ rawArgs: ["argv"] }]);
 		});
 
 		it("re-binds against the original input on each call, so the last call wins", async () => {
@@ -1094,44 +1085,30 @@ describe("Extension named hooks", () => {
 		it("reports argv, env, and default by canonical name and omits names without a value", async () => {
 			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp();
-			const argv = ["a", "-V", "--no-color", "--tags", "", "--", "b", "--x"];
+			const argv = ["a", "-V", "--no-color", "--tags", "", "--", "--b"];
 			expect(await app.execute({ argv, io: { stdout: { write() {} } } })).toBe(0);
 			expect(seen[0]).toEqual({
 				args: { source: "argv", target: "argv" },
 				flags: { name: "default", verbose: "argv", color: "argv", port: "env", tags: "argv" },
-				raw: "argv",
 			});
 			expect(Object.isFrozen(seen[0])).toBe(true);
 			expect(Object.isFrozen(seen[0]?.flags)).toBe(true);
 		});
 
-		it("reports no passthrough when `--` has no tokens left over", async () => {
-			const { app, seen } = recordingApp();
-			await app.execute({ argv: ["--name", "x", "--"] });
-			expect(seen[0]).toEqual({
-				args: { target: "default" },
-				flags: { name: "argv" },
-				raw: undefined,
-			});
-		});
-
 		it("reports typed run() input as run", async () => {
 			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp();
-			await unwrap(
-				app.run([], { args: { source: "a" }, flags: { verbose: true, port: 1 }, raw: ["r"] }),
-			);
+			await unwrap(app.run([], { args: { source: "a" }, flags: { verbose: true, port: 1 } }));
 			expect(seen[0]).toEqual({
 				args: { source: "run", target: "default" },
 				flags: { name: "default", verbose: "run", port: "run" },
-				raw: "run",
 			});
 		});
 
 		it("reads bound keys live, and a later bindInput reverts keys it no longer supplies", async () => {
 			vi.stubEnv("SOURCES_PORT", "9000");
 			const { app, seen } = recordingApp((ctx) => {
-				ctx.bindInput({ args: { source: "x" }, flags: { name: "a", port: 1 }, raw: ["r"] });
+				ctx.bindInput({ args: { source: "x" }, flags: { name: "a", port: 1 } });
 				seen.push(ctx.sources);
 				ctx.bindInput({ flags: { name: "b", verbose: true } });
 			});
@@ -1139,22 +1116,20 @@ describe("Extension named hooks", () => {
 			const original = {
 				args: { target: "default" },
 				flags: { name: "default", verbose: "argv", port: "env" },
-				raw: undefined,
 			};
 			expect(seen).toEqual([
 				original,
 				{
 					args: { source: "bound", target: "default" },
 					flags: { name: "bound", verbose: "argv", port: "bound" },
-					raw: "bound",
 				},
 				// argv still wins for verbose; port and source revert to the original parse.
 				{ ...original, flags: { ...original.flags, name: "bound" } },
 			]);
 		});
 
-		it("reports an empty variadic, multiple-flag, or raw array as omitted under run() and bindInput", async () => {
-			const empty = { args: { files: [] }, flags: { tags: [], labels: [] }, raw: [] };
+		it("reports an empty variadic or multiple-flag array as omitted under run() and bindInput", async () => {
+			const empty = { args: { files: [] }, flags: { tags: [], labels: [] } };
 			const seen: ExtensionContext["sources"][] = [];
 			const app = (bind: boolean) =>
 				new Crust("cli")
@@ -1171,20 +1146,14 @@ describe("Extension named hooks", () => {
 					.action(() => {});
 			await unwrap(app(false).run([], empty));
 			expect(await app(true).execute({ argv: [] })).toBe(0);
-			const omitted = { args: {}, flags: { tags: "default" }, raw: undefined };
+			const omitted = { args: {}, flags: { tags: "default" } };
 			expect(seen).toEqual([omitted, omitted]);
-		});
-
-		it("keeps argv's passthrough tokens over bound raw", async () => {
-			const { app, seen } = recordingApp((ctx) => ctx.bindInput({ raw: ["bound"] }));
-			await app.execute({ argv: ["--", "a", "b", "c"] });
-			expect(seen.at(-1)?.raw).toBe("argv");
 		});
 
 		it("is empty in the routing-failure onError context", async () => {
 			const { app, seen } = recordingApp();
 			await app.execute({ argv: ["--nope"], io: { stderr: { write() {} } } });
-			expect(seen).toEqual([{ args: {}, flags: {}, raw: undefined }]);
+			expect(seen).toEqual([{ args: {}, flags: {} }]);
 		});
 	});
 
@@ -2496,6 +2465,42 @@ describe("Crust .execute()", () => {
 					parentCommand: { meta: { name: "tools" } },
 				},
 			},
+		});
+	});
+
+	it('hands a root "passthrough" action every word a subcommand does not take, as typed', async () => {
+		const plugins = new Set(["deploy"]);
+		const app = new Crust("app")
+			.flags({ verbose: { type: "boolean", short: "v" } })
+			.args(
+				{ name: "plugin", type: "string", required: true },
+				{ name: "argv", type: "string", variadic: "passthrough" },
+			)
+			.command("build", (build) => build.action(({ stdout }) => stdout("built")))
+			.action(({ args, flags, command, stdout, exitCode }) => {
+				if (!plugins.has(args.plugin)) throw unknownCommand(command, args.plugin);
+				stdout(JSON.stringify({ ...args, verbose: flags.verbose }));
+				exitCode(3);
+			});
+		const run = async (argv: string[]) => {
+			const stdout: string[] = [];
+			const stderr: string[] = [];
+			const code = await app.execute({
+				argv,
+				io: { stdout: lineSink(stdout), stderr: lineSink(stderr) },
+			});
+			return { code, stdout, stderr };
+		};
+		expect(await run(["-v", "deploy", "--prod", "-v", "--", "x"])).toEqual({
+			code: 3,
+			stdout: ['{"plugin":"deploy","argv":["--prod","-v","--","x"],"verbose":true}'],
+			stderr: [],
+		});
+		// A real subcommand still wins.
+		expect(await run(["build"])).toEqual({ code: 0, stdout: ["built"], stderr: [] });
+		expect(await run(["lint", "--fix"])).toMatchObject({
+			code: 2,
+			stderr: [expect.stringContaining('Unknown command "lint"')],
 		});
 	});
 

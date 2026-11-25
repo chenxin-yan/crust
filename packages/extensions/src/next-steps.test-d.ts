@@ -21,6 +21,18 @@ function _nextStepsTypesInputFromTheDefinition() {
 			next.add(status, { args: { env: 1 } });
 			// @ts-expect-error `status` has no `--verbose` flag.
 			next.add(status, { args: { env: "prod" }, flags: { verbose: true } });
+
+			const bare = defineCommand("bare", (cmd) => cmd.action(() => {}));
+			next.add(bare);
+			next.add(bare, {});
+			next.add(bare, undefined, "Run it");
+			// @ts-expect-error words after `--` are arguments; there is no `raw` input.
+			next.add(bare, { raw: ["--dry-run"] });
+			const raw = { raw: ["--dry-run"] };
+			// @ts-expect-error no `raw` input, held in a variable.
+			next.add(bare, raw);
+			// @ts-expect-error a primitive is no input.
+			next.add(bare, 42);
 		}),
 	);
 }
