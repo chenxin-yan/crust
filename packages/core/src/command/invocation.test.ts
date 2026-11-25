@@ -1158,6 +1158,28 @@ describe("Invocation pipeline — streams", () => {
 		});
 		expect(exitCode).toBe(130);
 	});
+
+	it("lets a caller abort end the close of an injected iterable whose return never settles", async () => {
+		const controller = new AbortController();
+		// Like a `tee()` branch, whose `return()` waits for its sibling.
+		const source: AsyncIterable<string> = {
+			[Symbol.asyncIterator]: () => ({
+				next: async () => ({ done: false, value: "chunk" }),
+				return: () => new Promise(() => {}),
+			}),
+		};
+		const app = new Crust("app").action(async ({ stdin }) => {
+			for await (const _ of stdin.stream()) break;
+			setTimeout(() => controller.abort(), 10);
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: source, stdout: { write() {} }, stderr: { write() {} } },
+			signal: controller.signal,
+		});
+		// The action had completed before the abort.
+		expect(exitCode).toBe(0);
+	});
 });
 
 describe("Invocation pipeline — inherited signal ignores", () => {

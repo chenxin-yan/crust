@@ -158,7 +158,12 @@ function inputStream(
 			// through the cleanup-failure path if a host needs to see it.
 			const closing = (async () => iterator?.return?.())().catch(() => {});
 			// Behind a pull that cancellation abandoned, `return()` settles only when that pull does.
-			if (idle) await closing;
+			if (!idle || signal.aborted) return;
+			// A source may hold `return()` open (a `tee()` branch waits for its sibling): an abort ends the wait.
+			await new Promise<void>((resolve) => {
+				signal.addEventListener("abort", () => resolve(), { once: true });
+				void closing.then(() => resolve());
+			});
 		},
 	};
 }
