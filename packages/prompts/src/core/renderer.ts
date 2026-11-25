@@ -168,16 +168,16 @@ function physicalLineCount(content: string, columns: number): number {
 		// `stringWidth` decides what an escape sequence is; a line that fits needs no walk.
 		if (stringWidth(line) <= columns) continue;
 		let column = 0;
-		let measured = 0;
+		// Where the current row's text starts: measuring from there keeps a long line linear.
+		let start = 0;
 		for (const { segment, index } of graphemes.segment(line)) {
-			// The growth of the measured prefix, so the bytes of an escape sequence add nothing.
-			const total = stringWidth(line.slice(0, index + segment.length));
-			const width = total - measured;
-			measured = total;
+			// The growth of the row's measured width, so the bytes of an escape sequence add nothing.
+			const width = stringWidth(line.slice(start, index + segment.length)) - column;
 			// A wide character that does not fit in the last column starts the next row.
 			if (column > 0 && column + width > columns) {
 				count++;
 				column = 0;
+				start = index;
 			}
 			column += width;
 		}
