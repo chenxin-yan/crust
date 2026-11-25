@@ -161,8 +161,13 @@ function inputStream(
 			if (!idle || signal.aborted) return;
 			// A source may hold `return()` open (a `tee()` branch waits for its sibling): an abort ends the wait.
 			await new Promise<void>((resolve) => {
-				signal.addEventListener("abort", () => resolve(), { once: true });
-				void closing.then(() => resolve());
+				// Removed either way: a listener left on a caller's long-lived signal keeps this invocation alive.
+				const settle = () => {
+					signal.removeEventListener("abort", settle);
+					resolve();
+				};
+				signal.addEventListener("abort", settle);
+				void closing.then(settle);
 			});
 		},
 	};

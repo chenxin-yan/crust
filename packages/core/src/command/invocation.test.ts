@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { getEventListeners } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1179,6 +1180,21 @@ describe("Invocation pipeline — streams", () => {
 		});
 		// The action had completed before the abort.
 		expect(exitCode).toBe(0);
+	});
+
+	it("leaves no listener on the invocation's signal after execute()", async () => {
+		// One caller signal across many runs would otherwise keep every finished invocation alive.
+		const caller = new AbortController();
+		let signal: AbortSignal | undefined;
+		const app = new Crust("app").action((ctx) => {
+			signal = ctx.signal;
+		});
+		await app.execute({
+			argv: [],
+			io: { stdout: { write() {} }, stderr: { write() {} } },
+			signal: caller.signal,
+		});
+		expect(signal && getEventListeners(signal, "abort")).toEqual([]);
 	});
 });
 
