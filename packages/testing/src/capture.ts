@@ -13,7 +13,7 @@ export interface CaptureOptions {
 	 * `{}` is an empty environment; `{ ...process.env, NAME: "value" }` keeps the shell's and
 	 * changes one. Without `XDG_*` variables (`APPDATA` and `LOCALAPPDATA` on Windows), config,
 	 * data, state and cache directories stay under the home directory, which a `HOME` given here
-	 * moves on Node but not under Bun. Only one run at a time may replace it.
+	 * moves on Node on macOS and Linux but not under Bun. Only one run at a time may replace it.
 	 */
 	env?: Environment | undefined;
 	/**
