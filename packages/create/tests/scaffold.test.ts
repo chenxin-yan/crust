@@ -126,6 +126,23 @@ describe("scaffold", () => {
 		},
 	);
 
+	it.skipIf(process.platform === "win32")(
+		"overwrites a read-only file an earlier call copied",
+		async () => {
+			createTemplateFile("locked.txt", "v1");
+			chmodSync(join(templateDir, "locked.txt"), 0o444);
+			await scaffoldTemplate();
+			chmodSync(join(templateDir, "locked.txt"), 0o644);
+			writeFileSync(join(templateDir, "locked.txt"), "v2");
+			chmodSync(join(templateDir, "locked.txt"), 0o444);
+
+			await scaffoldTemplate({ conflict: "overwrite" });
+
+			expect(readOutputFile("locked.txt")).toBe("v2");
+			expect(mode(join(destDir, "locked.txt"))).toBe(0o444);
+		},
+	);
+
 	describe("files", () => {
 		it("writes files from code without a template", async () => {
 			const result = await scaffold({

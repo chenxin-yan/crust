@@ -1,5 +1,6 @@
 import {
 	accessSync,
+	chmodSync,
 	closeSync,
 	constants,
 	fchmodSync,
@@ -293,6 +294,9 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	for (const { relPath, mode, content } of copies) {
 		const destFilePath = join(realDestDir, relPath);
 		mkdirSync(dirname(destFilePath), { recursive: true });
+		// A file an earlier layer copied read-only is still replaced: opening it for writing needs the write bit.
+		const old = statSync(destFilePath, { throwIfNoEntry: false });
+		if (old && !(old.mode & 0o200)) chmodSync(destFilePath, old.mode | 0o200);
 		if (mode === undefined) {
 			writeFileSync(destFilePath, content);
 			continue;
