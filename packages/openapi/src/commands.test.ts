@@ -329,7 +329,10 @@ describe("generated commands", () => {
 					],
 					...jsonBody({
 						type: "object",
-						properties: { id: { type: "integer" }, mode: { enum: ["auto", 1] } },
+						properties: {
+							id: { type: "integer", enum: [1, 9007199254740992] },
+							mode: { enum: ["auto", 1] },
+						},
 					}),
 				},
 			},

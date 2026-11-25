@@ -373,10 +373,10 @@ function effectiveBody(
 			!Array.isArray(items) ||
 			items.some(
 				(item: unknown) =>
-					!(type === "integer" ? Number.isSafeInteger(item) : typeof item === type) &&
 					// A mixed enum has one flag type, and its other members are still valid JSON values.
-					!values.includes(item) &&
-					!(item === null && itemNullable),
+					!(type === "integer"
+						? Number.isSafeInteger(item)
+						: typeof item === type || values.includes(item)) && !(item === null && itemNullable),
 			)
 		) {
 			problems.push(
