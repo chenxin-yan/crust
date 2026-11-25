@@ -12,7 +12,6 @@ const CONFIRM: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:confirm");
 const yesFlags = {
 	yes: {
 		type: "boolean",
-		noNegate: true,
 		description: "Confirm without asking",
 	},
 } as const;

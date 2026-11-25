@@ -28,7 +28,7 @@ test("returns output and the action result", async () => {
 
 //#region env
 const whoami = new Crust("whoami")
-	.flags({ token: { type: "string", env: { name: "APP_TOKEN" } } })
+	.flags({ token: { type: "string", env: "APP_TOKEN" } })
 	.action(({ flags, stdout }) => {
 		stdout(flags.token ?? "anonymous");
 		return flags.token;

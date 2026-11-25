@@ -52,7 +52,7 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 	["invalid-spelling", () => defineFlag({ type: "string", short: "-" })],
 	["invalid-short", () => defineFlag({ type: "string", short: "ab" })],
 	["invalid-short", () => defineFlag({ type: "string", short: "\u{1F600}f" })],
-	["empty-env", () => defineFlag({ type: "string", env: { name: "" } })],
+	["empty-env", () => defineFlag({ type: "string", env: "" })],
 	["empty-delimiter", () => defineFlag({ type: "string", multiple: true, delimiter: "" })],
 	["flag-collision", () => defineFlag({ type: "string", short: "x", aliases: ["x"] })],
 	[
@@ -255,8 +255,13 @@ describe("rules TypeScript owns", () => {
 				}),
 			() =>
 				new Crust("cli").flags({
-					// @ts-expect-error -- env is an object
-					a: { type: "string", env: "A" },
+					// @ts-expect-error -- env names at least one variable
+					a: { type: "string", env: [] },
+				}),
+			() =>
+				new Crust("cli").flags({
+					// @ts-expect-error -- only a boolean is negatable
+					a: { type: "string", negatable: true },
 				}),
 			() =>
 				new Crust("cli").args(

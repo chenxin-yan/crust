@@ -348,20 +348,6 @@ function importFlag(choices: string[]) {
 	return defineFlag({ type: "string", choices });
 }
 
-function _possibleNoNegate(noNegate: true | undefined) {
-	const app = new Crust("app").flags({ yes: { type: "boolean", noNegate } });
-	// @ts-expect-error -- false is unsafe when negation may be disabled
-	void app.run([], { flags: { yes: false } });
-	const assigned = { flags: { yes: false } };
-	// @ts-expect-error -- assigned input cannot bypass possible noNegate
-	void app.run([], assigned);
-	type Flags = InputFlags<{ yes: { type: "boolean"; noNegate?: true } }>;
-	// @ts-expect-error -- exported input retains possible noNegate
-	const _flags: Flags = { yes: false };
-	void app.run([], { flags: { yes: true } });
-	void app.run([]);
-}
-
 function _conditionalValueContracts(
 	multiple: true | undefined,
 	parse: ((raw: string) => number) | undefined,
@@ -727,11 +713,11 @@ function _conditionalLocalHelperProof(condition: boolean) {
 	// @ts-expect-error Checked descendants retain conditional helper uncertainty.
 	void new Crust("app").add(child).run(["child"]);
 
-	const boolean: { type: "boolean"; noNegate: true } | { type: "boolean" } = condition
-		? { type: "boolean", noNegate: true }
+	const boolean: { type: "boolean"; negatable: true } | { type: "boolean" } = condition
+		? { type: "boolean", negatable: true }
 		: { type: "boolean" };
 	const toggle = defineFlag(boolean);
-	// @ts-expect-error The actual helper definition may prohibit false.
+	// @ts-expect-error A conditional helper does not prove supplied value compatibility.
 	void new Crust("app").flags({ toggle }).run([], { flags: { toggle: false } });
 
 	const parsed: { type: "string"; parse: (raw: string) => number } | { type: "string" } = condition
@@ -788,8 +774,8 @@ function _conditionalExportedDefinitionProof() {
 	const absentDefault: InputFlags<{
 		mode: { type: "string"; required: true; default?: string } | { type: "string" };
 	}> = {};
-	type Boolean = { type: "boolean"; noNegate: true } | { type: "boolean" };
-	// @ts-expect-error Same-kind definition alternatives cannot prove false is accepted.
+	type Boolean = { type: "boolean"; negatable: true } | { type: "boolean" };
+	// @ts-expect-error Same-kind definition alternatives prove no supplied value.
 	const toggle: InputFlags<{ toggle: Boolean }> = { toggle: false };
 	const omitted: InputFlags<{ toggle: Boolean; stable: { type: "number" } }> = { stable: 1 };
 	type Defaulted = { type: "string"; required: true; default: string } | { type: "string" };

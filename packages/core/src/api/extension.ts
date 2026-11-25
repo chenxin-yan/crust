@@ -437,12 +437,10 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 					: undefined)
 		: InferFlags<{ value: F }>["value"];
 
-/** Value flags can fail coercion; a boolean only through an env `false` under `noNegate`. */
+/** Value flags can fail coercion; a boolean only through its `env` variable. */
 type MayHoldInvalidValue<F extends ExtensionFlagDef> = F extends { type: "boolean" }
-	? "noNegate" extends keyof F
-		? "env" extends keyof F
-			? true
-			: false
+	? "env" extends keyof F
+		? true
 		: false
 	: true;
 

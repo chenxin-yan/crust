@@ -178,7 +178,9 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 				retries: { type: "string", parse: Number },
 				color: { type: "boolean", default: true },
 				env: { type: "string", required: true, default: "prod" },
-				version: { type: "boolean", noNegate: true },
+				version: { type: "boolean" },
+				verbose: { type: "count", short: "v" },
+				replicas: { type: "integer", min: 1 },
 			})
 			.action(() => {}),
 	);
@@ -196,7 +198,7 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 	type DeployInput = RunInput<DeployShape>;
 	const valid: DeployInput = {
 		args: { target: "prod", port: "8080" },
-		flags: { mode: "prod", retries: "2", version: true },
+		flags: { mode: "prod", retries: "2", version: false, verbose: 2, replicas: 3 },
 	};
 	// Defaulted flags/args remain optional in pre-parse input, even when
 	// declared `required: true` — the default satisfies requiredness at parse time.
@@ -207,7 +209,7 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 	// A required flag with an `env` binding is optional: its variable may supply it.
 	const login = new Crust("login")
 		.flags({
-			token: { type: "string", env: { name: "TOKEN" }, required: true },
+			token: { type: "string", env: "TOKEN", required: true },
 			scope: { type: "string", required: true },
 		})
 		.action(() => {});
@@ -221,10 +223,10 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 	};
 	// @ts-expect-error -- choices remain a literal union
 	const invalidChoice: DeployInput = { args: { target: "prod" }, flags: { mode: "staging" } };
-	const invalidNegation: DeployInput = {
+	const invalidCount: DeployInput = {
 		args: { target: "prod" },
-		// @ts-expect-error -- noNegate booleans accept only true
-		flags: { mode: "dev", version: false },
+		// @ts-expect-error -- a count is given as a number
+		flags: { mode: "dev", verbose: true },
 	};
 	function typecheckRunInput() {
 		// @ts-expect-error -- the structural JSON overload does not bypass required arguments
@@ -243,7 +245,7 @@ function _typecheckPreservesCommandAliasesAndPreParseInputTypes() {
 		missingScope,
 		unknownArg,
 		invalidChoice,
-		invalidNegation,
+		invalidCount,
 	];
 	void typecheckRunInput;
 }

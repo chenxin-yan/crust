@@ -18,13 +18,13 @@ const config = defineConfig({
 	global: true,
 	project: true,
 }).flags({
-	org: { type: "string", env: { name: "ACME_ORG" }, required: true },
+	org: { type: "string", env: "ACME_ORG", required: true },
 	region: { type: "string", choices: ["us", "eu"], default: "us" },
 	port: { type: "number", short: "p", aliases: ["listen"] },
 	timeout: { type: "string", parse: (raw) => Number(raw), default: "30" },
 	tags: { type: "string", multiple: true, delimiter: "," },
-	yes: { type: "boolean", noNegate: true, description: "Skip confirmations" },
-	telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
+	yes: { type: "boolean", negatable: true, description: "Skip confirmations" },
+	telemetry: { type: "boolean", flag: false, env: "ACME_TELEMETRY" },
 });
 
 // Each setting's value: inferred as the settings would be as flags; required and defaulted

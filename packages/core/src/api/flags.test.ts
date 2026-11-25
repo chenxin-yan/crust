@@ -13,7 +13,7 @@ describe("defineFlag", () => {
 		type _Verbose = Expect<Equal<Flags["verbose"], { readonly type: "boolean" }>>;
 		type _Output = Expect<Equal<Flags["output"], { readonly type: "string"; readonly short: "o" }>>;
 		expect((await app.snapshot()).flags).toEqual({
-			verbose: { type: "boolean", negatable: true },
+			verbose: { type: "boolean", negatable: false },
 			output: { type: "string", short: "o", negatable: false },
 		});
 	});

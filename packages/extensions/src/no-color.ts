@@ -20,7 +20,8 @@ let baseNoColor: string | undefined;
 const colorFlags = {
 	color: {
 		type: "boolean",
-		description: "Enable colored output",
+		negatable: true,
+		description: "Enable colored output (--no-color to disable it)",
 	},
 } as const;
 

@@ -21,7 +21,7 @@ function _rawRequiredVariadic() {
 
 async function _parseFlagValuesKeepsInlineChoices() {
 	const flags = await parseFlagValues(
-		{ level: { type: "string", choices: ["debug", "info"], env: { name: "LEVEL" } } },
+		{ level: { type: "string", choices: ["debug", "info"], env: "LEVEL" } },
 		{},
 	);
 	type _literal = Expect<Equal<typeof flags.level, "debug" | "info" | undefined>>;

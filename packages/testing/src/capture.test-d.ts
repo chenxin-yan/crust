@@ -10,7 +10,7 @@ async function _typecheckWithEnvKeepsTypedRun() {
 	const app = new Crust("acme").command("deploy", (command) =>
 		command
 			.args({ name: "target", type: "string", required: true })
-			.flags({ org: { type: "string", env: { name: "ACME_ORG" } } })
+			.flags({ org: { type: "string", env: "ACME_ORG" } })
 			.action(({ args, flags }) => ({ target: args.target, org: flags.org })),
 	);
 	const direct = () => app.run(["deploy"], { args: { target: "prod" } });

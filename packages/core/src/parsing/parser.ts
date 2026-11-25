@@ -1,5 +1,5 @@
 import { parseJsonValue } from "@crustjs/utils/json";
-import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
+import { tryCoerceBoolean } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
@@ -17,11 +17,10 @@ import type {
 	RunInputPayload,
 	RunInputValue,
 	ValueSource,
-	ValueType,
 } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { applySchemas } from "./schema.ts";
-import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
+import { flagTakesValue, normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
 /** Environment variables consulted by `FlagDef.env`; `parseArgs` defaults to `process.env`. */
 export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
@@ -37,6 +36,7 @@ export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
  */
 type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
+	| { readonly kind: "count"; value: number }
 	| { readonly kind: "string"; value: string | string[]; readonly env?: string }
 	| { readonly kind: "invalid"; readonly error: CrustError };
 
@@ -69,20 +69,56 @@ export interface ArgvParseResult<
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 
+// A finite decimal as written: no hex, `Infinity`, padding, or empty text, which `Number()` all accept.
+const DECIMAL = /^-?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i;
+const INTEGER = /^-?\d+$/;
+
+/** The text a positional or environment boolean must be, for its error message. */
+const BOOLEAN_WORDS = "true, false, 1, 0, yes, no, on, off";
+
 /**
- * Coerce a string value to the expected type based on the type literal.
+ * Check a number for a `number` or `integer` definition or snapshot: finite (a safe integer
+ * for `integer`) and within `min` and `max`. Typed `run()` values arrive as numbers; argv
+ * and environment text is read by {@link coerceValue} first.
  */
-function coerceValue(value: string, type: ValueType, label: string) {
-	if (type === "number") {
-		const num = tryCoerceNumber(value);
-		if (num === undefined) {
-			throw new CrustError("PARSE", `Expected a number for ${label}.`);
-		}
-		return num;
+export function checkNumber(
+	def: { readonly type?: string; readonly min?: number; readonly max?: number },
+	value: number,
+	label: string,
+): number {
+	if (def.type !== "number" && def.type !== "integer") return value;
+	const kind = def.type === "integer" ? "an integer" : "a number";
+	const valid = def.type === "integer" ? Number.isSafeInteger(value) : Number.isFinite(value);
+	if (!valid) throw new CrustError("PARSE", `Expected ${kind} for ${label}.`);
+	const { min, max } = def;
+	if ((min !== undefined && value < min) || (max !== undefined && value > max)) {
+		const range =
+			min === undefined
+				? `of at most ${max}`
+				: max === undefined
+					? `of at least ${min}`
+					: `from ${min} to ${max}`;
+		throw new CrustError("PARSE", `Expected ${kind} ${range} for ${label}.`);
+	}
+	return value;
+}
+
+/**
+ * Coerce a string value to the definition's type.
+ */
+function coerceValue(value: string, def: ArgDef | FlagDef, label: string) {
+	const { type } = def;
+	if (type === "number" || type === "integer") {
+		const valid = (type === "integer" ? INTEGER : DECIMAL).test(value);
+		return checkNumber(def, valid ? Number(value) : Number.NaN, label);
 	}
 	if (type === "boolean") {
 		// Positional booleans arrive as text; option booleans are already native values.
-		return coerceBooleanString(value);
+		const bool = tryCoerceBoolean(value);
+		if (bool === undefined) {
+			throw new CrustError("PARSE", `Expected a boolean (${BOOLEAN_WORDS}) for ${label}.`);
+		}
+		return bool;
 	}
 	if (type === "url") return coerceUrl(value, label);
 	if (type === "path") return coercePath(value, label);
@@ -177,7 +213,7 @@ function coerceToken(
 	if (def.schema && def.type !== "json") return raw;
 	if (def.choices) validateChoice(raw, def.choices, label);
 	if (def.parse) return invokeParse(def.parse, raw, label, index);
-	return coerceValue(raw, def.type, label);
+	return coerceValue(raw, def, label);
 }
 
 /**
@@ -202,7 +238,7 @@ function coerceOrDefer<T>(
 /** Coerce a single flag's parsed value; multi-value flags coerce per element. */
 function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): ParsedFlagValue {
 	if (parsed.kind === "invalid") throw parsed.error;
-	if (parsed.kind === "boolean") return parsed.value;
+	if (parsed.kind === "boolean" || parsed.kind === "count") return parsed.value;
 	const label = parsed.env === undefined ? `--${name}` : `--${name} (from $${parsed.env})`;
 	return Array.isArray(parsed.value)
 		? parsed.value.map((value, i) => coerceToken(def, value, label, i))
@@ -218,26 +254,41 @@ function splitOccurrences(values: readonly string[], delimiter: string | undefin
 /**
  * Convert an environment value into the shape argv tokens produce, so the
  * shared coercion path (`choices`, `parse`, type conversion, schemas) runs
- * identically. Booleans use the positional spelling rule (`true`/`1`);
- * a `noNegate` flag rejects a false value like it rejects `--no-<name>`.
+ * identically. A repeatable flag's `delimiter` splits the text; booleans read
+ * the same words as positional booleans.
  */
-function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | undefined {
-	const occurrences = def.multiple ? splitOccurrences([raw], def.env?.delimiter) : [raw];
+function envFlagValue(
+	name: string,
+	def: FlagDef,
+	variable: string,
+	raw: string,
+): ArgvFlagValue | undefined {
+	const occurrences = def.multiple ? splitOccurrences([raw], def.delimiter) : [raw];
 	if (def.multiple && occurrences.length === 0) return undefined;
 	if (def.type !== "boolean") {
-		return { kind: "string", value: def.multiple ? occurrences : raw, env: def.env?.name };
+		return { kind: "string", value: def.multiple ? occurrences : raw, env: variable };
 	}
-	const values = occurrences.map(coerceBooleanString);
-	if ("noNegate" in def && def.noNegate && values.includes(false)) {
-		return {
-			kind: "invalid",
-			error: new CrustError(
-				"PARSE",
-				`Flag "--${name}" does not support negation (from $${def.env?.name})`,
-			),
-		};
+	const label = `--${name} (from $${variable})`;
+	try {
+		const values = occurrences.map((text) => coerceValue(text, def, label) as boolean);
+		return { kind: "boolean", value: def.multiple ? values : values[0]! };
+	} catch (error) {
+		// SAFETY: coerceValue throws only CrustError for a boolean definition.
+		return { kind: "invalid", error: error as CrustError };
 	}
-	return { kind: "boolean", value: def.multiple ? values : coerceBooleanString(raw) };
+}
+
+/**
+ * The first of a flag's `env` variables that is set, and its text. An empty
+ * variable counts as unset for a boolean, which has no empty value.
+ */
+function envVariable(def: FlagDef, env: FlagEnvironment): [string, string] | undefined {
+	for (const variable of [def.env ?? []].flat()) {
+		// hasOwn: a variable named `constructor` must not read Object.prototype.
+		const raw = Object.hasOwn(env, variable) ? env[variable] : undefined;
+		if (raw !== undefined && !(raw === "" && def.type === "boolean")) return [variable, raw];
+	}
+	return undefined;
 }
 
 /**
@@ -256,8 +307,7 @@ function applyEnvAndDelimiter(
 ) {
 	const values: Record<string, ArgvFlagValue | undefined> = {};
 	for (const [name, def] of Object.entries(flagsDef)) {
-		// hasOwn on both records: a flag or variable named `constructor` must not
-		// read Object.prototype as a supplied value.
+		// hasOwn: a flag named `constructor` must not read Object.prototype as a supplied value.
 		const argvValue = Object.hasOwn(argvValues, name) ? argvValues[name] : undefined;
 		if (argvValue !== undefined) {
 			if (
@@ -274,9 +324,8 @@ function applyEnvAndDelimiter(
 			}
 			continue;
 		}
-		if (def.env === undefined || !Object.hasOwn(env, def.env.name)) continue;
-		const raw = env[def.env.name];
-		if (raw !== undefined) values[name] = envFlagValue(name, def, raw);
+		const found = envVariable(def, env);
+		if (found) values[name] = envFlagValue(name, def, ...found);
 	}
 	return values;
 }
@@ -306,7 +355,7 @@ function resolveFlags<F extends FlagsDef, V>(
 			continue;
 		}
 
-		resolved[name] = resolveDefault(def, `--${name}`);
+		resolved[name] = def.type === "count" ? 0 : resolveDefault(def, `--${name}`);
 	}
 
 	// SAFETY: the loop writes exactly every key from flagsDef; mapped generic keys cannot be correlated at runtime.
@@ -421,8 +470,9 @@ function unknownFlag(token: string, flag: string): CrustError {
 	return new CrustError("PARSE", `Unknown flag "${token}"`, { flag, reason: "unknown-flag" });
 }
 
-function unexpectedValue(flag: string): CrustError {
-	return new CrustError("PARSE", `Flag "--${flag}" does not take a value`, {
+function unexpectedValue({ canonicalName: flag, negatable }: FlagSpelling): CrustError {
+	const hint = negatable ? `write --${flag} or --no-${flag}` : `write --${flag}, or leave it out`;
+	return new CrustError("PARSE", `Flag "--${flag}" does not take a value; ${hint}`, {
 		flag,
 		reason: "unexpected-value",
 	});
@@ -452,7 +502,7 @@ export function matchFlagToken(
 			const spelling = spellings.get(short);
 			// A stray `-` would print as `--`, which reads as the separator; name the whole token instead.
 			if (!spelling) return unknownFlag(short === "-" ? token : `-${short}`, short);
-			if (spelling.def.type === "boolean") {
+			if (!flagTakesValue(spelling.def)) {
 				occurrences.push({ spelling, value: true });
 				continue;
 			}
@@ -470,12 +520,12 @@ export function matchFlagToken(
 	const value = eq === -1 ? undefined : token.slice(eq + 1);
 	const spelling = spellings.get(name);
 	if (spelling && spelling.kind !== "short") {
-		if (spelling.def.type !== "boolean") {
+		if (flagTakesValue(spelling.def)) {
 			return value === undefined
 				? { occurrences: [], pending: spelling }
 				: { occurrences: [{ spelling, value }] };
 		}
-		if (value !== undefined) return unexpectedValue(spelling.canonicalName);
+		if (value !== undefined) return unexpectedValue(spelling);
 		return { occurrences: [{ spelling, value: true }] };
 	}
 
@@ -487,7 +537,7 @@ export function matchFlagToken(
 				`Flag "--${base.canonicalName}" does not support negation ("--${name}")`,
 			);
 		}
-		if (value !== undefined) return unexpectedValue(base.canonicalName);
+		if (value !== undefined) return unexpectedValue(base);
 		return { occurrences: [{ spelling: base, value: false }] };
 	}
 
@@ -501,7 +551,12 @@ function addFlagValue(
 	value: string | boolean,
 ): void {
 	const existing = values[canonicalName];
-	if (typeof value === "boolean") {
+	if (def.type === "count") {
+		values[canonicalName] = {
+			kind: "count",
+			value: (existing?.kind === "count" ? existing.value : 0) + 1,
+		};
+	} else if (typeof value === "boolean") {
 		if (def.multiple && existing?.kind === "boolean" && Array.isArray(existing.value))
 			existing.value.push(value);
 		else values[canonicalName] = { kind: "boolean", value: def.multiple ? [value] : value };
@@ -572,10 +627,12 @@ function isOccurrenceArray(value: RunInputValue | undefined): value is readonly 
 }
 
 /** What a typed value of each type must be, worded like argv's `Expected a number for --port.` */
-const STRUCTURED_EXPECTATIONS: Readonly<Record<ValueType, string>> = {
+const STRUCTURED_EXPECTATIONS: Readonly<Record<FlagDef["type"], string>> = {
 	string: "a string",
 	path: "a string",
 	number: "a number",
+	integer: "an integer",
+	count: "a count",
 	boolean: "a boolean",
 	url: "a URL",
 	json: "a JSON value",
@@ -602,14 +659,15 @@ function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, la
 				pending.push(...item);
 			}
 		}
+	} else if (type === "count") {
+		valid = Number.isSafeInteger(value) && Number(value) >= 0;
 	} else {
-		valid = typeof value === (type === "path" ? "string" : type);
+		const primitive = type === "path" ? "string" : type === "integer" ? "number" : type;
+		valid = typeof value === primitive;
 	}
 	if (!valid)
 		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS[type]} for ${label}.`);
-	if (value === false && "noNegate" in def && def.noNegate) {
-		throw new CrustError("PARSE", `Flag "${label}" does not support negation`);
-	}
+	if (typeof value === "number") checkNumber(def, value, label);
 }
 
 /** Validate supplied structured values before applying transforms. */
@@ -709,7 +767,8 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
  * @returns Parsed args, flags, excessArgs (positional words no declared argument took), each value's source, and any deferred valueErrors
- * @throws {CrustError} On malformed argv: unknown flags, a missing option value, or a negated `noNegate` flag
+ * @throws {CrustError} On malformed argv: unknown flags, a missing option value, a value given to a
+ *   boolean or count flag, or `--no-<name>` for a flag that is not negatable
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
@@ -772,11 +831,11 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 
 /**
  * Resolve flags from their `env` bindings alone, as {@link parseArgs} does for an
- * empty argv: `env.delimiter` splitting, `choices`, `parse`, built-in coercion,
+ * empty argv: `delimiter` splitting, `choices`, `parse`, built-in coercion,
  * defaults, requiredness, then Standard Schemas. Flags without `env` resolve
  * to their defaults.
  *
- * @param flags - Flag definitions keyed by result name; each `env.name` selects its variable
+ * @param flags - Flag definitions keyed by result name; each `env` names its variables
  * @param env - Raw variable text; only own properties are read
  * @throws {CrustError} `DEFINITION`, outside built artifacts, for a definition `defineFlag`
  *   rejects (e.g. a `__proto__` key); `PARSE` or `VALIDATION` on the first

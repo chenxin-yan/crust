@@ -609,7 +609,7 @@ describe("renderSkill", () => {
 					alpha: makeCommand({ meta: { name: "alpha" }, run() {} }),
 					beta: makeCommand({ meta: { name: "beta" }, run() {} }),
 				},
-				flags: { zulu: { type: "boolean", noNegate: true }, able: { type: "string" } },
+				flags: { zulu: { type: "boolean" }, able: { type: "string" } },
 				run() {},
 			});
 
@@ -636,7 +636,7 @@ describe("renderSkill", () => {
 						type: "string",
 						description: "Output format",
 						choices: ["json", "text"],
-						env: { name: "SERVE_FORMAT" },
+						env: "SERVE_FORMAT",
 					},
 				},
 				run() {},
@@ -668,6 +668,8 @@ describe("renderSkill", () => {
 					watch: { type: "boolean", default: true },
 					entry: { type: "string", multiple: true, default: ["src/index.ts", "src/cli.ts"] },
 					root: { type: "path" },
+					workers: { type: "integer" },
+					verbose: { type: "count" },
 				},
 				run() {},
 			});
@@ -681,6 +683,8 @@ describe("renderSkill", () => {
 			expect(serve).toContain('| `--host` | string | No | `[default: "localhost"]` |');
 			expect(serve).toContain("| `--port` | number | No | `[default: 8080]` |");
 			expect(serve).toContain("| `--root` | string | No | - |");
+			expect(serve).toContain("| `--workers` | integer | No | - |");
+			expect(serve).toContain("| `--verbose` | count | No | Can be specified multiple times |");
 			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | `[default: true]` |");
 		});
 	});

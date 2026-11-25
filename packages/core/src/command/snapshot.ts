@@ -7,6 +7,7 @@ import type {
 	CommandSection,
 	DeclaredDefault,
 	FlagDef,
+	FlagEnv,
 	ValueType,
 	VariadicMode,
 } from "../types.ts";
@@ -49,6 +50,10 @@ export interface ArgSnapshot {
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
+	/** The smallest value a `number` or `integer` argument accepts. */
+	readonly min?: number;
+	/** The largest value a `number` or `integer` argument accepts. */
+	readonly max?: number;
 	/**
 	 * Draft 2020-12 JSON Schema of the values a schema-backed arg accepts
 	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
@@ -69,8 +74,8 @@ export interface ArgSnapshot {
  * ```
  */
 export interface FlagSnapshot {
-	/** Value type, e.g. `"boolean"`, `"string"`, `"number"`. */
-	readonly type: ValueType;
+	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`. */
+	readonly type: FlagDef["type"];
 	/** Human-readable description for help text. */
 	readonly description?: string;
 	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
@@ -81,17 +86,19 @@ export interface FlagSnapshot {
 	readonly required?: boolean;
 	/** `true` when the flag can repeat and collects values into an array. */
 	readonly multiple?: boolean;
-	/** `true` when the flag accepts generated `--no-<name>` spellings. */
+	/** `true` when the flag accepts generated `--no-<name>` spellings: a boolean with `default: true` or `negatable: true`. */
 	readonly negatable: boolean;
-	/** `true` when a boolean flag opted out of the `--no-<name>` spelling. */
-	readonly noNegate?: boolean;
 	/** Static enum of accepted values, e.g. `["debug", "info", "error"]`. */
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
-	/** Declared environment binding; never contains the variable's value. */
-	readonly env?: Readonly<NonNullable<FlagDef["env"]>>;
-	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
+	/** Declared environment variable names; never their values. */
+	readonly env?: FlagEnv;
+	/** The smallest value a `number` or `integer` flag accepts. */
+	readonly min?: number;
+	/** The largest value a `number` or `integer` flag accepts. */
+	readonly max?: number;
+	/** Delimiter that splits a repeatable flag's string argv values and environment text into occurrences. */
 	readonly delimiter?: string;
 	/**
 	 * Draft 2020-12 JSON Schema of the values a schema-backed flag accepts
@@ -207,6 +214,8 @@ function snapshotArg(def: ArgDef): ArgSnapshot {
 		variadic: def.variadic,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
+		min: def.min,
+		max: def.max,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 	});
 }
@@ -220,10 +229,11 @@ function snapshotFlag(def: FlagDef, extension: ExtensionId | undefined): FlagSna
 		required: effectiveRequired(def),
 		multiple: def.multiple,
 		negatable: isFlagNegatable(def),
-		noNegate: "noNegate" in def ? def.noNegate : undefined,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
-		env: def.env ? freezeCompact({ name: def.env.name, delimiter: def.env.delimiter }) : undefined,
+		env: def.env,
+		min: def.min,
+		max: def.max,
 		delimiter: def.delimiter,
 		inputSchema: def.schema && standardJsonSchema(def.schema, "input"),
 		extension,

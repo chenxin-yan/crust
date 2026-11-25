@@ -371,14 +371,13 @@ const pathArg = {
 } as const;
 
 const browseFlags = {
-	list: { type: "boolean", noNegate: true, description: "List the API's operations" },
+	list: { type: "boolean", description: "List the API's operations" },
 	spec: { type: "string", description: "Print the OpenAPI definition of an operationId or path" },
 } as const;
 
 const paginateFlag = {
 	paginate: {
 		type: "boolean",
-		noNegate: true,
 		description: "Fetch every page, printing each response body as one JSON line",
 	},
 } as const;

@@ -53,7 +53,7 @@ describe("captureExecute", () => {
 		vi.stubEnv("CRUST_TEST_OTHER", "kept");
 		try {
 			const app = new Crust("test-cli")
-				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, default: "none" } })
+				.flags({ token: { type: "string", env: "CRUST_TEST_TOKEN", default: "none" } })
 				.action(({ flags, stdout }) =>
 					stdout(
 						`${flags.token} ${process.env.CRUST_TEST_OTHER} ${Object.keys(process.env).length}`,

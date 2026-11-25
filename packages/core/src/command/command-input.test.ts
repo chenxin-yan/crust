@@ -317,8 +317,8 @@ describe("commandInputSchema", () => {
 			defineCommand("login", (c) =>
 				c
 					.flags({
-						token: { type: "string", env: { name: "TOKEN" }, required: true, description: "Token" },
-						user: { type: "string", env: { name: "USER_NAME" } },
+						token: { type: "string", env: "TOKEN", required: true, description: "Token" },
+						user: { type: "string", env: ["USER_NAME", "USER"] },
 						scope: { type: "string", required: true },
 					})
 					.action(noop),
@@ -331,9 +331,44 @@ describe("commandInputSchema", () => {
 		});
 		expect(schema.properties.user).toEqual({
 			type: "string",
-			description: "Falls back to $USER_NAME",
+			description: "Falls back to $USER_NAME, $USER",
 		});
 		expect(schema.required).toEqual(["scope"]);
+	});
+
+	it("maps integer, count, min, and max to JSON Schema", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("scale", (c) =>
+				c
+					.args({ name: "replicas", type: "integer", min: 1 })
+					.flags({
+						ratio: { type: "number", min: 0, max: 1 },
+						verbose: { type: "count", short: "v" },
+					})
+					.action(noop),
+			),
+		);
+		const { properties } = commandInputSchema((await app.snapshot()).subCommands.scale!, ["scale"]);
+		expect(properties).toEqual({
+			replicas: { type: "integer", minimum: 1 },
+			ratio: { type: "number", minimum: 0, maximum: 1 },
+			verbose: { type: "integer", minimum: 0 },
+		});
+	});
+
+	it("publishes only finite bounds, which are the ones that reject a value", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("go", (c) =>
+				c
+					.flags({
+						a: { type: "number", max: Number.POSITIVE_INFINITY },
+						b: { type: "integer", min: Number.NaN, max: 3 },
+					})
+					.action(noop),
+			),
+		);
+		const { properties } = commandInputSchema((await app.snapshot()).subCommands.go!, ["go"]);
+		expect(properties).toEqual({ a: { type: "number" }, b: { type: "integer", maximum: 3 } });
 	});
 
 	it("rejects an arg and flag sharing a name, naming the path", async () => {

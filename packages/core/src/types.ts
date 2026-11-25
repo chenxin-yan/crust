@@ -139,25 +139,46 @@ export interface ExecuteOptions {
 /**
  * Supported type literals for args and flags.
  *
- * Extends `BaseValueType` (`"string" | "number" | "boolean"`) with three
+ * Extends `BaseValueType` (`"string" | "number" | "boolean"`) with four
  * formatted built-ins:
  *
+ * - `"integer"` — digits with an optional leading minus, into a `number`
  * - `"url"`  — the raw value is parsed via `new URL()` into a {@link URL}
  * - `"path"` — the raw value is expanded (`~`) and resolved against
  *              `process.cwd()` into an absolute `string`
  * - `"json"` — the raw value is parsed via `JSON.parse()` into `unknown`
+ *
+ * A `"number"` is a finite decimal (`-1.5`, `2e3`): no hex, no `Infinity`, no
+ * surrounding spaces. A `"boolean"` given as text (a positional argument or an
+ * environment variable) is `true`, `1`, `yes` or `on`, or `false`, `0`, `no` or
+ * `off`, in any letter case. Flags also have `"count"`; see {@link FlagDef}.
  */
-export type ValueType = BaseValueType | "url" | "path" | "json";
+export type ValueType = BaseValueType | "integer" | "url" | "path" | "json";
 
 /** Resolve a {@link ValueType} literal to its runtime TypeScript type. */
 type Resolve<T extends ValueType> = {
 	string: string;
 	number: number;
+	integer: number;
 	boolean: boolean;
 	url: URL;
 	path: string;
 	json: unknown;
 }[T];
+
+/** Inclusive bounds of a `number` or `integer` value, checked wherever a value is supplied; not on `default`. */
+interface NumberRange {
+	/** The smallest value accepted. */
+	min?: number;
+	/** The largest value accepted. */
+	max?: number;
+}
+
+/** `min` and `max` are only for `number` and `integer`. */
+interface NoRange {
+	min?: never;
+	max?: never;
+}
 
 /**
  * Resolve the inferred runtime type for a flag/arg definition.
@@ -237,7 +258,7 @@ interface ArgDefBase {
 }
 
 /** A positional argument whose value is a string */
-interface StringArgDef<ParseOutput = unknown> extends ArgDefBase {
+interface StringArgDef<ParseOutput = unknown> extends ArgDefBase, NoRange {
 	type: "string";
 	/** Default string value when the argument is not provided */
 	default?: string;
@@ -268,7 +289,7 @@ interface StringArgDef<ParseOutput = unknown> extends ArgDefBase {
 }
 
 /** A positional argument whose value is a number */
-interface NumberArgDef extends ArgDefBase {
+interface NumberArgDef extends ArgDefBase, NumberRange {
 	type: "number";
 	choices?: never;
 	/** Default number value when the argument is not provided */
@@ -277,8 +298,18 @@ interface NumberArgDef extends ArgDefBase {
 	parse?: never;
 }
 
+/** A positional argument whose value is an integer */
+interface IntegerArgDef extends ArgDefBase, NumberRange {
+	type: "integer";
+	choices?: never;
+	/** Default integer value when the argument is not provided */
+	default?: number;
+	/** Not supported on integer args — use `type: "string"` with `parse`. */
+	parse?: never;
+}
+
 /** A positional argument whose value is a boolean */
-interface BooleanArgDef extends ArgDefBase {
+interface BooleanArgDef extends ArgDefBase, NoRange {
 	type: "boolean";
 	choices?: never;
 	/** Default boolean value when the argument is not provided */
@@ -288,7 +319,7 @@ interface BooleanArgDef extends ArgDefBase {
 }
 
 /** A positional argument whose value is a {@link URL} */
-interface UrlArgDef extends ArgDefBase {
+interface UrlArgDef extends ArgDefBase, NoRange {
 	type: "url";
 	choices?: never;
 	/** Default URL value when the argument is not provided */
@@ -298,7 +329,7 @@ interface UrlArgDef extends ArgDefBase {
 }
 
 /** A positional argument whose value is an absolute filesystem path */
-interface PathArgDef extends ArgDefBase {
+interface PathArgDef extends ArgDefBase, NoRange {
 	type: "path";
 	choices?: never;
 	/** Default path string when the argument is not provided */
@@ -308,7 +339,7 @@ interface PathArgDef extends ArgDefBase {
 }
 
 /** A positional argument whose value is JSON parsed to `unknown` */
-interface JsonArgDef extends ArgDefBase {
+interface JsonArgDef extends ArgDefBase, NoRange {
 	type: "json";
 	choices?: never;
 	/** Default parsed JSON value when the argument is not provided */
@@ -327,7 +358,7 @@ interface JsonArgDef extends ArgDefBase {
  * output type reaches the Command Action. Core value options (`type`,
  * `default`, `required`, `choices`, `parse`) cannot be mixed in.
  */
-interface SchemaArgDef {
+interface SchemaArgDef extends NoRange {
 	/** The argument name (used as the key in the parsed result and in help text) */
 	name: string;
 	/** Human-readable description for help text */
@@ -361,6 +392,7 @@ interface SchemaArgDef {
 export type ArgDef =
 	| StringArgDef
 	| NumberArgDef
+	| IntegerArgDef
 	| BooleanArgDef
 	| UrlArgDef
 	| PathArgDef
@@ -388,18 +420,17 @@ interface FlagDefBase {
 	schema?: never;
 }
 
-/** Environment fallback for a flag that argv or structured `run()` input omits. */
-interface FlagEnvBinding {
-	/** Variable consulted only when the flag is omitted; help shows its name, never its value. */
-	name: string;
-	/** Split environment text into occurrences; independent of the argv delimiter, repeatable flags only. */
-	delimiter?: string;
-}
+/**
+ * Environment fallback for a flag that argv or structured `run()` input omits: a variable
+ * name, or a list of names where the first one that is set wins. Help shows the names, never
+ * the values.
+ */
+export type FlagEnv = string | readonly [string, ...string[]];
 
 /** Occurrence fields of a single-value flag — `multiple` and `delimiter` must be omitted. */
 interface SingleOccurrenceFields {
 	/** Environment fallback; argv wins over env, which wins over the default. */
-	env?: FlagEnvBinding & { delimiter?: never };
+	env?: FlagEnv;
 	/** Must be omitted for single-value flags — set to `true` for multi-value */
 	multiple?: never;
 	/** Only repeatable flags split values — see {@link RepeatableOccurrenceFields} */
@@ -408,15 +439,15 @@ interface SingleOccurrenceFields {
 
 /** Occurrence fields of a repeatable flag — `multiple` is required as `true`. */
 interface RepeatableOccurrenceFields {
-	/** Environment fallback; text is one occurrence unless `env.delimiter` is set. */
-	env?: FlagEnvBinding;
+	/** Environment fallback; its text is one occurrence unless `delimiter` is set. */
+	env?: FlagEnv;
 	/** Collect repeated values into an array */
 	multiple: true;
 	/**
-	 * Split each string argv value into separate occurrences
-	 * (`--tags a,b` with `","` is two occurrences). Empty segments are dropped.
-	 * Boolean argv switches stay booleans. Environment text uses `env.delimiter`.
-	 * Opt-in with no default; structured `run()` arrays are never split.
+	 * Split each string argv value, and the environment variable's text, into separate
+	 * occurrences (`--tags a,b` with `","` is two occurrences). Empty segments are dropped.
+	 * Boolean argv switches stay booleans. Opt-in with no default; structured `run()`
+	 * arrays are never split.
 	 */
 	delimiter?: string;
 }
@@ -447,18 +478,22 @@ type StringFlagFields<Default, ParseOutput> = {
 	 * inferred runtime value type.
 	 */
 	parse?: (raw: string) => ParseOutput;
-	noNegate?: never;
-};
+	negatable?: never;
+} & NoRange;
 
 type TypedFlagFields<T extends Exclude<ValueType, "string">, Default> = {
 	/** Default value, or value array for a multi-value flag. */
 	default?: Default;
 	choices?: never;
-	/** Only boolean flags support generated-negation opt-out. */
-	noNegate?: T extends "boolean" ? true : never;
+	/**
+	 * Boolean flags only: also accept `--no-<name>` (and `--no-<alias>`) for `false`, such as
+	 * to override an environment variable. A flag with `default: true` accepts it without
+	 * this, and only such a flag lists it in help.
+	 */
+	negatable?: T extends "boolean" ? true : never;
 	/** Use `type: "string"` with `parse` for custom parsing. */
 	parse?: never;
-};
+} & (T extends "number" | "integer" ? NumberRange : NoRange);
 
 type CoreFlagFields<T extends ValueType, Default, ParseOutput> = T extends "string"
 	? StringFlagFields<Default, ParseOutput>
@@ -477,7 +512,7 @@ type TypedMultiFlagDef<T extends ValueType, ParseOutput = unknown> = MultiFlagBa
 } & CoreFlagFields<T, readonly Resolve<T>[], ParseOutput>;
 
 /** Shared fields for schema-backed flags (exclusive mode) */
-interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
+interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required">, NoRange {
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	required?: never;
@@ -495,7 +530,7 @@ interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
  */
 type SchemaStringFlagDef = SchemaFlagBase & {
 	type: "string";
-	noNegate?: never;
+	negatable?: never;
 } & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
 /**
@@ -504,8 +539,8 @@ type SchemaStringFlagDef = SchemaFlagBase & {
  */
 type SchemaBooleanFlagDef = SchemaFlagBase & {
 	type: "boolean";
-	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
-	noNegate?: true;
+	/** Also accept `--no-<name>` (and `--no-<alias>`) for `false`; help does not list it. */
+	negatable?: true;
 } & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
 /**
@@ -516,14 +551,31 @@ type SchemaBooleanFlagDef = SchemaFlagBase & {
  */
 type SchemaJsonFlagDef = SchemaFlagBase & {
 	type: "json";
-	noNegate?: never;
+	negatable?: never;
 } & SingleOccurrenceFields;
+
+/**
+ * A flag that counts its occurrences: `-vvv` gives `3`, and an omitted flag `0`. It takes
+ * no value and has no negation.
+ */
+interface CountFlagDef extends Omit<FlagDefBase, "required">, NoRange {
+	type: "count";
+	required?: never;
+	default?: never;
+	env?: never;
+	multiple?: never;
+	delimiter?: never;
+	choices?: never;
+	parse?: never;
+	negatable?: never;
+}
 
 /**
  * Defines a single named flag for a CLI command.
  *
  * Discriminated by `type` and `multiple` for type-safe `default` values.
  * Boolean toggle fields (`required`, `multiple`) only accept `true`.
+ * Besides the {@link ValueType}s, `type: "count"` counts occurrences (`-vvv` is `3`).
  *
  * @example
  * ```ts
@@ -536,6 +588,7 @@ type SchemaJsonFlagDef = SchemaFlagBase & {
  */
 export type FlagDef =
 	| { [T in ValueType]: TypedFlagDef<T> | TypedMultiFlagDef<T> }[ValueType]
+	| CountFlagDef
 	| SchemaStringFlagDef
 	| SchemaBooleanFlagDef
 	| SchemaJsonFlagDef;
@@ -668,22 +721,24 @@ type InferFlagValue<F extends FlagDef> = F extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
-	: F extends { multiple: true }
-		? F extends { required: true }
-			? ResolveBaseType<F>[]
-			: // See InferArgValue: narrow on default presence. With `parse`,
-				// the raw default is `string[]` while ResolveBaseType<F> is the
-				// parsed element type.
-				F extends { default: readonly unknown[] }
+	: F extends { type: "count" }
+		? number
+		: F extends { multiple: true }
+			? F extends { required: true }
 				? ResolveBaseType<F>[]
-				: ResolveBaseType<F>[] | undefined
-		: F extends { required: true }
-			? ResolveBaseType<F>
-			: F extends { default: infer Default }
-				? undefined extends Default
-					? ResolveBaseType<F> | undefined
-					: ResolveBaseType<F>
-				: ResolveBaseType<F> | undefined;
+				: // See InferArgValue: narrow on default presence. With `parse`,
+					// the raw default is `string[]` while ResolveBaseType<F> is the
+					// parsed element type.
+					F extends { default: readonly unknown[] }
+					? ResolveBaseType<F>[]
+					: ResolveBaseType<F>[] | undefined
+			: F extends { required: true }
+				? ResolveBaseType<F>
+				: F extends { default: infer Default }
+					? undefined extends Default
+						? ResolveBaseType<F> | undefined
+						: ResolveBaseType<F>
+					: ResolveBaseType<F> | undefined;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.
@@ -719,34 +774,32 @@ export interface RunInputPayload {
 type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
 	? never
 	: D extends { type: "boolean" }
-		? "noNegate" extends keyof D
-			? true extends D["noNegate"]
-				? true
-				: boolean
-			: boolean
-		: D extends { schema: infer S extends StandardSchema }
-			? D extends { type: "json" }
-				? InferInput<S>
-				: string
-			: D extends { type: "json" }
-				? JsonValue
-				: "choices" extends keyof D
-					? Exclude<D["choices"], undefined> extends infer Choices extends readonly string[]
-						? [Choices] extends [never]
-							? D extends { type: infer T extends ValueType }
-								? Resolve<T>
-								: never
-							: IsStaticTuple<Choices> extends true
-								? IsClosedName<Choices[number]> extends true
-									? Choices[number]
+		? boolean
+		: D extends { type: "count" }
+			? number
+			: D extends { schema: infer S extends StandardSchema }
+				? D extends { type: "json" }
+					? InferInput<S>
+					: string
+				: D extends { type: "json" }
+					? JsonValue
+					: "choices" extends keyof D
+						? Exclude<D["choices"], undefined> extends infer Choices extends readonly string[]
+							? [Choices] extends [never]
+								? D extends { type: infer T extends ValueType }
+									? Resolve<T>
 									: never
-								: never
-						: never
-					: D extends { parse: (raw: string) => infer _ParseOutput }
-						? string
-						: D extends { type: infer T extends ValueType }
-							? Resolve<T>
-							: never;
+								: IsStaticTuple<Choices> extends true
+									? IsClosedName<Choices[number]> extends true
+										? Choices[number]
+										: never
+									: never
+							: never
+						: D extends { parse: (raw: string) => infer _ParseOutput }
+							? string
+							: D extends { type: infer T extends ValueType }
+								? Resolve<T>
+								: never;
 
 // Resolve the shared input kind before occurrence handling distributes definition unions.
 type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extends [never]
@@ -832,7 +885,7 @@ export type InputArgs<A extends ArgsDef> = number extends A["length"]
 // Distribute before inspecting keys: each alternative must permit omission.
 // An `env` binding may supply the value, so typed input can omit it like argv can.
 type RequiredFlagName<D, K> = D extends unknown
-	? D extends { readonly env: object }
+	? D extends { readonly env: FlagEnv }
 		? never
 		: "required" extends keyof D
 			? true extends D["required"]

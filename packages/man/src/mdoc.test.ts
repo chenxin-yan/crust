@@ -134,14 +134,15 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain(".Sh SUBCOMMANDS");
 		expect(mdoc).toContain(".It Nm ping");
 		expect(mdoc).toContain(".Sh OPTIONS");
-		expect(mdoc).toContain(".It Fl v , Fl Fl verbose , Fl Fl no-verbose");
+		expect(mdoc).toContain(".It Fl v , Fl Fl verbose\n");
 	});
 
 	it("marks the value argument of value flags with Ar", async () => {
 		const root = await new Crust("demo")
 			.flags({
 				count: { type: "number", short: "c" },
-				yes: { type: "boolean" },
+				yes: { type: "boolean", default: true },
+				level: { type: "count", short: "l" },
 			})
 			.action(() => {})
 			.snapshot();
@@ -149,6 +150,7 @@ describe("renderManPageMdoc", () => {
 
 		expect(mdoc).toContain(".It Fl c , Fl Fl count Ar number\n");
 		expect(mdoc).toContain(".It Fl Fl yes , Fl Fl no-yes\n");
+		expect(mdoc).toContain(".It Fl l , Fl Fl level\n");
 		expect(mdoc).toContain(".Bl -tag -width 18n");
 	});
 
@@ -286,7 +288,7 @@ describe("renderManPageMdoc", () => {
 
 	it("renders the flag `env` variable name after the description, never its value", async () => {
 		const app = new Crust("demo", { description: "Demo." })
-			.flags({ token: { type: "string", env: { name: "HOME" }, description: "API token" } })
+			.flags({ token: { type: "string", env: "HOME", description: "API token" } })
 			.action(() => {});
 
 		const root = await app.snapshot();

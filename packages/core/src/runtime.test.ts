@@ -12,18 +12,17 @@ import {
 } from "./index.ts";
 
 describe("runtime structured invocation", () => {
-	it("checks choices and negation", async () => {
+	it("checks choices and number ranges", async () => {
 		const app = new Crust("run").flags({
 			tag: { type: "string", multiple: true, choices: ["ok"] },
-			yes: { type: "boolean", noNegate: true },
+			port: { type: "integer", min: 1 },
 		});
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		await expect(unwrap(app.run([], { flags: { tag: ["wrong"] } }))).rejects.toThrow(
 			"Expected one of: ok",
 		);
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(unwrap(app.run([], { flags: { yes: false } }))).rejects.toThrow(
-			"does not support negation",
+		await expect(unwrap(app.run([], { flags: { port: 0 } }))).rejects.toThrow(
+			"Expected an integer of at least 1 for --port.",
 		);
 	});
 

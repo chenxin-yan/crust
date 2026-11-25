@@ -23,7 +23,7 @@ export async function renderHelp(
 }
 
 const helpFlags = {
-	help: { type: "boolean", short: "h", noNegate: true, description: "Show help" },
+	help: { type: "boolean", short: "h", description: "Show help" },
 } as const;
 
 async function showHelp(context: ExtensionContext): Promise<void> {

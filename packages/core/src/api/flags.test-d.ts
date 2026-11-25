@@ -45,46 +45,29 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	defineArg(name, { type: "string", choices, default: value });
 }
 
-// Environment bindings work on every variant; either delimiter requires `multiple: true`.
-function _envAndDelimiter(schema: StandardSchema) {
-	defineFlag({ type: "string", env: { name: "APP_TOKEN" }, required: true });
-	defineFlag({ type: "number", env: { name: "APP_PORT" }, default: 3000 });
-	defineFlag({ type: "boolean", env: { name: "APP_COLOR" }, noNegate: true });
-	defineFlag({ type: "string", schema, env: { name: "APP_PORT" } });
-	defineFlag({
-		type: "string",
-		multiple: true,
-		env: { name: "APP_TAGS", delimiter: ":" },
-		delimiter: ",",
-	});
+// `env` is a variable name or a non-empty list of names on every variant except `count`;
+// `delimiter`, which also splits the variable's text, requires `multiple: true`.
+function _envAndDelimiter(schema: StandardSchema, names: string[]) {
+	defineFlag({ type: "string", env: "APP_TOKEN", required: true });
+	defineFlag({ type: "number", env: ["APP_PORT", "PORT"], default: 3000 });
+	defineFlag({ type: "boolean", env: "APP_COLOR", negatable: true });
+	defineFlag({ type: "string", schema, env: "APP_PORT" });
+	defineFlag({ type: "string", multiple: true, env: "APP_TAGS", delimiter: "," });
 	defineFlag({ type: "number", multiple: true, delimiter: ":" });
-	defineFlag({
-		type: "string",
-		schema,
-		multiple: true,
-		env: { name: "APP_TAGS", delimiter: "," },
-	});
-	defineFlag({
-		type: "boolean",
-		schema,
-		multiple: true,
-		env: { name: "APP_ENABLED", delimiter: "," },
-	});
-	// @ts-expect-error -- an environment binding requires an explicit name
-	defineFlag({ type: "string", env: "APP_TOKEN" });
-	// @ts-expect-error -- the environment delimiter also requires multiple: true
-	defineFlag({ type: "string", env: { name: "APP_TAGS", delimiter: "," } });
+	defineFlag({ type: "string", schema, multiple: true, env: "APP_TAGS", delimiter: "," });
+	defineFlag({ type: "boolean", schema, multiple: true, env: "APP_ENABLED", delimiter: "," });
+	// @ts-expect-error -- the `{ name, delimiter }` object is gone
+	defineFlag({ type: "string", env: { name: "APP_TOKEN" } });
+	// @ts-expect-error -- an empty list names no variable
+	defineFlag({ type: "string", env: [] });
+	// @ts-expect-error -- a list that may be empty names no variable either
+	defineFlag({ type: "string", env: names });
+	// @ts-expect-error -- a count reads no variable
+	defineFlag({ type: "count", env: "VERBOSE" });
+	// @ts-expect-error -- delimiter requires multiple: true
+	defineFlag({ type: "string", env: "APP_TAGS", delimiter: "," });
 	// @ts-expect-error -- schema-backed flags use the same occurrence restriction
-	defineFlag({ type: "string", schema, env: { name: "APP_TAGS", delimiter: "," } });
-	// @ts-expect-error -- bindings require a name
-	defineFlag({ type: "string", multiple: true, env: { delimiter: "," } });
-	new Crust("cli").flags({
-		// @ts-expect-error -- the restriction also applies at attachment
-		tag: {
-			type: "string",
-			env: { name: "APP_TAGS", delimiter: "," },
-		},
-	});
+	defineFlag({ type: "string", schema, env: "APP_TAGS", delimiter: "," });
 	// @ts-expect-error -- delimiter requires multiple: true
 	defineFlag({ type: "string", delimiter: "," });
 	// @ts-expect-error -- delimiter requires multiple: true on schema-backed flags too
@@ -93,15 +76,43 @@ function _envAndDelimiter(schema: StandardSchema) {
 	new Crust("cli").flags({ tag: { type: "string", delimiter: "," } });
 }
 
-function _ownedEnvBinding() {
-	const env = { name: "APP_TAGS", delimiter: "," };
+// `negatable` is for booleans; `min` and `max` for numbers and integers; `count` takes neither.
+function _negatableRangeCount(schema: StandardSchema) {
+	defineFlag({ type: "boolean", negatable: true, multiple: true });
+	defineFlag({ type: "integer", min: 1, max: 65535, default: 80 });
+	defineFlag({ type: "number", min: 0, max: 1, multiple: true });
+	defineArg("port", { type: "integer", min: 1 });
+	defineFlag({ type: "count", short: "v", aliases: ["verbose"] });
+	// @ts-expect-error -- only a boolean can be negatable
+	defineFlag({ type: "string", negatable: true });
+	// @ts-expect-error -- only a boolean can be negatable
+	defineFlag({ type: "string", schema, negatable: true });
+	// @ts-expect-error -- only a boolean can be negatable
+	defineFlag({ type: "count", negatable: true });
+	// @ts-expect-error -- negatable is `true` or left out
+	defineFlag({ type: "boolean", negatable: false });
+	// @ts-expect-error -- noNegate is gone: negation is opt-in
+	defineFlag({ type: "boolean", noNegate: true });
+	// @ts-expect-error -- min applies to numbers and integers
+	defineFlag({ type: "string", min: 1 });
+	// @ts-expect-error -- max applies to numbers and integers
+	defineArg("name", { type: "string", max: 1 });
+	// @ts-expect-error -- a count has no default: it is 0
+	defineFlag({ type: "count", default: 1 });
+	// @ts-expect-error -- a count is never required
+	defineFlag({ type: "count", required: true });
+	// @ts-expect-error -- a count does not repeat into an array
+	defineFlag({ type: "count", multiple: true });
+	// @ts-expect-error -- an integer default is a number
+	defineFlag({ type: "integer", default: "1" });
+}
+
+function _ownedEnvList() {
+	const env: [string, string] = ["APP_TAGS", "TAGS"];
 	const flag = defineFlag({ type: "string", multiple: true, env });
-	// @ts-expect-error -- owned environment names are frozen even for predeclared bindings
-	flag.env.name = "OTHER";
-	// @ts-expect-error -- owned environment delimiters are frozen too
-	flag.env.delimiter = ":";
-	env.name = "OTHER";
-	env.delimiter = ":";
+	// @ts-expect-error -- an owned list of names is read-only
+	flag.env[0] = "OTHER";
+	env[0] = "OTHER";
 }
 
 function _attachments(flags: FlagsDef, args: ArgsDef, aliases: string[], cond: boolean) {

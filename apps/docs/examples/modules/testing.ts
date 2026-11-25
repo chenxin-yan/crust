@@ -12,7 +12,7 @@ const app = new Crust("my-cli")
 	)
 	.command("whoami", (command) =>
 		command
-			.flags({ token: { type: "string", env: { name: "MY_CLI_TOKEN" } } })
+			.flags({ token: { type: "string", env: "MY_CLI_TOKEN" } })
 			.action(({ flags }) => flags.token),
 	);
 

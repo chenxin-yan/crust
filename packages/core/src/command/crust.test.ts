@@ -107,7 +107,7 @@ describe("Crust .flags()", () => {
 		await unwrap(app.run([], { flags: { first: true, second: "value" } }));
 		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
-			first: { type: "boolean", negatable: true },
+			first: { type: "boolean", negatable: false },
 			second: { type: "string", negatable: false },
 		});
 	});
@@ -121,8 +121,8 @@ describe("Crust .flags() records", () => {
 		const { flags } = await app.snapshot();
 		expect(Object.keys(flags)).toEqual(["zeta", "dry-run", "alpha"]);
 		expect(flags).toEqual({
-			zeta: { type: "boolean", short: "z", negatable: true },
-			"dry-run": { type: "boolean", negatable: true },
+			zeta: { type: "boolean", short: "z", negatable: false },
+			"dry-run": { type: "boolean", negatable: false },
 			alpha: { type: "string", aliases: ["a-alias"], negatable: false },
 		});
 	});
@@ -832,8 +832,8 @@ describe("Extension named hooks", () => {
 			const app = new Crust("cli")
 				.flags({
 					name: { type: "string", default: "dflt" },
-					port: { type: "number", env: { name: "BIND_PORT" } },
-					verbose: { type: "boolean", default: false },
+					port: { type: "number", env: "BIND_PORT" },
+					verbose: { type: "boolean", default: false, negatable: true },
 					tags: { type: "string", multiple: true, delimiter: "," },
 				})
 				.args({ name: "source", type: "string" })
@@ -1068,8 +1068,8 @@ describe("Extension named hooks", () => {
 				.flags({
 					name: { type: "string", default: "dflt" },
 					verbose: { type: "boolean", short: "V" },
-					color: { type: "boolean" },
-					port: { type: "number", env: { name: "SOURCES_PORT" } },
+					color: { type: "boolean", negatable: true },
+					port: { type: "number", env: "SOURCES_PORT" },
 					tags: { type: "string", multiple: true, delimiter: "," },
 					count: { type: "number" },
 				})
@@ -1196,7 +1196,7 @@ describe("Extension named hooks", () => {
 			const seen: unknown[] = [];
 			const errors: unknown[] = [];
 			const actions: string[] = [];
-			const port = { type: "number", default: 3000, env: { name: "PORT" } } as const;
+			const port = { type: "number", default: 3000, env: "PORT" } as const;
 			const gate = defineExtension(defineExtensionId("gate"))
 				.flags({ stop: { type: "boolean", recursive: true } })
 				.preRun((ctx) => void seen.push(ctx.flags.port))
@@ -1371,7 +1371,9 @@ describe("Extension setup, flag handlers, and noAction", () => {
 	function handlerApps() {
 		const handler = (name: string, eager = false) =>
 			defineExtension(defineExtensionId(name))
-				.flags({ [name]: { type: "boolean", env: { name: name.toUpperCase() } } } as const)
+				.flags({
+					[name]: { type: "boolean", env: name.toUpperCase(), negatable: true },
+				} as const)
 				.handle(name, (ctx) => ctx.stdout(name), { eager });
 		const [help, version, preview, dry] = [
 			handler("help", true),
@@ -2880,10 +2882,10 @@ describe("value errors never echo the raw value", () => {
 		);
 		const app = new Crust("cli")
 			.flags({
-				port: { type: "number", env: { name: "R3_PORT" } },
-				mode: { type: "string", choices: ["fast", "safe"], env: { name: "R3_MODE" } },
-				home: { type: "url", env: { name: "R3_HOME" } },
-				data: { type: "json", env: { name: "R3_DATA" } },
+				port: { type: "number", env: "R3_PORT" },
+				mode: { type: "string", choices: ["fast", "safe"], env: "R3_MODE" },
+				home: { type: "url", env: "R3_HOME" },
+				data: { type: "json", env: "R3_DATA" },
 			})
 			.args({ name: "count", type: "number" })
 			.extend(observer)
@@ -3064,9 +3066,10 @@ describe("definition checks on config-built definitions", () => {
 
 	it("rejects empty env names and delimiters from dynamic defs", () => {
 		const cases: [Record<string, ParsedFlagValue>, string][] = [
-			[{ name: "token", type: "string", env: { name: "" } }, "empty-env"],
+			[{ name: "token", type: "string", env: "" }, "empty-env"],
+			[{ name: "token", type: "string", env: ["TOKEN", ""] }, "empty-env"],
 			[
-				{ name: "tags", type: "string", multiple: true, env: { name: "TAGS", delimiter: "" } },
+				{ name: "tags", type: "string", multiple: true, env: "TAGS", delimiter: "" },
 				"empty-delimiter",
 			],
 			[{ name: "tags", type: "string", multiple: true, delimiter: "" }, "empty-delimiter"],
@@ -3081,15 +3084,7 @@ describe("definition checks on config-built definitions", () => {
 		}
 		expect(() =>
 			new Crust("cli").flags(
-				asFlags([
-					{
-						name: "tags",
-						type: "string",
-						multiple: true,
-						env: { name: "TAGS", delimiter: ":" },
-						delimiter: ",",
-					},
-				]),
+				asFlags([{ name: "tags", type: "string", multiple: true, env: ["TAGS"], delimiter: "," }]),
 			),
 		).not.toThrow();
 	});

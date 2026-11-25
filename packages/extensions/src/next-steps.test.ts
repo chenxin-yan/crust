@@ -165,8 +165,9 @@ describe("nextSteps", () => {
 					count: { type: "number" },
 					tag: { type: "string", multiple: true },
 					force: { type: "boolean" },
-					cache: { type: "boolean" },
-					quiet: { type: "boolean", noNegate: true },
+					cache: { type: "boolean", negatable: true },
+					quiet: { type: "boolean" },
+					verbose: { type: "count" },
 					meta: { type: "json" },
 					offset: { type: "number" },
 					url: { type: "url" },
@@ -193,8 +194,9 @@ describe("nextSteps", () => {
 							tag: ["x", "y"],
 							force: true,
 							cache: false,
-							// @ts-expect-error -- `false` on a noNegate flag has no spelling and is left out.
+							// `false` on a flag that is not negatable has no spelling and is left out.
 							quiet: false,
+							verbose: 2,
 							meta: { a: 1 },
 							offset: -5,
 							url: new URL("https://example.com/a?b=1"),
@@ -210,7 +212,7 @@ describe("nextSteps", () => {
 		expect(stderr).toBe(
 			[
 				"Next steps:",
-				`  app copy --message 'hello world' --count 3 --tag x --tag y --force --no-cache --meta '{"a":1}' --offset=-5 --url 'https://example.com/a?b=1' 'a b.txt' 'it'\\''s' c`,
+				`  app copy --message 'hello world' --count 3 --tag x --tag y --force --no-cache --verbose --verbose --meta '{"a":1}' --offset=-5 --url 'https://example.com/a?b=1' 'a b.txt' 'it'\\''s' c`,
 				"  app exec -- --watch src",
 				"  app seek -- -5",
 				"",
@@ -317,6 +319,39 @@ describe("nextSteps", () => {
 			].join("\n"),
 			exitCode: 1,
 		});
+	});
+
+	it("skips false on a boolean flag that is not negatable but reads an environment variable or is required", async () => {
+		const go = defineCommand("go", (cmd) =>
+			cmd
+				.flags({ cache: { type: "boolean", env: "CACHE" }, quiet: { type: "boolean" } })
+				.action(() => {}),
+		);
+		const ship = defineCommand("ship", (cmd) =>
+			cmd.flags({ sign: { type: "boolean", required: true } }).action(() => {}),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(go)
+			.add(ship)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(go, { flags: { cache: false } });
+					next.add(ship, { flags: { sign: false } });
+					next.add(go, { flags: { quiet: false } });
+				}),
+			);
+
+		expect((await captureExecute(app, ["suggest"])).stderr).toBe(
+			[
+				'nextSteps(): skipped "app go": "--cache" false has no spelling, and its environment variable may set it',
+				'nextSteps(): skipped "app ship": "--sign" false has no spelling, and the flag is required',
+				"Next steps:",
+				"  app go",
+				"",
+			].join("\n"),
+		);
 	});
 
 	it("reports a throwing onError on stderr and still prints the action's steps", async () => {
@@ -447,7 +482,7 @@ describe("nextSteps", () => {
 		]);
 	});
 
-	it("replays infinite numbers and negative zero and skips NaN, which argv cannot spell", async () => {
+	it("replays negative zero and skips non-finite numbers, which argv cannot spell", async () => {
 		const seen: unknown[] = [];
 		const wait = defineCommand("wait", (cmd) =>
 			cmd
@@ -461,7 +496,7 @@ describe("nextSteps", () => {
 			.command("suggest", (cmd) =>
 				cmd.use(nextSteps).action(async ({ ctx }) => {
 					const next = await ctx.nextSteps;
-					next.add(wait, { args: { at: -Infinity }, flags: { timeout: Infinity } });
+					next.add(wait, { args: { at: -Infinity } });
 					next.add(wait, { flags: { timeout: Number.NaN } });
 					next.add(wait, { args: { at: -0 }, flags: { timeout: -0 } });
 				}),
@@ -470,16 +505,43 @@ describe("nextSteps", () => {
 		const { stderr } = await captureExecute(app, ["suggest"]);
 		const lines = stderr.split("\n").slice(0, -1);
 		expect(lines).toEqual([
+			'nextSteps(): skipped "app wait": argument "at" value -Infinity has no argv spelling',
 			'nextSteps(): skipped "app wait": "--timeout" value NaN has no argv spelling',
 			"Next steps:",
-			"  app wait --timeout Infinity -- -Infinity",
 			"  app wait --timeout=-0 -- -0",
 		]);
-		await replay(app, lines.slice(2));
-		expect(seen).toEqual([
-			[{ at: -Infinity }, { timeout: Infinity }],
-			[{ at: -0 }, { timeout: -0 }],
+		await replay(app, lines.slice(3));
+		expect(seen).toEqual([[{ at: -0 }, { timeout: -0 }]]);
+	});
+
+	it("skips a number argv would reject for its integer type or min and max", async () => {
+		const scale = defineCommand("scale", (cmd) =>
+			cmd
+				.args({ name: "port", type: "number", min: 1, max: 10 })
+				.flags({ jobs: { type: "integer" } })
+				.action(() => {}),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(scale)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(scale, { flags: { jobs: 1.5 } });
+					next.add(scale, { args: { port: 99 } });
+					next.add(scale, { args: { port: 10 }, flags: { jobs: 2 } });
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n").slice(0, -1);
+		expect(lines).toEqual([
+			'nextSteps(): skipped "app scale": Expected an integer for "--jobs".',
+			'nextSteps(): skipped "app scale": Expected a number from 1 to 10 for argument "port".',
+			"Next steps:",
+			"  app scale --jobs 2 10",
 		]);
+		await replay(app, lines.slice(-1));
 	});
 
 	it("skips json values JSON would change and replays the rest", async () => {

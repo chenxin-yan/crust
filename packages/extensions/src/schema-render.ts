@@ -88,13 +88,7 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 					item(
 						flag.spellings.map((spelling) => `\`${spelling}\``).join(", "),
 						valueLabel(flag.type, flag.multiple, flag.required),
-						formatDescription(
-							flag.description,
-							flag.default,
-							flag.choices,
-							undefined,
-							flag.env?.name,
-						),
+						formatDescription(flag.description, flag.default, flag.choices, undefined, flag.env),
 					),
 				);
 			}

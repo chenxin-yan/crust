@@ -162,7 +162,7 @@ Error: Expected a number for --port.
 
 - **Names:** quote a name that is not an identifier, such as `"dry-run"`, and read it as `flags["dry-run"]`. A name must not contain whitespace or `=`, or start with `-`; such a name throws a `DEFINITION` error when the CLI runs from source or in `crust build` (see [definition checks](/docs/api/crust#definition-checks)).
 - **Omitted:** a flag without `required`, `default`, or an `env` binding is `undefined`.
-- **Values:** a value-taking flag needs one value, so `serve --port` fails. Built-in types convert the text and reject invalid input, including a blank number, before the action runs.
+- **Values:** a value-taking flag needs one value, so `serve --port` fails. Built-in types convert the text and reject invalid input, including a blank number, before the action runs. There are no flags whose value is optional (`--color[=when]`), as [POSIX](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02) advises: give the flag `choices` and a `default` instead.
 
 Malformed argv, such as an unknown flag or `serve --port --help`, fails before any hook runs. Invalid values fail later, after [flag handlers and `preRun` hooks](/docs/guide/extensions#hooks), so `serve --port nope --help` with [`help()`](/docs/modules/extensions/help) still prints help. An invalid value is reported before a missing required one.
 
@@ -196,12 +196,35 @@ $ serve -c
 color=true
 $ serve --no-colour
 color=false
+$ serve --color=false
+Error: Flag "--color" does not take a value; write --color or --no-color
 ```
 
 - `short` sets a one-character (one code point) alias; `aliases` sets long aliases. Every spelling writes to the flag's key.
-- Boolean flags also accept `--no-<name>` and `--no-<alias>`, unless `noNegate: true`.
+- A boolean flag is `true` when given and takes no value: `--color=false` fails with a hint, as in GNU tools, clap, and Node.js `util.parseArgs`.
+- `--no-<name>` and `--no-<alias>` exist only for a flag with `default: true`, where they are the way to turn it off, or with `negatable: true`, such as to override an [environment variable](#environment-variables). Help lists them only for `default: true` flags.
 
 See the [`.flags()` contract](/docs/api/crust#flagsflags) for all accepted spellings.
+
+### Numbers and counts
+
+<include lang="ts" meta='title="src/serve.ts" twoslash'>
+  ../../../examples/guide/flags-numbers.ts
+</include>
+
+```sh
+$ serve --port 8080 -vv
+port=8080 ratio=0.5 verbose=2
+$ serve --port 0
+Error: Expected an integer from 1 to 65535 for --port.
+$ serve --ratio 0x1
+Error: Expected a number for --ratio.
+```
+
+- `type: "number"` reads a finite decimal, such as `-1.5` or `2e3`: no hex, `Infinity`, or surrounding spaces.
+- `type: "integer"` reads digits with an optional leading minus.
+- `min` and `max` bound a `number` or `integer`, inclusive. They check every value given on argv, in the environment, or in typed `run()` input, but not the `default`. Arguments take them too.
+- `type: "count"` counts the flag's occurrences: `-vvv` is `3`, and an omitted flag is `0`, typed `number`. It takes no value, no negation, and no `env`.
 
 ### Repeated values
 
@@ -242,15 +265,18 @@ $ PUBLISH_TOKEN=example publish
 publishing to npm tags=undefined
 $ PUBLISH_TOKEN=example PUBLISH_REGISTRY=github publish --registry jsr
 publishing to jsr tags=undefined
+$ PUBLISH_TOKEN=example npm_config_registry=github publish
+publishing to github tags=undefined
 ```
 
-`env: { name: "VARIABLE" }` reads a flag from that variable when argv omits it. Variables are read when the command runs, not when the flag is defined.
+`env: "VARIABLE"` reads a flag from that variable when argv omits it. Variables are read when the command runs, not when the flag is defined.
 
 - **Precedence:** argv, then env, then `default`. An environment value satisfies `required`.
 - **Validation:** environment text goes through the same `type` conversion, `choices`, `parse`, and schemas as argv.
-- **Booleans:** `true` or `1` is true; any other value is false. A `noNegate` flag rejects a false value, as it rejects `--no-<name>`.
+- **Lists:** `env: ["PUBLISH_REGISTRY", "npm_config_registry"]` reads the first variable that is set.
+- **Booleans:** `true`, `1`, `yes`, and `on` are true; `false`, `0`, `no`, and `off` are false, in any letter case. Any other value fails, naming the variable. An empty variable counts as unset. A positional boolean argument reads the same words.
 - **Invalid values:** an invalid argv value fails instead of trying env; an invalid environment value, including a blank `PORT=` for a number flag, fails instead of using the default. Neither blocks `--help` or `--version`.
-- **Docs:** generated documentation lists the variable as `[env: PUBLISH_TOKEN]`, never its value.
+- **Docs:** generated documentation lists the variables as `[env: PUBLISH_REGISTRY, npm_config_registry]`, never their values.
 - **Programmatic calls:** [`run()`](/docs/api/crust#runpath-input-options) reads `process.env` too, for flags its input omits. To isolate a test from the caller's shell, wrap the call in [`withEnv()`](/docs/modules/testing#withenvenv-fn).
 - **Arguments:** positional arguments have no `env`; use a flag.
 - **Config files:** to also read a value from a JSON config file, declare it as a setting of [`@crustjs/config`](/docs/modules/config): the same flag definition, read after the variable.
@@ -258,26 +284,19 @@ publishing to jsr tags=undefined
 
 #### Delimiters
 
-Split a `multiple: true` flag's values with two independent settings:
-
-| Setting         | Splits                   | Without it                      |
-| --------------- | ------------------------ | ------------------------------- |
-| `delimiter`     | Each string argv value   | Each occurrence is one value    |
-| `env.delimiter` | The environment variable | The whole variable is one value |
-
-The example uses commas on argv and colons in `PUBLISH_TAGS`:
+`delimiter` splits each string argv value of a `multiple: true` flag, and its environment variable's text, into separate values. Without it, each occurrence and the whole variable are one value each.
 
 ```sh
-$ PUBLISH_TOKEN=example PUBLISH_TAGS=latest::beta publish
+$ PUBLISH_TOKEN=example PUBLISH_TAGS=latest,,beta publish
 publishing to npm tags=latest,beta
 $ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
 publishing to npm tags=latest,beta,next
 ```
 
-- Both require `multiple: true`, which TypeScript checks, and a nonempty separator. An empty `env.name`, `delimiter`, or `env.delimiter` throws a `DEFINITION` error when the CLI runs from source or in `crust build`.
+- It requires `multiple: true`, which TypeScript checks, and a nonempty separator. An empty `delimiter` or variable name throws a `DEFINITION` error when the CLI runs from source or in `crust build`.
 - Empty segments are dropped. Zero values after splitting follow the usual default, required, and schema rules, but an argv occurrence still wins over the environment.
 - [`run()`](/docs/api/crust#runpath-input-options) takes arrays and never splits them.
-- Boolean argv stays `--flag` / `--no-flag`. Repeated booleans can split environment text such as `true,false` with `env: { name: "FEATURES", delimiter: "," }`.
+- Boolean argv stays `--flag`. Repeated booleans can split environment text such as `true,false` with `env: "FEATURES", delimiter: ","`.
 
 ### Values that start with `-`
 

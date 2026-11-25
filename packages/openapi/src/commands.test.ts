@@ -1217,6 +1217,21 @@ describe("generated command inputs", () => {
 		});
 		expect(calls.map(({ url }) => url)).toEqual(["https://api.example.com/v1/p?paginate=true"]);
 	});
+
+	it("sends false for a boolean parameter through --no-<name>", async () => {
+		const calls = stubFetch(() => Response.json({ id: "1" }));
+		const { app } = appFor({
+			"/p": {
+				get: {
+					operationId: "probe",
+					parameters: [{ name: "draft", in: "query", schema: { type: "boolean" } }],
+				},
+			},
+		});
+
+		expect((await captureExecute(app, ["probe", "--no-draft"])).exitCode).toBe(0);
+		expect(calls.map(({ url }) => url)).toEqual(["https://api.example.com/v1/p?draft=false"]);
+	});
 });
 
 describe("generated output schemas", () => {

@@ -29,16 +29,20 @@ type ValueShape =
 /**
  * Map a Core value type onto its completion shape. url/path/json consume
  * string tokens but keep their completion intent; schema-backed args
- * (`undefined`) complete as free-form strings.
+ * (`undefined`) complete as free-form strings. A count takes no value, as a boolean.
  */
 function valueShape(
-	type: ValueType | undefined,
+	type: ValueType | "count" | undefined,
 	choices: readonly string[] | undefined,
 ): ValueShape {
 	switch (type) {
 		case "boolean":
 		case "number":
 			return { type };
+		case "count":
+			return { type: "boolean" };
+		case "integer":
+			return { type: "number" };
 		case "path":
 			return { type: "string", valueCompletion: "files" };
 		case "url":
@@ -66,7 +70,7 @@ function walkFlag(def: DocumentationFlag): CompletionFlag {
 		name: def.name,
 		spellings: def.spellings,
 		...(description === undefined ? {} : { description }),
-		...(def.multiple ? { multiple: true as const } : {}),
+		...(def.multiple || def.type === "count" ? { multiple: true as const } : {}),
 	};
 
 	const shape = valueShape(def.type, def.choices);

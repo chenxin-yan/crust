@@ -57,8 +57,9 @@ export const buildCommand = defineCommand(
 					type: "boolean",
 					// No default: other builds must distinguish an explicit --bytecode (error)
 					// from the implicit bun-binary default (true, applied by `build`).
+					negatable: true,
 					description:
-						"Precompile bun binaries to bytecode for faster startup (default for bun binaries; unsupported otherwise)",
+						"Precompile bun binaries to bytecode for faster startup (default for bun binaries; unsupported otherwise; --no-bytecode to skip)",
 				},
 			})
 			.action(async ({ flags, stdout, stderr }) => {

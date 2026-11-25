@@ -73,14 +73,14 @@ function acme() {
 		global: true,
 		project: true,
 	}).flags({
-		level: { type: "string", env: { name: "ACME_LEVEL" }, default: "default" },
-		org: { type: "string", description: "Organization", env: { name: "ACME_ORG" } },
+		level: { type: "string", env: "ACME_LEVEL", default: "default" },
+		org: { type: "string", description: "Organization", env: "ACME_ORG" },
 		region: { type: "string", description: "Region", choices: ["us", "eu"], default: "us" },
-		port: { type: "number", short: "p" },
+		port: { type: "number", short: "p", min: 1, max: 65535 },
 		timeout: { type: "string", parse: (raw) => Number(raw) * 1000, default: "30" },
 		tags: { type: "string", multiple: true },
-		yes: { type: "boolean", noNegate: true },
-		telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
+		yes: { type: "boolean" },
+		telemetry: { type: "boolean", flag: false, env: "ACME_TELEMETRY" },
 	});
 	const app = shows(
 		config,
@@ -276,6 +276,17 @@ describe("settings", () => {
 		).toMatchObject({ port: 1, tags: ["x", "y"], timeout: 2000, yes: true });
 	});
 
+	it("turns off a boolean setting with default: true by --no-<name>", async () => {
+		const config = defineConfig({ name: "acme", project: true }).flags({
+			cache: { type: "boolean", default: true },
+		});
+		const run = (argv: string[]) => captureExecute(shows(config), ["show", ...argv]);
+		expect(JSON.parse((await run([])).stdout)).toEqual({ cache: true });
+		const off = await run(["--no-cache"]);
+		expect(off.exitCode, off.stderr).toBe(0);
+		expect(JSON.parse(off.stdout)).toEqual({ cache: false });
+	});
+
 	it("reads a flag: false setting from env and the files, never from a flag", async () => {
 		write(globalFile(), { telemetry: false });
 		expect(await viaRun()).toMatchObject({ telemetry: false });
@@ -294,7 +305,7 @@ describe("settings", () => {
 			global: true,
 			project: true,
 		}).flags({
-			org: { type: "string", env: { name: "ACME_ORG" }, required: true },
+			org: { type: "string", env: "ACME_ORG", required: true },
 			token: { type: "string", flag: false, required: true },
 		});
 		const app = shows(config);
@@ -329,7 +340,7 @@ describe("errors", () => {
 	});
 
 	it("names the file and each key of a wrong value, without the value", async () => {
-		write(globalFile(), { org: 7, region: "mars", port: "80x", tags: "a", yes: false });
+		write(globalFile(), { org: 7, region: "mars", port: "80x", tags: "a", yes: "no" });
 		const { exitCode, stderr } = await captureExecute(acme().app, ["show"]);
 		expect(exitCode).toBe(1);
 		expect(stderr).toContain(`Store validation failed (read) in ${globalFile()}`);
@@ -338,11 +349,18 @@ describe("errors", () => {
 			"region: Expected one of: us, eu",
 			"port: Expected number",
 			"tags: Expected string[]",
-			"yes: Expected true",
+			"yes: Expected boolean",
 		]) {
 			expect(stderr).toContain(line);
 		}
 		expect(stderr).not.toContain("mars");
+	});
+
+	it("keeps a file's number within the setting's min and max", async () => {
+		write(globalFile(), { port: 0 });
+		const { exitCode, stderr } = await captureExecute(acme().app, ["show"]);
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain("port: Expected at least 1");
 	});
 
 	it("names the file when parse rejects a file value", async () => {
@@ -415,13 +433,23 @@ describe("config.jsonSchema()", () => {
 				level: { type: "string", default: "default" },
 				org: { type: "string", description: "Organization" },
 				region: { enum: ["us", "eu"], description: "Region", default: "us" },
-				port: { type: "number" },
+				port: { type: "number", minimum: 1, maximum: 65535 },
 				timeout: { type: "string", default: "30" },
 				tags: { type: "array", items: { type: "string" } },
-				yes: { const: true },
+				yes: { type: "boolean" },
 				telemetry: { type: "boolean" },
 			},
 			additionalProperties: false,
+		});
+	});
+
+	it("leaves out a bound that is not finite", () => {
+		const config = defineConfig({ name: "acme", project: true }).flags({
+			a: { type: "number", min: Number.NaN, max: Number.POSITIVE_INFINITY },
+		});
+		expect(config.jsonSchema().properties).toEqual({
+			$schema: { type: "string" },
+			a: { type: "number" },
 		});
 	});
 });
@@ -737,7 +765,7 @@ describe("flag: false settings and parsers", () => {
 	it("reads a flag: false setting whose name is no argv spelling, without and with a variable", async () => {
 		const config = defineConfig({ name: "acme", project: true }).flags({
 			"no-proxy": { type: "string", flag: false },
-			"no-cache": { type: "string", flag: false, env: { name: "ACME_NO_CACHE" } },
+			"no-cache": { type: "string", flag: false, env: "ACME_NO_CACHE" },
 		});
 		write(projectFile(), { "no-proxy": "local", "no-cache": "file" });
 		expect(await result(shows(config))).toEqual({ "no-proxy": "local", "no-cache": "file" });
@@ -753,7 +781,7 @@ describe("flag: false settings and parsers", () => {
 
 	it("names the setting, not an internal key, when a flag: false setting's variable is invalid", async () => {
 		const config = defineConfig({ name: "acme", project: true }).flags({
-			retries: { type: "number", flag: false, env: { name: "ACME_RETRIES" } },
+			retries: { type: "number", flag: false, env: "ACME_RETRIES" },
 		});
 		process.env.ACME_RETRIES = "abc";
 		try {

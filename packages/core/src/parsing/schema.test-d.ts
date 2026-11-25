@@ -32,7 +32,7 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 		)
 		.flags({
 			n: { type: "string", schema: z.coerce.number().optional() },
-			len: { type: "string", schema: stringToNumber, env: { name: "LEN" } },
+			len: { type: "string", schema: stringToNumber, env: "LEN" },
 			on: { type: "boolean", schema: z.boolean().optional() },
 			yes: { type: "boolean", schema: z.literal(true).optional() },
 			level: { type: "string", schema: z.enum(["low", "high"]) },
@@ -73,7 +73,7 @@ function _typecheckSchemaInputAcceptsTheParserValue() {
 	});
 	new Crust("cli").flags({
 		// @ts-expect-error -- an env-sourced string flag still receives a string
-		n: { type: "string", env: { name: "N" }, schema: z.number() },
+		n: { type: "string", env: "N", schema: z.number() },
 	});
 	new Crust("cli").flags({
 		// @ts-expect-error -- a boolean flag receives a boolean
@@ -126,7 +126,7 @@ function _typecheckJsonFlagSchemaInputAcceptsJsonData() {
 		.flags({
 			body: { type: "json", schema: user },
 			any: { type: "json", schema: z.unknown() },
-			list: { type: "json", schema: z.array(z.number()), env: { name: "LIST" } },
+			list: { type: "json", schema: z.array(z.number()), env: "LIST" },
 			either: { type: "json", schema: z.union([z.string(), z.date()]) },
 			record: { type: "json", schema: z.record(z.string(), z.unknown()) },
 			rest: { type: "json", schema: z.tuple([z.string()], z.date()) },

@@ -139,7 +139,7 @@ $ APP_QUIET=1 app publish
 Published v1.2.0
 ```
 
-- `APP_QUIET` applies when the flag is omitted: `1` or `true` turns quiet on, and `--no-quiet` overrides it. See [environment variables](/docs/guide/arguments-and-flags#environment-variables).
+- `APP_QUIET` applies when the flag is omitted: `1`, `true`, `yes`, or `on` turns quiet on. `negatable: true` adds `--no-quiet` to override it. See [environment variables](/docs/guide/arguments-and-flags#environment-variables).
 - Each command decides what to skip. Other commands reject `--quiet` as an unknown flag, and Extensions keep their own output.
 
 ## Cancellation

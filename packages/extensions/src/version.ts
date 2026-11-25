@@ -26,7 +26,6 @@ const versionFlags = {
 	version: {
 		type: "boolean",
 		short: "v",
-		noNegate: true,
 		description: "Show version number",
 		recursive: false,
 	},

@@ -7,9 +7,14 @@ import {
 	type FlagDef,
 	type ValidatedInput,
 } from "@crustjs/core";
-import { formatDescription, type LocalValueBrand, parseFlagValues } from "@crustjs/core/tooling";
+import {
+	formatDescription,
+	type LocalValueBrand,
+	parseFlagValues,
+	type UnknownKeysBrand,
+} from "@crustjs/core/tooling";
 
-type FlagOnlyKey = "short" | "aliases" | "negatable" | "noNegate" | "hidden" | "env";
+type FlagOnlyKey = "short" | "aliases" | "negatable" | "hidden" | "env";
 
 // `?: never`, not just Omit: a generic `V extends EnvVarsDef` would admit them as excess keys.
 type WithoutFlagOnlyKeys<D> = D extends unknown
@@ -18,10 +23,10 @@ type WithoutFlagOnlyKeys<D> = D extends unknown
 
 /**
  * One environment variable: the {@link FlagDef} vocabulary without argv-only
- * keys. Omitted per variant, so `type`/`multiple`/`schema` constraints hold;
- * the argv-only keys are typed `never`.
+ * keys or the argv-only `count` type. Omitted per variant, so
+ * `type`/`multiple`/`schema` constraints hold; the argv-only keys are typed `never`.
  */
-export type EnvVarDef = WithoutFlagOnlyKeys<FlagDef>;
+export type EnvVarDef = WithoutFlagOnlyKeys<Exclude<FlagDef, { type: "count" }>>;
 
 /** Environment variable definitions keyed by literal variable name. */
 export type EnvVarsDef = Record<string, EnvVarDef>;
@@ -81,9 +86,9 @@ function ownVar(name: string, def: EnvVarDef): EnvVarDef {
 	}
 }
 
-/** Zero occurrences after delimiter splitting is omission, as for flags. */
+/** Zero occurrences after delimiter splitting, or an empty boolean, is omission, as for flags. */
 function isAbsent(def: EnvVarDef, raw: string | undefined): boolean {
-	if (raw === undefined) return true;
+	if (raw === undefined || (raw === "" && def.type === "boolean")) return true;
 	return (
 		def.multiple === true &&
 		def.delimiter !== undefined &&
@@ -109,10 +114,8 @@ type VarResult =
 
 async function parseVar(name: string, def: EnvVarDef, raw: string | undefined): Promise<VarResult> {
 	// Fixed flag and variable names keep names like `__proto__` off the core records.
-	const env =
-		def.delimiter === undefined ? { name: "value" } : { name: "value", delimiter: def.delimiter };
-	// SAFETY: EnvVarDef is a FlagDef variant minus argv-only keys; `env` reuses its own delimiter.
-	const flags = { value: { ...def, env } as FlagDef };
+	// SAFETY: EnvVarDef is a FlagDef variant minus argv-only keys; its `delimiter` splits the text.
+	const flags = { value: { ...def, env: "value" } as FlagDef };
 	try {
 		const { value } = await parseFlagValues(flags, raw === undefined ? {} : { value: raw });
 		return { name, value };
@@ -177,8 +180,10 @@ export function defineEnv<
 	const O extends EnvOptions | undefined = undefined,
 >(
 	name: Name,
-	// Same value brands as defineFlag (default within choices, synchronous parse), per variable.
-	vars: V & { readonly [K in keyof V]: LocalValueBrand<V[K]> },
+	// Same value and unknown-key brands as defineFlag (default within choices, synchronous parse), per variable.
+	vars: V & {
+		readonly [K in keyof V]: LocalValueBrand<V[K]> & UnknownKeysBrand<V[K], EnvVarDef>;
+	},
 	// A required tuple member keeps `undefined` in O, so omittable options stay honest.
 	...[options]: undefined extends O ? [] | [options: O] : [options: O]
 ): ContextFactory<Name, void, EnvValue<V, O>> {

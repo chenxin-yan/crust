@@ -8,11 +8,11 @@ export const config = defineConfig({
 	project: true, // acme.config.json, the nearest from the working directory up, or a file name
 }).flags({
 	// Each entry is a flag definition, as in a command's .flags({...}).
-	org: { type: "string", description: "Organization", env: { name: "ACME_ORG" }, required: true },
+	org: { type: "string", description: "Organization", env: "ACME_ORG", required: true },
 	region: { type: "string", choices: ["us", "eu"], default: "us", description: "Region" },
 	port: { type: "number", description: "Port" },
 	// No --telemetry flag: the variable and the files only.
-	telemetry: { type: "boolean", flag: false, env: { name: "ACME_TELEMETRY" } },
+	telemetry: { type: "boolean", flag: false, env: "ACME_TELEMETRY" },
 });
 // One Context per setting, named after it.
 export const { org, region, port, telemetry } = config.settings;

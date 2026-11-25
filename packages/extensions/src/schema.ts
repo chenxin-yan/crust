@@ -24,7 +24,6 @@ const PATH_ARG_DESCRIPTION = "Command path, e.g. `remote add`; omit for the root
 const llmsFlags = {
 	llms: {
 		type: "boolean",
-		noNegate: true,
 		recursive: false,
 		description: "Print a Markdown index of all commands for LLMs",
 	},

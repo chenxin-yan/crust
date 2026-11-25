@@ -13,14 +13,17 @@ A property a definition doesn't have, such as a misspelled `requried`, is a comp
 
 ### `ValueType`
 
-| Value     | Runtime value                        |
-| --------- | ------------------------------------ |
-| `string`  | `string`                             |
-| `number`  | `number`                             |
-| `boolean` | `boolean`                            |
-| `url`     | `URL`                                |
-| `path`    | Absolute `string`, with `~` expanded |
-| `json`    | `unknown` from `JSON.parse()`        |
+| Value     | Runtime value                                                       |
+| --------- | ------------------------------------------------------------------- |
+| `string`  | `string`                                                            |
+| `number`  | `number`: a finite decimal, such as `-1.5` or `2e3`                 |
+| `integer` | `number`: digits with an optional leading minus                     |
+| `boolean` | `boolean`; as text, `true`/`1`/`yes`/`on` or `false`/`0`/`no`/`off` |
+| `url`     | `URL`                                                               |
+| `path`    | Absolute `string`, with `~` expanded                                |
+| `json`    | `unknown` from `JSON.parse()`                                       |
+
+`number` and `integer` definitions also take `min` and `max`, inclusive bounds checked on every supplied value but not on the `default`. Boolean text (a positional argument or an environment variable) is read in any letter case; other text is a `PARSE` error. Flags also have `type: "count"`; see [`FlagDef`](#flagdef).
 
 ### `ArgDef`
 
@@ -75,23 +78,24 @@ const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const
 
 ```ts
 const flags = {
-  verbose: { type: "boolean", short: "v" },
-  port: { type: "number", default: 3000 },
-  token: { type: "string", env: { name: "MYAPP_TOKEN" }, required: true },
-  tags: {
-    type: "string",
-    multiple: true,
-    delimiter: ",",
-    env: { name: "MYAPP_TAGS", delimiter: ":" },
-  },
+  verbose: { type: "count", short: "v" },
+  color: { type: "boolean", negatable: true },
+  port: { type: "integer", min: 1, max: 65535, default: 3000 },
+  token: { type: "string", env: "MYAPP_TOKEN", required: true },
+  registry: { type: "string", env: ["MYAPP_REGISTRY", "npm_config_registry"] },
+  tags: { type: "string", multiple: true, delimiter: ",", env: "MYAPP_TAGS" },
 } satisfies FlagsDef;
 ```
 
-`env` is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Variables come from `process.env`; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
+A boolean flag takes no value: `--color=false` is a `PARSE` error. `--no-<name>` and `--no-<alias>` exist only for a flag with `default: true` or `negatable: true`, and help, man pages, completion, and generated skills list them only for `default: true`. `negatable` on any other type is a compile error.
 
-`delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
+`type: "count"` counts occurrences: `-vvv` is `3`, and an omitted flag is `0`, typed `number`. It takes only `description`, `short`, and `aliases`: no value, negation, `default`, `required`, `multiple`, or `env`.
 
-Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
+`env` names a variable, or lists variables of which the first that is set wins. It is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`; an empty variable counts as unset for a boolean. Variables come from `process.env`; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
+
+`delimiter` splits string argv occurrences and the environment text alike. It requires `multiple: true` and drops empty segments. Boolean argv switches are never split.
+
+Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `negatable`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted. As for arguments, TypeScript rejects a schema whose input type cannot accept a present value.
 
 A schema-backed flag with `type: "json"` takes one value token (no `multiple` or `delimiter`) and parses it as JSON. The schema receives the parsed `JsonValue | undefined`, and structured input (`run()`, `--input`, MCP) passes the JSON value itself; a value that is not JSON data is a `PARSE` error. Its input type must accept JSON data, typed `run()` input takes that input type, and the schema's input JSON Schema is the flag's command input property.
 
@@ -168,7 +172,7 @@ Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
+`required` is the effective requiredness the parser enforces: it is absent when the definition has a `default`. `URL` defaults become strings. `env` records the variable name or names, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 

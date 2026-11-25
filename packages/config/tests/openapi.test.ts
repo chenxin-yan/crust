@@ -46,7 +46,7 @@ const config = defineConfig({
 	account: {
 		type: "string",
 		description: "Account ID",
-		env: { name: "ACME_ACCOUNT" },
+		env: "ACME_ACCOUNT",
 		required: true,
 	},
 });

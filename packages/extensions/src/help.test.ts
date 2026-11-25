@@ -105,6 +105,9 @@ describe("help", () => {
 			tag: { type: "string", short: "t", multiple: true, description: "Tag" },
 			out: { type: "path", description: "Output file" },
 			force: { type: "boolean", short: "f", description: "Force it" },
+			cache: { type: "boolean", default: true, description: "Use the cache" },
+			verbose: { type: "count", short: "v", description: "More output" },
+			port: { type: "integer", env: ["APP_PORT", "PORT"], description: "Port" },
 		});
 
 		const lines = stripAnsi(await renderHelp(await command.snapshot())).split("\n");
@@ -113,7 +116,10 @@ describe("help", () => {
 		expect(lines).toContain("  --mode <string>              Execution mode [choices: fast, slow]");
 		expect(lines).toContain("  -t, --tag <string>           Tag");
 		expect(lines).toContain("  --out <path>                 Output file");
-		expect(lines).toContain("  -f, --force, --no-force      Force it");
+		expect(lines).toContain("  -f, --force                  Force it");
+		expect(lines).toContain("  --cache, --no-cache          Use the cache [default: true]");
+		expect(lines).toContain("  -v, --verbose                More output");
+		expect(lines).toContain("  --port <integer>             Port [env: APP_PORT, PORT]");
 	});
 
 	it('renderHelp shows an "afterDoubleDash" argument after -- and [options]', async () => {
@@ -298,7 +304,7 @@ describe("help", () => {
 
 	it("help extension shows help instead of an invalid flag value from argv or env", async () => {
 		const actions: string[] = [];
-		const port = { type: "number", default: 3000, env: { name: "PORT" } } as const;
+		const port = { type: "number", default: 3000, env: "PORT" } as const;
 		const app = new Crust("app")
 			.extend(help())
 			.flags({ port })
@@ -389,7 +395,7 @@ describe("help", () => {
 			.flags({
 				token: {
 					type: "string",
-					env: { name: "HOME" },
+					env: "HOME",
 					default: "anon",
 					description: "API token",
 				},
