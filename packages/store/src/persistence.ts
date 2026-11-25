@@ -460,8 +460,11 @@ function isProcessAlive(pid: number): boolean {
 /** The pid a lock file names, or `undefined` when it has none: missing, not yet written, or another host's. */
 async function readLockPid(lockPath: string): Promise<number | undefined> {
 	try {
+		const fs = process.getBuiltinModule("node:fs/promises");
+		// A lock is a file of its own: a link or a device at the path, as a cloned folder can hold, is not read.
+		if (!(await fs.lstat(lockPath)).isFile()) return undefined;
 		const owner: { pid?: unknown; host?: unknown } | null = JSON.parse(
-			await process.getBuiltinModule("node:fs/promises").readFile(lockPath, "utf-8"),
+			await fs.readFile(lockPath, "utf-8"),
 		);
 		// A pid only identifies a process on the host that wrote it.
 		return owner?.host === process.getBuiltinModule("node:os").hostname() &&
@@ -483,7 +486,7 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
 	}
 	return process
 		.getBuiltinModule("node:fs/promises")
-		.stat(lockPath)
+		.lstat(lockPath)
 		.then(
 			(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
 			() => false,
