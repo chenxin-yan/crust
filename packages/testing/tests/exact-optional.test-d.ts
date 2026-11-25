@@ -17,6 +17,9 @@ async function _capturesAnApp() {
 	await captureExecute(app, ["deploy"], { env: {} });
 	// Options filled from optional values accept an explicit `undefined`.
 	await captureExecute(app, ["deploy"], { env: maybeEnv, raw: maybeRaw });
+	await captureExecute(app, ["deploy"], { stdin: "input", isTTY: true, columns: 120 });
+	// @ts-expect-error -- only a terminal has a width
+	await captureExecute(app, ["deploy"], { columns: 120 });
 	return code;
 }
 

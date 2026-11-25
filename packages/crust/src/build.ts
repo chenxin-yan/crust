@@ -11,7 +11,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-import type { BuildReport, InvocationIO } from "@crustjs/core";
+import type { BuildReport } from "@crustjs/core";
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 import { dim, yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
@@ -35,6 +35,7 @@ import {
 	CRUST_DIR,
 	type DistributeBuildPlan,
 	type Distribution,
+	type LineIO,
 	assertPublishableRange,
 	validatePackageIdentity,
 	runDistributeBuild,
@@ -272,11 +273,7 @@ function resolveBuildRuntime(pkg: JsonObject, config: CrustConfig): ResolvedRunt
 	return { runtime: "bun", source: "default" };
 }
 
-function printBuildReport(
-	command: string,
-	report: BuildReport,
-	stdout: InvocationIO["stdout"],
-): void {
+function printBuildReport(command: string, report: BuildReport, stdout: LineIO["stdout"]): void {
 	if (report.extensions.length === 0) return;
 	stdout(`Preparing Command Snapshot for ${command}...`);
 	const fileCount = (files: readonly string[]) =>
@@ -580,7 +577,7 @@ type SelectedCompilers = {
  * packages are bundled by Bun and embed no runtime, so engines stay a consumer
  * requirement there and are not checked against the bundler.
  */
-async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<SelectedCompilers> {
+async function selectCompilers(plan: BuildPlan, io: LineIO): Promise<SelectedCompilers> {
 	if (plan.artifact === "package") {
 		const runner = resolveBunBuildRunner();
 		const target = plan.runtime === "bun" ? "bun" : "node";
@@ -655,7 +652,7 @@ async function selectCompilers(plan: BuildPlan, io: InvocationIO): Promise<Selec
  */
 async function prepareEntries(
 	plan: BuildPlan,
-	io: InvocationIO,
+	io: LineIO,
 	runner: BuildRunner,
 ): Promise<Record<string, BuildReport>> {
 	const owners = new Map<string, ArtifactOwner>();
@@ -727,7 +724,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	}
 	try {
 		const onLog = options.onLog ?? (() => {});
-		const io: InvocationIO = {
+		const io: LineIO = {
 			stdout: (line) => onLog(line, "stdout"),
 			stderr: (line) => onLog(line, "stderr"),
 		};

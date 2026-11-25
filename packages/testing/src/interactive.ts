@@ -11,7 +11,7 @@ import type {
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
-import { type CaptureOptions, captureText } from "./capture.ts";
+import { type CaptureOptions, captureText, joinChunks } from "./capture.ts";
 
 /**
  * A running interactive invocation. `Outcome` is the `run()` outcome of the selected command;
@@ -23,7 +23,7 @@ export interface InteractiveRun<Outcome = RunOutcome<unknown, readonly unknown[]
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
 	/**
-	 * Text passed to the action's `stdout()` so far, joined with newlines like `RunOutcome.stdout`;
+	 * What the action wrote to `stdout` so far, without one final newline like `RunOutcome.stdout`;
 	 * plain unless `raw` is set.
 	 */
 	stdout(): string;
@@ -55,26 +55,34 @@ export function runInteractive<
 	const input = args[0];
 	// SAFETY: the rest tuple puts CaptureOptions second; its generic input element hides that here.
 	const options = args[1] as CaptureOptions | undefined;
-	const stdoutLines: string[] = [];
+	const stdoutChunks: Buffer[] = [];
+	// One decoder across stderr writes, so a character split between two writes reaches the screen whole.
+	const stderrDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
 	const done = withTerminalIO(harness.io, () =>
 		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
 		app
 			.run(path as never, input as never, {
 				env: options?.env,
-				stdout: (text) => {
-					stdoutLines.push(text);
+				stdout: (chunk) => {
+					stdoutChunks.push(Buffer.from(chunk));
 				},
-				stderr: (text) => {
-					// Line-oriented like core's default stderr.
-					output.write(`${text}\n`);
+				stderr: (chunk) => {
+					// A string starts on a character boundary, so bytes still waiting are an incomplete character.
+					output.write(
+						typeof chunk === "string"
+							? stderrDecoder.decode() + chunk
+							: stderrDecoder.decode(chunk, { stream: true }),
+					);
 				},
 			})
 			.then((outcome) => {
+				const rest = stderrDecoder.decode();
+				if (rest) output.write(rest);
 				if (outcome.status === "failed") throw outcome.error;
 				const captured = {
 					...outcome,
-					stdout: captureText([outcome.stdout], options),
-					stderr: captureText([outcome.stderr], options),
+					stdout: captureText(outcome.stdout, options),
+					stderr: captureText(outcome.stderr, options),
 				};
 				// SAFETY: the same Path + input link that types `app.run()` selects this outcome.
 				return captured as Exclude<
@@ -125,7 +133,7 @@ export function runInteractive<
 		type: (text) => harness.type(text),
 		keys: (...namedKeys) => harness.keys(...namedKeys),
 		screen: () => harness.screen(),
-		stdout: () => captureText(stdoutLines, options),
+		stdout: () => captureText(joinChunks(stdoutChunks), options),
 		done,
 	};
 }

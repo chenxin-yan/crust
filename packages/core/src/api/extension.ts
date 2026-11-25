@@ -282,10 +282,14 @@ export interface ExtensionSetupContext<
  * An omitted optional member keeps Core's default for it.
  */
 export interface Renderer {
-	/** A line the Command Action or a Context wrote with `stdout()`. Default: the invocation's stdout. */
-	text(line: string): void;
-	/** A line the Command Action or a Context wrote with `stderr()`. Default: the invocation's stderr. */
-	diag(line: string): void;
+	/**
+	 * What the Command Action or a Context wrote to `stdout`, exactly as written: `stdout(text)`
+	 * arrives as `text` and a newline, `stdout.write(chunk)` as `chunk`. Default: the invocation's
+	 * stdout. Pass it on with `ctx.stdout.write`, not `ctx.stdout`, which adds a newline.
+	 */
+	text: (chunk: string | Uint8Array) => void;
+	/** What the Command Action or a Context wrote to `stderr`, as `text` receives stdout's. Default: the invocation's stderr. */
+	diag: (chunk: string | Uint8Array) => void;
 	/**
 	 * The Command Action's awaited return value, after any `.output()` schema validated it, only
 	 * when the invocation ran an action that completed; called before `postRun`. A throw becomes

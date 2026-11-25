@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, posix, resolve, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
-import { type BuildReport, defineExtensionId, type InvocationIO } from "@crustjs/core";
+import { type BuildReport, defineExtensionId } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
@@ -16,6 +16,7 @@ import { bindToProcessLifetime, killProcessTree } from "@crustjs/utils/process";
 
 import { toBunEnvFileArgs } from "./bundle.ts";
 import { type BuildRunner, resolveBunBuildRunner } from "./compilers.ts";
+import type { LineIO } from "./distribute.ts";
 
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
@@ -65,7 +66,7 @@ export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
 	envFiles: readonly string[],
-	io: InvocationIO,
+	io: LineIO,
 	cwd: string,
 	runner: BuildRunner = resolveBunBuildRunner(),
 	timeoutMs = SNAPSHOT_TIMEOUT_MS,

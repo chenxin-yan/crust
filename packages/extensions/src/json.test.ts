@@ -63,7 +63,10 @@ async function executeWithSignal(app: AnyCrust, argv: string[], signal: AbortSig
 	try {
 		const exitCode = await app.execute({
 			argv,
-			io: { stdout: (line) => stdout.push(line), stderr: (line) => stderr.push(line) },
+			io: {
+				stdout: { write: (chunk) => void stdout.push(String(chunk).replace(/\n$/, "")) },
+				stderr: { write: (chunk) => void stderr.push(String(chunk).replace(/\n$/, "")) },
+			},
 			signal,
 		});
 		return { stdout, stderr, exitCode };
@@ -399,6 +402,28 @@ describe("json", () => {
 			).toEqual({ stdout: "", stderr: "table row 1\ntable row 2", exitCode: 0 });
 		});
 
+		it("keeps held bytes as they were written", async () => {
+			const app = new Crust("app")
+				.extend(json())
+				.output(anything)
+				.action(({ stdout }) => {
+					const reused = Buffer.from("a");
+					stdout.write(reused);
+					reused[0] = 0x62;
+					stdout.write(reused);
+				});
+			// Sinks that decode each write at once, so only json()'s own held list is under test.
+			const stderr: string[] = [];
+			await app.execute({
+				argv: ["--json"],
+				io: {
+					stdout: { write() {} },
+					stderr: { write: (chunk) => void stderr.push(String(chunk)) },
+				},
+			});
+			expect(stderr).toEqual(["a", "b"]);
+		});
+
 		it("writes held text to stderr before the error JSON", async () => {
 			const app = outputAppReturning(() => {
 				throw new Error("boom");
@@ -436,8 +461,10 @@ describe("json", () => {
 					return flags.empty ? undefined : { ok: true };
 				});
 			const io = {
-				stdout: (line: string) => log.push(line),
-				stderr: (line: string) => log.push(`stderr:${line}`),
+				stdout: { write: (chunk: string | Uint8Array) => void log.push(String(chunk).trimEnd()) },
+				stderr: {
+					write: (chunk: string | Uint8Array) => void log.push(`stderr:${String(chunk).trimEnd()}`),
+				},
 			};
 
 			await app.execute({ argv: ["--json"], io });
@@ -624,7 +651,10 @@ describe("json", () => {
 
 			await app.execute({
 				argv: ["--json"],
-				io: { stdout: (line) => log.push(line), stderr: (line) => log.push(`stderr:${line}`) },
+				io: {
+					stdout: { write: (chunk) => void log.push(String(chunk).replace(/\n$/, "")) },
+					stderr: { write: (chunk) => void log.push(`stderr:${String(chunk).replace(/\n$/, "")}`) },
+				},
 			});
 
 			expect(log).toEqual(['{"type":"event","data":1}', "resumed", '{"type":"result","data":2}']);

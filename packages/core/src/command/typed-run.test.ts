@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import { unwrap } from "../../tests/helpers.ts";
+import { lineSink, unwrap } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
@@ -191,10 +191,7 @@ describe("typed programmatic invocation", () => {
 				.flags({ token: { type: "string", env: { name: "CRUST_TEST_TOKEN" }, required: true } })
 				.action(({ flags, stdout }) => stdout(flags.token));
 			const output: string[] = [];
-			const io = {
-				stdout: (text: string) => output.push(text),
-				stderr: (text: string) => output.push(text),
-			};
+			const io = { stdout: lineSink(output), stderr: lineSink(output) };
 			const exitCode = process.exitCode;
 			try {
 				expect(await echo.execute({ argv: [], io })).toBe(0);
@@ -269,7 +266,7 @@ describe("afterDoubleDash arguments", () => {
 	it("splits `run <task> [pkgs...] -- <extra...>` on argv", async () => {
 		const { app, received } = taskRunner();
 		const stderr: string[] = [];
-		const io = { stdout: () => {}, stderr: (line: string) => void stderr.push(line) };
+		const io = { stdout: { write() {} }, stderr: lineSink(stderr) };
 		expect(await app.execute({ argv: ["run", "build", "core", "--", "--watch", "src"], io })).toBe(
 			0,
 		);
@@ -285,9 +282,9 @@ describe("afterDoubleDash arguments", () => {
 		expect(
 			await app.run(["run"], { args: { task: "build", extra: ["--watch"] }, raw: ["x"] }),
 		).toMatchObject({ status: "completed" });
-		expect(await app.execute({ argv: ["run", "build", "--bind"], io: { stdout: () => {} } })).toBe(
-			0,
-		);
+		expect(
+			await app.execute({ argv: ["run", "build", "--bind"], io: { stdout: { write() {} } } }),
+		).toBe(0);
 		expect(received).toEqual([
 			{ args: { task: "build", pkgs: [], extra: ["--watch"] }, rawArgs: ["x"] },
 			{ args: { task: "build", pkgs: [], extra: ["--bound"] }, rawArgs: [] },

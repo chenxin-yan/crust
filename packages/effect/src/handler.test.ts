@@ -384,7 +384,10 @@ describe("handler under execute()", () => {
 			try {
 				const exitCode = app.execute({
 					argv: [],
-					io: { stdout() {}, stderr: (text) => stderr.push(text) },
+					io: {
+						stdout: { write() {} },
+						stderr: { write: (chunk) => void stderr.push(String(chunk)) },
+					},
 					signal: controller.signal,
 				});
 

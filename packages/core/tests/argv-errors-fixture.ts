@@ -1,4 +1,5 @@
 import { Crust } from "../src/index.ts";
+import { lineSink } from "./helpers.ts";
 
 // Shared by argv-runtime-parity.test.ts in-process (Node) and as a Bun subprocess.
 const ARGVS: string[][] = [
@@ -25,7 +26,7 @@ export async function argvErrors(): Promise<string[]> {
 					quiet: { type: "boolean", noNegate: true },
 				})
 				.action(() => {})
-				.execute({ argv, io: { stdout: () => {}, stderr: (text) => lines.push(text) } });
+				.execute({ argv, io: { stdout: { write() {} }, stderr: lineSink(lines) } });
 			errors.push(lines.join("\n"));
 		}
 	} finally {

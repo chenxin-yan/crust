@@ -1,0 +1,63 @@
+---
+title: Terminal I/O
+description: Write text and bytes, read stdin, and ask whether a stream is a terminal.
+---
+
+The Command Action receives the invocation's `stdin`, `stdout`, and `stderr`. Context setups and Extension hooks receive the same streams. They describe the invocation, not the process: under [`run()`](/docs/api/crust#runpath-input-options) and in [tests](#test-it), they are not the process's streams, and they answer for what the test sets up.
+
+Write data on stdout and messages for people on stderr, so `app | jq` and `app > out.json` get only the data.
+
+## Write output
+
+`stdout(text)` writes `text` and a newline. `stdout.write(chunk)` writes text or bytes as they are, with no newline added. Use it for output that is not lines, such as names separated by NUL bytes, a binary file, or a partial line a child process wrote:
+
+<include lang="ts">../../../examples/guide/terminal-io.ts#write</include>
+
+`stderr(text)` and `stderr.write(chunk)` work the same way.
+
+- Outside Windows, each call is one synchronous write to the process's stdout or stderr. Join many short lines into fewer writes when you print a lot.
+- When the reader of stdout goes away, as in `app | head -1`, the next write throws and the run ends with exit code 141; any other failed write to stdout, such as a full disk, fails the run with exit code 1. See [Cancellation](/docs/guide/error-handling#cancellation).
+
+## Ask about the terminal
+
+`stdout.isTTY` says whether stdout is a terminal, and `stdout.columns` gives its width, or `undefined` when it has none, such as a pipe or a file. Print a table for a person and tab-separated values for a script:
+
+<include lang="ts">../../../examples/guide/terminal-io.ts#terminal</include>
+
+`stderr` and `stdin` have `isTTY` too. Under `run()`, `stdout` and `stderr` are never a terminal.
+
+## Read stdin
+
+`stdin.text()` resolves to the rest of the input as UTF-8 text once it ends. Follow the convention that `-`, or no file at all, means stdin, and fail instead of waiting when stdin is a terminal and nobody piped anything:
+
+<include lang="ts">../../../examples/guide/terminal-io.ts#stdin</include>
+
+`stdin.stream()` gives the input chunk by chunk as it arrives, as `Uint8Array` bytes, so a filter can start writing before its input ends:
+
+<include lang="ts">../../../examples/guide/terminal-io.ts#stream</include>
+
+- Both readers stop when the invocation is cancelled, such as by Ctrl+C while waiting for input, and throw the cancellation.
+- Each read continues where the last one stopped. Stopping a `for await` loop early leaves the rest of the input for the next read.
+- A read throws while another reader consumes stdin: an earlier read that has not finished, such as a `stdin.text()` inside a `for await` loop over `stdin.stream()`, or the [`mcp`](/docs/modules/mcp) stdio server, whose protocol messages arrive on the process's stdin.
+- Under `run()`, `stdin` is the process's stdin.
+
+## Page long output
+
+Crust has no pager. On a terminal, pipe the text to `$PAGER` (`less` by default) and print it as it is anywhere else:
+
+<include lang="ts">../../../examples/guide/terminal-io.ts#pager</include>
+
+`LESS=FRX` makes `less` exit at once when the text fits on one screen, keep colors, and leave the text on screen after it quits. Passing the invocation's `signal` stops the pager when the run is cancelled.
+
+## Test it
+
+[`captureExecute()`](/docs/modules/testing#captureexecuteapp-argv) gives the action's streams what a test sets: `stdin` text, and `isTTY` with `columns` to run as if in a terminal of that width.
+
+```ts
+import { captureExecute } from "@crustjs/testing";
+
+await captureExecute(app, ["-"], { stdin: "a\nb\n" });
+await captureExecute(app, [], { isTTY: true, columns: 40 });
+```
+
+To pass your own streams, give `execute({ io })` an `stdin` async iterable and `stdout` and `stderr` objects with a `write(chunk)` method, and optional `isTTY` and `columns`. See [`ExecuteOptions`](/docs/api/types#executeoptions).

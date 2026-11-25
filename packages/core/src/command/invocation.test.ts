@@ -1,13 +1,17 @@
 import { spawnSync } from "node:child_process";
+import { getEventListeners } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { PassThrough, Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { lineSink } from "../../tests/helpers.ts";
+import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import { type AnyCrust, Crust, type CommandDefinition, defineCommand } from "./crust.ts";
@@ -18,7 +22,9 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	const originalExit = process.exit;
 	let exitCalls: Array<number | undefined>;
 	let errorCalls: string[];
-	const io = { stderr: (text: string) => void errorCalls.push(text) };
+	const io = {
+		stderr: { write: (chunk: string | Uint8Array) => lineSink(errorCalls).write(chunk) },
+	};
 	let tempDirs: string[];
 
 	beforeEach(() => {
@@ -303,7 +309,7 @@ describe("Invocation pipeline — snapshot projection", () => {
 		// An unknown flag fails before dispatch builds a context.
 		const originalExitCode = process.exitCode;
 		try {
-			expect(await app.execute({ argv: ["--nope"], io: { stderr: () => {} } })).toBe(2);
+			expect(await app.execute({ argv: ["--nope"], io: { stderr: { write() {} } } })).toBe(2);
 		} finally {
 			process.exitCode = originalExitCode ?? 0;
 		}
@@ -524,7 +530,7 @@ describe("Invocation pipeline — commandPathOf", () => {
 
 		const originalExitCode = process.exitCode;
 		try {
-			await app.execute({ argv: ["nope"], io: { stderr: () => {} } });
+			await app.execute({ argv: ["nope"], io: { stderr: { write() {} } } });
 		} finally {
 			process.exitCode = originalExitCode ?? 0;
 		}
@@ -627,7 +633,7 @@ describe("Invocation pipeline — exit status", () => {
 		const stderr: string[] = [];
 		const exitCode = await app.execute({
 			argv,
-			io: { stdout: (text) => void stdout.push(text), stderr: (text) => void stderr.push(text) },
+			io: { stdout: lineSink(stdout), stderr: lineSink(stderr) },
 		});
 		return { exitCode, processExitCode: process.exitCode, stdout, stderr };
 	}
@@ -769,10 +775,12 @@ describe("Invocation pipeline — output failures", () => {
 		const exitCode = await app.execute({
 			argv: [],
 			io: {
-				stdout: () => {
-					throw failure();
+				stdout: {
+					write() {
+						throw failure();
+					},
 				},
-				stderr: (text) => void stderr.push(text),
+				stderr: lineSink(stderr),
 			},
 		});
 		return { exitCode, stderr };
@@ -797,6 +805,16 @@ describe("Invocation pipeline — output failures", () => {
 			} catch {}
 		});
 		expect(await execute(ignoring, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
+
+		const raw = new Crust("app").action(({ stdout, signal }) => {
+			try {
+				stdout.write(new Uint8Array([0]));
+			} finally {
+				seen.push(signal.reason);
+			}
+		});
+		expect(await execute(raw, stdoutClosed)).toEqual({ exitCode: 141, stderr: [] });
+		expect(seen[1]).toMatchObject({ name: "AbortError", cause: "SIGPIPE" });
 
 		// A writer that bypasses stdout(), such as raw bytes to the process's stdout.
 		// Hooks see the cancellation, and a failing cleanup keeps 141.
@@ -840,7 +858,7 @@ describe("Invocation pipeline — output failures", () => {
 		let aborted: boolean | undefined;
 		const app = new Crust("app").action(({ stdout, signal }) => {
 			try {
-				stdout("line");
+				stdout.write("line");
 			} finally {
 				aborted = signal.aborted;
 			}
@@ -852,6 +870,331 @@ describe("Invocation pipeline — output failures", () => {
 			stderr: ["Error: ENOSPC: no space left on device, write"],
 		});
 		expect(aborted).toBe(false);
+	});
+});
+
+describe("Invocation pipeline — streams", () => {
+	let originalExitCode: typeof process.exitCode;
+	beforeEach(() => {
+		originalExitCode = process.exitCode;
+	});
+	afterEach(() => {
+		process.exitCode = originalExitCode ?? 0;
+	});
+
+	it("writes chunks as they are and answers for the injected streams", async () => {
+		const out: (string | Uint8Array)[] = [];
+		const err: (string | Uint8Array)[] = [];
+		const seen: unknown[] = [];
+		const app = new Crust("app").action(async ({ stdin, stdout, stderr }) => {
+			seen.push(stdin.isTTY, stdout.isTTY, stdout.columns, stderr.isTTY, stderr.columns);
+			const { write } = stdout;
+			write("a\0");
+			write(new Uint8Array([0x62]));
+			stdout(await stdin.text());
+			stderr.write("no newline");
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: {
+				stdin: Readable.from([Buffer.from("piped "), "input"]),
+				stdout: { write: (chunk) => void out.push(chunk), isTTY: true, columns: 120 },
+				stderr: { write: (chunk) => void err.push(chunk) },
+			},
+		});
+		expect(exitCode).toBe(0);
+		expect(seen).toEqual([false, true, 120, false, undefined]);
+		expect(out).toEqual(["a\0", new Uint8Array([0x62]), "piped input\n"]);
+		expect(err).toEqual(["no newline"]);
+	});
+
+	it("passes Renderers each chunk as it was written", async () => {
+		const chunks: unknown[] = [];
+		const render = defineExtension(defineExtensionId("render")).renderer(() => ({
+			text: (chunk) => void chunks.push(chunk),
+			diag: (chunk) => void chunks.push(chunk),
+		}));
+		const app = new Crust("app").extend(render).action(({ stdout, stderr }) => {
+			stdout.write("raw");
+			stdout("line");
+			stderr("note");
+		});
+		await app.execute({ argv: [], io: { stdout: { write() {} }, stderr: { write() {} } } });
+		expect(chunks).toEqual(["raw", "line\n", "note\n"]);
+	});
+
+	it("reports no terminal under run() and captures every chunk", async () => {
+		const live: (string | Uint8Array)[] = [];
+		const app = new Crust("app").action(({ stdout, stderr }) => {
+			stdout.write(new TextEncoder().encode("é".repeat(2)).subarray(0, 3));
+			stdout.write(new TextEncoder().encode("é").subarray(1));
+			const reused = Buffer.from("a");
+			stdout.write(reused);
+			reused[0] = 0x62;
+			stdout.write(reused);
+			stdout(` ${stdout.isTTY} ${stdout.columns} ${stderr.isTTY}`);
+		});
+		const outcome = await app.run([], undefined, { stdout: (chunk) => void live.push(chunk) });
+		expect(outcome.stdout).toBe("ééab false undefined false");
+		expect(live).toHaveLength(5);
+	});
+
+	it("gives Contexts and Extension hooks the invocation's streams", async () => {
+		const seen: unknown[] = [];
+		const terminal = { write() {}, isTTY: true, columns: 90 };
+		const probe = defineContext("probe").setup(({ stdout, stdin }) => {
+			seen.push(stdout.isTTY, stdout.columns, stdin.isTTY);
+		});
+		const hooks = defineExtension(defineExtensionId("hooks")).preRun((ctx) => {
+			seen.push(ctx.stdout.isTTY, ctx.stderr.columns, ctx.stdin.isTTY);
+		});
+		const app = new Crust("app")
+			.provide(probe())
+			.extend(hooks)
+			.action(async ({ ctx }) => {
+				await ctx.probe;
+			});
+		await app.execute({
+			argv: [],
+			io: {
+				stdin: Object.assign(Readable.from([]), { isTTY: true }),
+				stdout: terminal,
+				stderr: terminal,
+			},
+		});
+		expect(seen).toEqual([true, 90, true, true, 90, true]);
+	});
+
+	it("continues each stdin read where the last one stopped", async () => {
+		const lines: string[] = [];
+		const app = new Crust("app").action(async ({ stdin, stdout }) => {
+			for await (const chunk of stdin.stream()) {
+				stdout(new TextDecoder().decode(chunk));
+				break;
+			}
+			stdout(await stdin.text());
+			stdout(`[${await stdin.text()}]`);
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: {
+				stdin: Readable.from(["a", "b", "c"]),
+				stdout: lineSink(lines),
+				stderr: { write() {} },
+			},
+		});
+		expect(exitCode).toBe(0);
+		expect(lines).toEqual(["a", "bc", "[]"]);
+	});
+
+	it("pulls an injected iterable only as a read asks, copying each item", async () => {
+		let pulls = 0;
+		async function* failsOnSecondPull() {
+			pulls++;
+			yield "one";
+			pulls++;
+			throw new Error("second pull failed");
+		}
+		const first: string[] = [];
+		const once = new Crust("app").action(async ({ stdin }) => {
+			for await (const chunk of stdin.stream()) {
+				first.push(new TextDecoder().decode(chunk));
+				break;
+			}
+		});
+		const quiet = { stdout: { write() {} }, stderr: { write() {} } };
+		expect(await once.execute({ argv: [], io: { stdin: failsOnSecondPull(), ...quiet } })).toBe(0);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect({ first, pulls }).toEqual({ first: ["one"], pulls: 1 });
+
+		async function* reusesItsBuffer() {
+			const buffer = Buffer.from("a");
+			yield buffer;
+			buffer[0] = 0x62;
+			yield buffer;
+		}
+		const lines: string[] = [];
+		const read = new Crust("app").action(async ({ stdin, stdout }) => {
+			const chunks: string[] = [];
+			for await (const chunk of stdin.stream()) chunks.push(new TextDecoder().decode(chunk));
+			stdout(chunks.join(","));
+		});
+		const text = new Crust("app").action(async ({ stdin, stdout }) => stdout(await stdin.text()));
+		for (const app of [read, text]) {
+			await app.execute({
+				argv: [],
+				io: { stdin: reusesItsBuffer(), stdout: lineSink(lines), stderr: { write() {} } },
+			});
+		}
+		expect(lines).toEqual(["a,b", "ab"]);
+	});
+
+	it("closes an injected iterable the action left unfinished when the invocation ends", async () => {
+		const readOne = new Crust("app").action(async ({ stdin }) => {
+			for await (const _ of stdin.stream()) break;
+		});
+		const quiet = { stdout: { write() {} }, stderr: { write() {} } };
+		const web = new ReadableStream<string>({
+			start(controller) {
+				controller.enqueue("one");
+				controller.enqueue("two");
+			},
+		});
+		expect(await readOne.execute({ argv: [], io: { stdin: web, ...quiet } })).toBe(0);
+		expect(web.locked).toBe(false);
+
+		let cleanedUp = false;
+		async function* holdsAResource() {
+			try {
+				yield "one";
+				yield "two";
+			} finally {
+				cleanedUp = true;
+			}
+		}
+		expect(await readOne.execute({ argv: [], io: { stdin: holdsAResource(), ...quiet } })).toBe(0);
+		expect(cleanedUp).toBe(true);
+	});
+
+	it("refuses to read an injected Node.js readable another listener consumes", async () => {
+		const source = new PassThrough();
+		const owner: string[] = [];
+		source.on("data", (chunk: Buffer) => owner.push(chunk.toString()));
+		source.write("payload");
+		const errors: string[] = [];
+		const app = new Crust("app").action(async ({ stdin }) => {
+			const text = stdin.text();
+			source.end();
+			await text;
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: source, stdout: { write() {} }, stderr: lineSink(errors) },
+		});
+		expect({ exitCode, errors, owner }).toEqual({
+			exitCode: 1,
+			errors: ["Error: stdin is in use by another reader"],
+			owner: ["payload"],
+		});
+	});
+
+	it("fails a read of an injected Node.js readable destroyed before it ended", async () => {
+		const source = new PassThrough();
+		const errors: string[] = [];
+		const app = new Crust("app").action(async ({ stdin }) => {
+			const text = stdin.text();
+			setTimeout(() => source.destroy(), 10);
+			await text;
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: source, stdout: { write() {} }, stderr: lineSink(errors) },
+		});
+		expect({ exitCode, errors }).toEqual({
+			exitCode: 1,
+			errors: ["Error: stdin closed before it ended"],
+		});
+	});
+
+	it("refuses a stdin read started inside another read", async () => {
+		const lines: string[] = [];
+		const app = new Crust("app").action(async ({ stdin, stdout }) => {
+			for await (const chunk of stdin.stream()) {
+				stdout(new TextDecoder().decode(chunk));
+				await stdin.text().catch((error: Error) => stdout(error.message));
+			}
+		});
+		await app.execute({
+			argv: [],
+			io: {
+				stdin: Readable.from(["a", "b"]),
+				stdout: lineSink(lines),
+				stderr: { write() {} },
+			},
+		});
+		expect(lines).toEqual([
+			"a",
+			"stdin is in use by another reader",
+			"b",
+			"stdin is in use by another reader",
+		]);
+	});
+
+	it("stops reading stdin with the invocation's cancellation", async () => {
+		const controller = new AbortController();
+		const stdin = new PassThrough();
+		stdin.write("first");
+		const read: string[] = [];
+		const app = new Crust("app").action(async ({ stdin }) => {
+			for await (const chunk of stdin.stream()) {
+				read.push(new TextDecoder().decode(chunk));
+				controller.abort();
+			}
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin, stdout: { write() {} }, stderr: { write() {} } },
+			signal: controller.signal,
+		});
+		expect(exitCode).toBe(130);
+		expect(read).toEqual(["first"]);
+	});
+
+	it("cancels a read of an injected iterable whose pull never settles", async () => {
+		const controller = new AbortController();
+		// A generator queues `return()` behind the pull that never settles.
+		async function* neverSettles() {
+			await new Promise(() => {});
+			yield "never";
+		}
+		const app = new Crust("app").action(async ({ stdin }) => {
+			const text = stdin.text();
+			controller.abort();
+			await text;
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: neverSettles(), stdout: { write() {} }, stderr: { write() {} } },
+			signal: controller.signal,
+		});
+		expect(exitCode).toBe(130);
+	});
+
+	it("lets a caller abort end the close of an injected iterable whose return never settles", async () => {
+		const controller = new AbortController();
+		// Like a `tee()` branch, whose `return()` waits for its sibling.
+		const source: AsyncIterable<string> = {
+			[Symbol.asyncIterator]: () => ({
+				next: async () => ({ done: false, value: "chunk" }),
+				return: () => new Promise(() => {}),
+			}),
+		};
+		const app = new Crust("app").action(async ({ stdin }) => {
+			for await (const _ of stdin.stream()) break;
+			setTimeout(() => controller.abort(), 10);
+		});
+		const exitCode = await app.execute({
+			argv: [],
+			io: { stdin: source, stdout: { write() {} }, stderr: { write() {} } },
+			signal: controller.signal,
+		});
+		// The action had completed before the abort.
+		expect(exitCode).toBe(0);
+	});
+
+	it("leaves no listener on the invocation's signal after execute()", async () => {
+		// One caller signal across many runs would otherwise keep every finished invocation alive.
+		const caller = new AbortController();
+		let signal: AbortSignal | undefined;
+		const app = new Crust("app").action((ctx) => {
+			signal = ctx.signal;
+		});
+		await app.execute({
+			argv: [],
+			io: { stdout: { write() {} }, stderr: { write() {} } },
+			signal: caller.signal,
+		});
+		expect(signal && getEventListeners(signal, "abort")).toEqual([]);
 	});
 });
 

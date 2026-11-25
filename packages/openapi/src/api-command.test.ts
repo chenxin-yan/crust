@@ -706,18 +706,21 @@ describe("api <path>", () => {
 		});
 	});
 
-	it("fails after the request when a binary body cannot be written to captured output", async () => {
+	it("writes a binary body to captured output, and refuses it when that output is a terminal", async () => {
+		const bytes = new Uint8Array([0x50, 0x4b, 0xff]);
 		stubFetch(
-			() =>
-				new Response(new Uint8Array([0x50, 0x4b, 0xff]), {
-					headers: { "content-type": "application/octet-stream" },
-				}),
+			() => new Response(bytes, { headers: { "content-type": "application/octet-stream" } }),
 		);
 
 		expect(await captureExecute(buildApp(), ["api", "/file.zip"])).toEqual({
+			stdout: "PK\uFFFD",
+			stderr: "",
+			exitCode: 0,
+		});
+		expect(await captureExecute(buildApp(), ["api", "/file.zip"], { isTTY: true })).toEqual({
 			stdout: "",
 			stderr:
-				"Error: api: the response body is binary (application/octet-stream); its bytes go only to the process's stdout, not to captured output",
+				"Error: api: the response body is binary (application/octet-stream); redirect or pipe stdout to save it instead of printing it to the terminal",
 			exitCode: 1,
 		});
 	});

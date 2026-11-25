@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { contextSources, defineContext, type ContextBag } from "../api/context.ts";
 import { defineFlag } from "../api/flags.ts";
 import type { CaughtError } from "../errors.ts";
+import type { InvocationIO } from "../types.ts";
 import { createContextResolver } from "./context-resolver.ts";
 
 /** A resolver with silent IO and a signal that never aborts. */
@@ -14,7 +15,8 @@ function resolverFor(
 	return createContextResolver(
 		contexts,
 		flagContexts,
-		{ stdout: () => {}, stderr: () => {} },
+		// SAFETY: no Context setup in these tests reads or writes the streams.
+		{} as InvocationIO,
 		disposal,
 		new AbortController().signal,
 	);

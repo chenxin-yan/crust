@@ -205,7 +205,25 @@ For parser integrations and tooling. `ParseResult<A, F>` is the syntax-parsed in
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationIO" />
 
-The same callbacks are passed to the Command Action and every Context setup in the invocation.
+The same streams are passed to the Command Action, every Context setup, and every Extension hook in the invocation; Extension hooks write past the [`Renderer`](#renderer). See [Terminal I/O](/docs/guide/terminal-io).
+
+### `OutputStream`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="OutputStream" />
+
+`stdout` and `stderr`. Calling it writes a line; `write` is a standalone function, so `const { write } = stdout` works. `isTTY` and `columns` answer for the invocation's stream: the process's under `execute()`, the caller's [`OutputSink`](#outputsink) when `execute({ io })` replaces it, and no terminal under `run()`.
+
+### `InputStream`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="InputStream" />
+
+`stdin`: the process's stdin, or the async iterable passed as `execute({ io: { stdin } })`. A read stops with the invocation's `signal.reason` once it is aborted, and continues where the last read stopped.
+
+### `OutputSink`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="OutputSink" />
+
+What `execute({ io: { stdout, stderr } })` takes in place of the process's stream. It receives each write as it was made; `stdout(text)` arrives as one chunk ending in a newline.
 
 ### `InvocationOptions`
 
@@ -417,7 +435,7 @@ See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook t
 
 Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) selector. It receives:
 
-- the Command Action's and Contexts' `stdout()` lines as `text`, and `stderr()` lines as `diag`;
+- what the Command Action and Contexts write to `stdout` as `text`, and to `stderr` as `diag`, one chunk per write exactly as written: `stdout(text)` arrives as `text` and a newline, `stdout.write(chunk)` as `chunk`. Pass a chunk on with `ctx.stdout.write`, not `ctx.stdout`, which would add a newline;
 - the completed action's `result`;
 - a `stream` signal and each `event` of an [async generator action](/docs/guide/commands#stream-events);
 - in `execute()` only, an `error` no `onError` hook claimed, and each `cleanup` failure Core would otherwise write as `Cleanup failed:` lines, including cleanup that fails while a cancellation unwinds.

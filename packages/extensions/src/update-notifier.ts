@@ -5,6 +5,7 @@
 import {
 	type Extension,
 	type ExtensionId,
+	type OutputStream,
 	type RootMetaKey,
 	defineExtension,
 	defineExtensionId,
@@ -150,8 +151,8 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 // ────────────────────────────────────────────────────────────────────────────
 
 /** CI runs, redirected stderr, and the user's opt-out skip the check entirely. */
-async function isUpdateCheckSuppressed(): Promise<boolean> {
-	if (process.env.NO_UPDATE_NOTIFIER || !process.stderr?.isTTY) return true;
+async function isUpdateCheckSuppressed(stderr: OutputStream): Promise<boolean> {
+	if (process.env.NO_UPDATE_NOTIFIER || !stderr.isTTY) return true;
 	// Loaded lazily so importing the package does not load `@crustjs/utils`.
 	return (await import("@crustjs/utils/terminal")).isCI();
 }
@@ -186,7 +187,7 @@ export interface UpdateNotifierExtension {
  * - Network, cache, and parsing errors are silently swallowed.
  * - The check is skipped, with no cache or network access, when `CI` is set
  *   (other than `"0"` or `"false"` in any letter case), when `NO_UPDATE_NOTIFIER` is non-empty, or
- *   when `process.stderr` is not a TTY.
+ *   when the invocation's stderr is not a terminal.
  * - Update notices are intentionally written to the invocation's stderr callback.
  * - Duplicate notifications for the same version are suppressed.
  *
@@ -228,7 +229,7 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 		const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version!;
 
 		try {
-			if (await isUpdateCheckSuppressed()) return;
+			if (await isUpdateCheckSuppressed(context.stderr)) return;
 			// The registry check, cache, and notice (with @crustjs/style) load only when a check runs.
 			const { runUpdateCheck } = await import("./update-notifier-check.ts");
 			await runUpdateCheck({

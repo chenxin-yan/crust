@@ -154,7 +154,7 @@ Core decides when output happens; one Extension can decide how. `.renderer(selec
 
 | Member            | Receives                                                                                                      |
 | ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| `text`, `diag`    | Each line the action or a Context writes with `stdout()` and `stderr()`                                       |
+| `text`, `diag`    | Each chunk the action or a Context writes to `stdout` and `stderr`, newline included                          |
 | `result`          | The action's return value, after any `.output()` schema validated it, before `postRun`                        |
 | `stream`, `event` | A signal that the action is an [async generator](/docs/guide/commands#stream-events), then each yielded value |
 | `error`           | In `execute()` only, a failure no `onError` hook claimed; never a cancellation                                |

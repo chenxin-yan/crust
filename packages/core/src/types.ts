@@ -8,19 +8,68 @@ import type { IsClosedName, IsStaticTuple, IsUnion } from "./validation/shared.t
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
 
-/** Injectable output callbacks threaded through one invocation. */
-export interface InvocationIO {
-	/** Write a line of standard output (injectable text callback) */
-	stdout: (text: string) => void;
-	/** Write a line of diagnostic output (injectable text callback) */
-	stderr: (text: string) => void;
+/**
+ * One invocation's standard output or standard error. Call it to write `text` and a newline.
+ * `isTTY` and `columns` describe the invocation's stream, not the process's: under `run()` and
+ * captured `execute()` output, the stream is no terminal unless the caller says so.
+ */
+export interface OutputStream {
+	/** Write `text` and a newline. */
+	(text: string): void;
+	/** Write text or bytes as they are, adding no newline. */
+	readonly write: (chunk: string | Uint8Array) => void;
+	/** Whether the stream is a terminal. */
+	readonly isTTY: boolean;
+	/** The terminal's width in columns; `undefined` when the stream has none, such as a pipe or a file. */
+	readonly columns: number | undefined;
 }
 
 /**
- * Caller options for one programmatic `run()` invocation: IO callbacks, action events, and cancellation.
- * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
+ * One invocation's standard input. Each read continues where the last one stopped, and throws
+ * the invocation's `signal.reason` once it is cancelled, such as by Ctrl-C while waiting for input.
+ * A read throws while another reader consumes the stream, such as an MCP stdio server.
  */
-export interface InvocationOptions<Event = unknown> extends Partial<InvocationIO> {
+export interface InputStream {
+	/** Whether the stream is a terminal. */
+	readonly isTTY: boolean;
+	/** The rest of the input as UTF-8 text, once it ends. */
+	text(): Promise<string>;
+	/** The rest of the input, chunk by chunk as it arrives. */
+	stream(): AsyncIterable<Uint8Array>;
+}
+
+/** One invocation's standard streams, as the Command Action, Context setups, and Extension hooks receive them. */
+export interface InvocationIO {
+	readonly stdin: InputStream;
+	/** What the command produces. */
+	readonly stdout: OutputStream;
+	/** Messages for people: progress, warnings, and errors. */
+	readonly stderr: OutputStream;
+}
+
+/** An output stream an `execute()` caller passes instead of the process's. A Node.js writable stream fits. */
+export interface OutputSink {
+	/**
+	 * Receives each write as it was made: `stdout(text)` arrives as one chunk, `text` and a newline.
+	 * A sink that keeps a byte chunk must copy it, since the writer may reuse its buffer.
+	 */
+	readonly write: (chunk: string | Uint8Array) => void;
+	/** Read on each `isTTY` access; absent means no terminal. */
+	readonly isTTY?: boolean | undefined;
+	/** Read on each `columns` access. */
+	readonly columns?: number | undefined;
+}
+
+/**
+ * Caller options for one programmatic `run()` invocation: output callbacks, action events, and cancellation.
+ * Typed `run()` sets `Event` to the values the selected command's async generator action yields.
+ * Its output streams are no terminal, and its `stdin` is the process's.
+ */
+export interface InvocationOptions<Event = unknown> {
+	/** Receives each stdout write live, as it was made: `stdout(text)` arrives as `text` and a newline. */
+	stdout?: (chunk: string | Uint8Array) => void;
+	/** Receives each stderr write live, as it was made. */
+	stderr?: (chunk: string | Uint8Array) => void;
 	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
 	signal?: AbortSignal;
 	/**
@@ -49,22 +98,32 @@ export interface InvocationOptions<Event = unknown> extends Partial<InvocationIO
  * same one, relayed by a parent process such as `npm run` or `npx`, or sent again by a
  * process-group kill.
  *
- * On macOS and Linux, a failed write to the default stdout throws from `stdout()`. Once the
- * reader is gone (`cli | head`), it throws an `AbortError` whose `cause` is `"SIGPIPE"` and
- * aborts `ctx.signal` with it: the run ends silently with `141` (128 + SIGPIPE), whatever the
- * action did, without a re-raise. Any other error (`ENOSPC` from `cli > /dev/full`) is thrown
- * as it is and fails the run like any error. A failed write to the default stderr is ignored.
+ * On macOS and Linux, a failed write to the default stdout throws from `stdout()` and
+ * `stdout.write()`. Once the reader is gone (`cli | head`), it throws an `AbortError` whose
+ * `cause` is `"SIGPIPE"` and aborts `ctx.signal` with it: the run ends silently with `141`
+ * (128 + SIGPIPE), whatever the action did, without a re-raise. Any other error (`ENOSPC` from
+ * `cli > /dev/full`) is thrown as it is and fails the run like any error. A failed write to the
+ * default stderr is ignored.
  */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
 	argv?: readonly string[];
 	/**
-	 * Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). On macOS and
-	 * Linux, omitted callbacks write each line synchronously to file descriptor 1 or 2, so
-	 * patching `process.stdout.write` does not capture them. Windows writes through
-	 * `process.stdout` / `process.stderr`.
+	 * Streams that replace the process's, such as in in-process tests; each one omitted stays the
+	 * process's. `stdin` takes any async iterable of text or bytes, such as a Node.js readable
+	 * stream; its `isTTY` answers `stdin.isTTY`. An iterable the action did not read to its end is
+	 * closed when the invocation ends (its `return()` is called); a Node.js readable is left open
+	 * and paused. Setting any of them, `stdin` alone included, runs the invocation in process: a
+	 * cancelling signal only sets the exit code and never re-raises.
+	 * On macOS and Linux, the process's stdout and stderr are written synchronously to file
+	 * descriptor 1 or 2, so patching `process.stdout.write` does not capture them. Windows writes
+	 * through `process.stdout` / `process.stderr`.
 	 */
-	io?: Partial<InvocationIO>;
+	io?: {
+		stdin?: AsyncIterable<string | Uint8Array> & { readonly isTTY?: boolean | undefined };
+		stdout?: OutputSink;
+		stderr?: OutputSink;
+	};
 	/**
 	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`
 	 * with the same reason. If work throws that reason, an `AbortError` exits `130`
