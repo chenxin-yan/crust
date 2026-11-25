@@ -108,7 +108,15 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		);
 		for (const child of [...model.children].sort(byName)) {
 			lines.push(`.It Nm ${commandLabel(child)}`);
-			if (child.description) lines.push(...bodyLines(child.description.trim()));
+			const body = formatDescription(
+				child.description?.trim(),
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				child.deprecated,
+			);
+			if (body) lines.push(...bodyLines(body));
 		}
 		lines.push(".El");
 	}
@@ -125,6 +133,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				flag.choices,
 				undefined,
 				flag.env,
+				flag.deprecated,
 			);
 			if (body) lines.push(...bodyLines(body));
 		}

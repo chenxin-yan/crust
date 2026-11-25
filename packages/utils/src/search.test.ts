@@ -147,12 +147,23 @@ describe("commandSearchItem", () => {
 				flags: {
 					dryRun: { description: "Print the plan only" },
 					json: { description: "Print JSON", extension: "crust:json" },
+					legacy: { description: "Old behaviour", hidden: true },
+					scope: { flags: { all: { description: "Every key" }, mine: { hidden: true } } },
 				},
 			}),
 		).toEqual({
 			names: ["keys", "rotate", "rotate", "roll"],
 			descriptions: ["Rotate an API key"],
-			details: ["id", "Key to rotate", "note", undefined, "dryRun", "Print the plan only"],
+			details: [
+				"id",
+				"Key to rotate",
+				"note",
+				undefined,
+				"dryRun",
+				"Print the plan only",
+				"all",
+				"Every key",
+			],
 		});
 	});
 });

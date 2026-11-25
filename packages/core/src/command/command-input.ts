@@ -1,4 +1,4 @@
-import { type JsonValue, parseJsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonValue, parseJsonValue } from "@crustjs/utils/json";
 
 import { CrustError } from "../errors.ts";
 import { coerceUrl } from "../parsing/coercers.ts";
@@ -47,6 +47,8 @@ function valueSchema(def: ArgSnapshot | FlagSnapshot): CommandInputPropertySchem
 			};
 		case "boolean":
 			return { type: "boolean" };
+		case "exclusive":
+			return exclusiveSchema(def.flags ?? {});
 		case "string":
 		case "path":
 		// Only schema-backed args omit `type`; custom `parse` and schemas without a
@@ -54,6 +56,34 @@ function valueSchema(def: ArgSnapshot | FlagSnapshot): CommandInputPropertySchem
 		case undefined:
 			return { type: "string" };
 	}
+}
+
+/** One object per listed member: `{ flag, value }`, or `{ flag }` for a boolean. */
+function exclusiveSchema(
+	members: Readonly<Record<string, FlagSnapshot>>,
+): CommandInputPropertySchema {
+	return {
+		oneOf: Object.entries(members)
+			.filter(([, member]) => member.hidden !== true)
+			.map(([flag, member]) => {
+				const { description, deprecated, ...value } = propertySchema(member, false);
+				const boolean = member.type === "boolean";
+				return {
+					type: "object",
+					...(description === undefined ? {} : { description }),
+					...(deprecated === undefined ? {} : { deprecated }),
+					properties: { flag: { const: flag }, ...(boolean ? {} : { value }) },
+					required: boolean ? ["flag"] : ["flag", "value"],
+					additionalProperties: false,
+				};
+			}),
+	};
+}
+
+/** Whether an `env` binding, or a group member's, may supply the definition. */
+function hasEnv(def: ArgSnapshot | FlagSnapshot): boolean {
+	if (!("negatable" in def)) return false;
+	return def.env !== undefined || Object.values(def.flags ?? {}).some(hasEnv);
 }
 
 /** Keywords whose keys are names; only their values are schemas. */
@@ -137,6 +167,7 @@ function propertySchema(
 		...schema,
 		...(description === undefined ? {} : { description }),
 		...(defaultValue === undefined || "default" in schema ? {} : { default: defaultValue }),
+		...("deprecated" in def && def.deprecated !== undefined && { deprecated: true }),
 	};
 }
 
@@ -177,18 +208,25 @@ export function commandInputSchema(
 	// which `in` and plain assignment would confuse with Object.prototype.
 	const properties: Record<string, CommandInputPropertySchema> = Object.create(null);
 	const required: string[] = [];
-	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean) => {
+	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean, listed: boolean) => {
 		if (Object.hasOwn(properties, name)) {
 			throw new Error(
 				`Command "${formatPath(path)}" declares "${name}" more than once across args and flags; command input is one flat object`,
 			);
 		}
+		if (!listed) return;
 		properties[name] = propertySchema(def, list);
-		if (def.required === true && !("env" in def && def.env)) required.push(name);
+		if (def.required === true && !hasEnv(def)) required.push(name);
 	};
-	for (const arg of command.args) claim(arg.name, arg, arg.variadic !== undefined);
+	for (const arg of command.args) claim(arg.name, arg, arg.variadic !== undefined, true);
 	for (const [name, flag] of commandInputFlags(command)) {
-		claim(name, flag, flag.multiple === true);
+		// A hidden flag is still input, so it collides with an argument; it is only left unpublished,
+		// as is a group with no listed member (`oneOf: []` is not a valid schema).
+		const listed =
+			flag.hidden !== true &&
+			(flag.flags === undefined ||
+				Object.values(flag.flags).some((member) => member.hidden !== true));
+		claim(name, flag, flag.multiple === true, listed);
 	}
 	return required.length === 0
 		? { type: "object", properties }
@@ -229,6 +267,18 @@ function isString(value: JsonValue): value is string {
 	return typeof value === "string";
 }
 
+/** A group's `{ flag, value }`, with a `url` member's string as a `URL`. */
+function groupInput(
+	members: Readonly<Record<string, FlagSnapshot>>,
+	given: JsonValue,
+): RunInputValue {
+	if (!isJsonObject(given)) return given;
+	const { flag, value } = given;
+	if (typeof flag !== "string" || typeof value !== "string") return given;
+	if (!Object.hasOwn(members, flag) || members[flag]!.type !== "url") return given;
+	return { ...given, flag, value: coerceUrl(value, `--${flag}`) };
+}
+
 /**
  * Split flat JSON command input (the shape {@link commandInputSchema}
  * describes) into structured `run()` input. Arg names fill `args`; any other
@@ -267,11 +317,14 @@ export function parseCommandInput(
 		}
 		const label = isArg ? `<${name}>` : `--${name}`;
 		const toUrl = (item: JsonValue) => (isString(item) ? coerceUrl(item, label) : item);
+		const members = isArg ? undefined : command.flags[name]?.flags;
 		(isArg ? args : flags)[name] = urlFields.includes(name)
 			? Array.isArray(given)
 				? given.map(toUrl)
 				: toUrl(given)
-			: given;
+			: members
+				? groupInput(members, given)
+				: given;
 	}
 	return { args, flags };
 }

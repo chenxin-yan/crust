@@ -187,6 +187,8 @@ $ PORT=abc serve
 Error: Expected a number for --port (from $PORT).
 ```
 
+One exception: a command-line value Crust rejects that starts with `=`, as in `-t=vue`, is shown without the `=` in a hint (`Write -t vue or --template=vue.`). A value from the environment is never shown.
+
 Tokens Crust cannot match to an argument or flag, such as an unknown command or an extra positional argument, are echoed so a typo is visible. Text you supply is printed as written: errors thrown by a custom `parse` and Standard Schema issue messages are yours to keep free of values.
 
 See the [errors reference](/docs/api/errors) for every code, its `details`, and where failures propagate.

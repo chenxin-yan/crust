@@ -300,6 +300,22 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).not.toContain(process.env.HOME as string);
 	});
 
+	it("marks deprecated flags and subcommands, and leaves hidden flags out", async () => {
+		const app = new Crust("demo", { description: "Demo." })
+			.flags({
+				old: { type: "string", description: "Old", deprecated: "Use --new." },
+				secret: { type: "boolean", hidden: true },
+			})
+			.add(defineCommand("scan", { deprecated: "Use scout." }, (c) => c.action(() => {})))
+			.action(() => {});
+
+		const mdoc = renderManPageMdoc({ root: await app.snapshot(), section: 1 });
+
+		expect(mdoc).toContain("Old [deprecated: Use --new.]");
+		expect(mdoc).toContain("[deprecated: Use scout.]");
+		expect(mdoc).not.toContain("secret");
+	});
+
 	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {
 		const app = new Crust("demo", { description: "Demo." })
 			.args({

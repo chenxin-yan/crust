@@ -428,7 +428,15 @@ function renderSubcommandLinks(node: CommandDocumentation, filePath: string): st
 	for (const child of sortedChildren(node)) {
 		const childPath = commandFilePath(child);
 		const childRelative = relativePath(filePath, childPath);
-		const desc = child.description ? ` - ${child.description}` : "";
+		const text = formatDescription(
+			child.description,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			child.deprecated,
+		);
+		const desc = text ? ` - ${text}` : "";
 		lines.push(`- [\`${normalizeName(child.name)}\`](${childRelative})${desc}`);
 	}
 
@@ -489,6 +497,7 @@ function formatFieldDescription(field: DocumentationArg | DocumentationFlag): st
 			field.choices,
 			(annotation) => `\`${annotation}\``,
 			flag?.env,
+			flag?.deprecated,
 		) || "-"
 	);
 }

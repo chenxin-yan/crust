@@ -14,7 +14,7 @@ import {
 	type UnknownKeysBrand,
 } from "@crustjs/core/tooling";
 
-type FlagOnlyKey = "short" | "aliases" | "negatable" | "hidden" | "env";
+type FlagOnlyKey = "short" | "aliases" | "negatable" | "hidden" | "deprecated" | "requires" | "env";
 
 // `?: never`, not just Omit: a generic `V extends EnvVarsDef` would admit them as excess keys.
 type WithoutFlagOnlyKeys<D> = D extends unknown
@@ -23,10 +23,10 @@ type WithoutFlagOnlyKeys<D> = D extends unknown
 
 /**
  * One environment variable: the {@link FlagDef} vocabulary without argv-only
- * keys or the argv-only `count` type. Omitted per variant, so
+ * keys or the argv-only `count` and `exclusive` types. Omitted per variant, so
  * `type`/`multiple`/`schema` constraints hold; the argv-only keys are typed `never`.
  */
-export type EnvVarDef = WithoutFlagOnlyKeys<Exclude<FlagDef, { type: "count" }>>;
+export type EnvVarDef = WithoutFlagOnlyKeys<Exclude<FlagDef, { type: "count" | "exclusive" }>>;
 
 /** Environment variable definitions keyed by literal variable name. */
 export type EnvVarsDef = Record<string, EnvVarDef>;

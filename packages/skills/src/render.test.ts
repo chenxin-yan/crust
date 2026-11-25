@@ -652,6 +652,22 @@ describe("renderSkill", () => {
 			);
 		});
 
+		it("marks deprecated flags and leaves hidden flags out", async () => {
+			const cmd = makeCommand({
+				meta: { name: "serve" },
+				flags: {
+					old: { type: "string", description: "Old", deprecated: "Use --new." },
+					secret: { type: "boolean", hidden: true },
+				},
+				run() {},
+			});
+
+			const serve = expectTextContent(findFile(await render(cmd), "commands/serve.md"));
+
+			expect(serve).toContain("| `--old` | string | No | Old `[deprecated: Use --new.]` |");
+			expect(serve).not.toContain("secret");
+		});
+
 		it("formats defaults like Core help and displays other value types as strings", async () => {
 			const schemaArg = {
 				name: "target",

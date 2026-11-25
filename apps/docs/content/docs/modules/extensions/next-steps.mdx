@@ -49,16 +49,17 @@ After the invocation completes or fails, `nextSteps()` prints a `Next steps:` bl
 
 Each step prints as a shell-quoted command line built from the target command's [Command Snapshot](/docs/api/types#commandsnapshot): flags first, then positional arguments in declaration order.
 
-| Input                                                                         | Printed as                                                                  |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| flag value                                                                    | `--name value`, or `--name=value` when the value starts with `-`            |
-| boolean `true` / `false`                                                      | `--name` / `--no-name`                                                      |
-| `count` flag `n`                                                              | `--name` repeated `n` times                                                 |
-| `multiple` flag or variadic argument array                                    | repeated values                                                             |
-| number                                                                        | text; `-0` prints as written, and a number argv would reject skips the step |
-| `json` value                                                                  | JSON, strings included: `"hello"` prints as `'"hello"'`                     |
-| positionals, when the command has subcommands or one starts with `-`          | after `--`, so no value is routed as a subcommand                           |
-| [`"afterDoubleDash"`](/docs/guide/arguments-and-flags#only-after---) argument | after `--`; the other positionals stay before `--`                          |
+| Input                                                                                     | Printed as                                                                  |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| flag value                                                                                | `--name value`, or `--name=value` when the value starts with `-`            |
+| boolean `true` / `false`                                                                  | `--name` / `--no-name`                                                      |
+| [exclusive group](/docs/guide/arguments-and-flags#one-of-several-flags) `{ flag, value }` | the member flag: `--member value`, or `--member` for `{ flag }`             |
+| `count` flag `n`                                                                          | `--name` repeated `n` times                                                 |
+| `multiple` flag or variadic argument array                                                | repeated values                                                             |
+| number                                                                                    | text; `-0` prints as written, and a number argv would reject skips the step |
+| `json` value                                                                              | JSON, strings included: `"hello"` prints as `'"hello"'`                     |
+| positionals, when the command has subcommands or one starts with `-`                      | after `--`, so no value is routed as a subcommand                           |
+| [`"afterDoubleDash"`](/docs/guide/arguments-and-flags#only-after---) argument             | after `--`; the other positionals stay before `--`                          |
 
 ### Skipped steps
 
@@ -73,6 +74,7 @@ A step is skipped, with a `nextSteps():` note on stderr, when:
 - a repeatable flag value is empty or contains the flag's `delimiter` (argv would split or drop it);
 - a number value is not finite, a fraction for an `integer`, or outside `min`/`max` (argv rejects it);
 - a `json` value would change through JSON: a non-finite number, `-0`, `undefined`, or anything else that is not plain JSON data;
+- an exclusive group's value names none of its member flags, no value for a member that takes one, a value for a boolean member, or a key other than `flag` and `value`;
 - a boolean flag value is not a boolean;
 - a boolean flag that is not negatable but has an `env` binding or is `required` is given `false` (the variable may turn it on, or the command fails without the flag).
 

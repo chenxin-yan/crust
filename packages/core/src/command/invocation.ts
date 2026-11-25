@@ -863,6 +863,38 @@ interface ActionEventStream {
 	events?: unknown[];
 }
 
+/** One stderr warning for each deprecated command on the route and each deprecated flag argv gave. */
+function warnDeprecated(
+	root: CommandNode,
+	route: CommandRoute,
+	parsed: ArgvParseResult,
+	stderr: OutputStream,
+): void {
+	let node = root;
+	for (const [index, name] of route.commandPath.entries()) {
+		if (index > 0) node = node.subCommands[name]!;
+		const { deprecated } = node.meta;
+		if (deprecated !== undefined) {
+			stderr(
+				`Warning: command "${route.commandPath.slice(0, index + 1).join(" ")}" is deprecated. ${deprecated}`,
+			);
+		}
+	}
+	for (const [name, def] of Object.entries(route.command.effectiveFlags)) {
+		if (parsed.sources.flags[name] !== "argv") continue;
+		const value = parsed.flags[name];
+		// A group's member is the flag given.
+		const member =
+			def.flags && typeof value === "object" && value !== null && "flag" in value
+				? String(value.flag)
+				: undefined;
+		const deprecated = member === undefined ? def.deprecated : def.flags?.[member]?.deprecated;
+		if (deprecated !== undefined) {
+			stderr(`Warning: flag "--${member ?? name}" is deprecated. ${deprecated}`);
+		}
+	}
+}
+
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
 	input: InvocationInput,
@@ -887,6 +919,7 @@ async function dispatch(
 			? resolveArgvInput(rootNode, input.argv)
 			: resolveStructuredInput(rootNode, input.path, input.input);
 	const resolvedNode = route.command;
+	if ("argv" in input) warnDeprecated(rootNode, route, parsed, output.io.stderr);
 	// `bindInput` replaces this; hooks and `terminal()` read it live.
 	let bound = parsed;
 	// Set by the action's `exitCode(n)`; the last call wins.

@@ -307,7 +307,54 @@ $ serve --tag -nightly
 Error: Missing value for flag "--tag"; to pass a value starting with "-", write --tag=<value>
 ```
 
-Attach a dash-leading flag value with `=`. For a positional argument, pass it after `--`, as in `seek -- -5`: POSIX treats every token after `--` as an operand, even one that starts with `-`; see [Words after `--`](#words-after---). Arguments before a [`variadic: "afterDoubleDash"`](#only-after---) argument read nothing after `--`, so give them such values through a flag instead.
+Attach a dash-leading flag value with `=`, as Node.js `util.parseArgs` and argparse require: a separate word that starts with `-` more likely means a forgotten value. The exception is a negative number for an `integer` or `number` flag, so `head -n -5` reads `-5`. For a positional argument, pass it after `--`, as in `seek -- -5`: POSIX treats every token after `--` as an operand, even one that starts with `-`; see [Words after `--`](#words-after---). Arguments before a [`variadic: "afterDoubleDash"`](#only-after---) argument read nothing after `--`, so give them such values through a flag instead.
+
+A short flag's attached value is everything after the letter, `=` included, as in POSIX tools, `util.parseArgs`, and Commander: `cut -d=` splits on `=`. So `-t=vue` gives `--template` the value `=vue`, and when that value is rejected the error says what to write instead:
+
+```sh
+$ create -t=vue
+Error: Invalid value for --template. Expected one of: vue, react. Write -t vue or --template=vue.
+$ create -D=1
+Error: Flag "-D" does not take a value.
+```
+
+### One of several flags
+
+<include lang="ts" meta='title="src/deploy.ts" twoslash'>
+  ../../../examples/guide/flags-groups.ts
+</include>
+
+```sh
+$ deploy --org-id acme
+deploying to acme
+$ deploy --all --org-id acme
+Error: Flags "--all" and "--org-id" cannot be used together
+$ deploy
+Error: Missing one of the required flags "--org-id", "--all"
+$ DEPLOY_ORG_ID=acme deploy --all
+deploying to every org
+```
+
+`type: "exclusive"` declares mutually exclusive flags as one entry. Its `flags` are the members, each a single-value flag with its own spellings; usage shows the group as `(--org-id <string> | --all)`.
+
+- **Value:** the entry's key holds `{ flag, value }` for the member given, or `{ flag }` for a boolean member, so a `switch` on `flag` narrows `value`. Typed [`run()`](/docs/api/crust#runpath-input-options) takes the same shape under `flags`: `{ flags: { scope: { flag: "org-id", value: "acme" } } }`. `--input` and MCP take it under the group's key in their flat object: `{ "scope": { "flag": "org-id", "value": "acme" } }`.
+- **Count:** without `required`, at most one member may be given and an absent group is `undefined`; with `required: true`, exactly one. Two members, or none when required, is a usage error (exit status 2).
+- **Sources:** compared level by level. The first of the command line and the environment where any member has a value decides, so `--all` above wins over `DEPLOY_ORG_ID`; two members' variables both set is an error naming both. A boolean member's variable set to a false word counts as unset. Members take no `default`, `required`, `negatable`, `multiple`, or `requires`.
+- **Names:** member names share the command's flag namespace with the group's key and every other flag; a collision throws a `DEFINITION` error when the CLI runs from source or in `crust build`. The key itself is no command-line spelling.
+
+`requires` lists flags of the same record that a flag needs: above, `--jq` without `--json` is a usage error. A required flag counts as given from the command line, the environment, or typed input, but not from its `default`, and a boolean's `false` doesn't count. Requiring an exclusive group needs any one of its members. TypeScript checks that each name is a flag of the record.
+
+### Hidden and deprecated flags
+
+`hidden: true` keeps a flag working but leaves it out of help, man pages, completion, generated skills, search, and command input schemas, the same places as a hidden command. `deprecated: "Use --memory instead."` on a flag, or in a command's config, prints one warning on stderr when the command line uses it, and help marks it:
+
+```sh
+$ deploy --all --kernel-memory 1g
+Warning: flag "--kernel-memory" is deprecated. Use --memory instead.
+deploying to every org
+```
+
+The two are independent: set both to stop listing a deprecated flag, as `--kernel-memory` above. A value from the environment or from typed `run()` input prints no warning.
 
 ### Reuse across commands
 

@@ -15,7 +15,8 @@ import { parseArgs } from "./parser.ts";
 //
 // The oracle adds what parseArgs cannot express: opt-in negation (`--no-x`
 // for a boolean that is not negatable is an error at its argv position), the
-// hint after "does not take a value", and canonical names for aliases.
+// hint after "does not take a value", `-v=1` naming the boolean short `-v`
+// where parseArgs reads `=` as another short, and canonical names for aliases.
 // Intentional differences, kept out of the generated inputs:
 // - Shorts are one code point (`-😀`); parseArgs splits clusters by UTF-16 unit.
 // - Bun's parseArgs names an unknown short `z` instead of `-z`; Crust always
@@ -78,8 +79,27 @@ function oracleOutcome(flags: FlagsDef, argv: string[]): Outcome {
 
 	try {
 		// Tokenizing does not depend on `strict`; the strict run checks every token before the negation.
-		for (const token of nodeParseArgs({ ...config, args: argv, strict: false }).tokens) {
-			if (token.kind !== "option" || !token.rawName.startsWith("--no-")) continue;
+		const loose = nodeParseArgs({ ...config, args: argv, strict: false }).tokens;
+		for (const [position, token] of loose.entries()) {
+			if (token.kind !== "option") continue;
+			if (token.rawName === "-=") {
+				// Crust names the boolean short before `=` (`-v=1`); parseArgs reads `=` as another short.
+				const cluster = loose
+					.slice(0, position)
+					.filter((prior) => prior.kind === "option" && prior.index === token.index);
+				const previous = cluster.at(-1);
+				if (
+					previous?.kind !== "option" ||
+					cluster.some((prior) => prior.kind !== "option" || !spellings.has(prior.name))
+				)
+					continue;
+				nodeParseArgs({ ...config, args: argv.slice(0, token.index), strict: true });
+				return {
+					error: `Flag "${previous.rawName}" does not take a value.`,
+					details: { flag: spellings.get(previous.name)!.canonical, reason: "unexpected-value" },
+				};
+			}
+			if (!token.rawName.startsWith("--no-")) continue;
 			const base = spellings.get(token.rawName.slice("--no-".length));
 			if (!base || base.short || base.def.type !== "boolean" || negatable(base.def)) continue;
 			nodeParseArgs({ ...config, args: argv.slice(0, token.index), strict: true });

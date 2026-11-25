@@ -544,6 +544,60 @@ describe("nextSteps", () => {
 		await replay(app, lines.slice(-1));
 	});
 
+	it("spells an exclusive group's value as its member flag, and replays it", async () => {
+		const seen: unknown[] = [];
+		const scoped = defineCommand("scoped", (cmd) =>
+			cmd
+				.flags({
+					scope: {
+						type: "exclusive",
+						required: true,
+						flags: {
+							"org-id": { type: "string" },
+							all: { type: "boolean" },
+							data: { type: "json" },
+						},
+					},
+				})
+				.action(({ flags }) => void seen.push(flags.scope)),
+		);
+		const app = new Crust("app")
+			.extend(nextSteps())
+			.add(scoped)
+			.command("suggest", (cmd) =>
+				cmd.use(nextSteps).action(async ({ ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(scoped, { flags: { scope: { flag: "org-id", value: "acme" } } });
+					next.add(scoped, { flags: { scope: { flag: "all" } } });
+					next.add(scoped, { flags: { scope: { flag: "data", value: null } } });
+					// Untyped input: `RunInputPayload` allows a member without its value.
+					next.add(scoped, { flags: { scope: { flag: "org-id" } as never } });
+					next.add(scoped, { flags: { scope: { flag: "all", value: false } as never } });
+					next.add(scoped, {
+						flags: { scope: { flag: "org-id", value: "acme", all: true } as never },
+					});
+				}),
+			);
+
+		const { stderr } = await captureExecute(app, ["suggest"]);
+		const lines = stderr.split("\n").slice(0, -1);
+		expect(lines).toEqual([
+			'nextSteps(): skipped "app scoped": "--org-id" value is missing',
+			'nextSteps(): skipped "app scoped": "--scope" value is not { flag: "all" }',
+			'nextSteps(): skipped "app scoped": "--scope" value is not { flag: "org-id", value }',
+			"Next steps:",
+			"  app scoped --org-id acme",
+			"  app scoped --all",
+			"  app scoped --data null",
+		]);
+		await replay(app, lines.slice(4));
+		expect(seen).toEqual([
+			{ flag: "org-id", value: "acme" },
+			{ flag: "all" },
+			{ flag: "data", value: null },
+		]);
+	});
+
 	it("skips json values JSON would change and replays the rest", async () => {
 		const seen: unknown[] = [];
 		const show = defineCommand("show", (cmd) =>

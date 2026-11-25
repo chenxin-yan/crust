@@ -68,7 +68,15 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 	const lines = [`# ${root.meta.name}`];
 	const visit = (doc: CommandDocumentation) => {
 		lines.push("", `## \`${doc.usage}\``);
-		if (doc.description) lines.push("", doc.description);
+		const description = formatDescription(
+			doc.description,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			doc.deprecated,
+		);
+		if (description) lines.push("", description);
 		if (doc.args.length > 0) {
 			lines.push("", "Arguments:", "");
 			for (const arg of doc.args) {
@@ -88,7 +96,14 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 					item(
 						flag.spellings.map((spelling) => `\`${spelling}\``).join(", "),
 						valueLabel(flag.type, flag.multiple, flag.required),
-						formatDescription(flag.description, flag.default, flag.choices, undefined, flag.env),
+						formatDescription(
+							flag.description,
+							flag.default,
+							flag.choices,
+							undefined,
+							flag.env,
+							flag.deprecated,
+						),
 					),
 				);
 			}

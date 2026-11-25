@@ -418,6 +418,27 @@ interface FlagDefBase {
 	required?: true;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
+	/**
+	 * Parsed as usual, but left out of every listing: help, man pages, completion, skills, and
+	 * command input schemas, as for a hidden command.
+	 */
+	hidden?: boolean;
+	/**
+	 * Why the flag is deprecated, and what to use instead. Giving the flag on the command line
+	 * prints one warning with it on stderr; help marks the flag. Independent of `hidden`.
+	 */
+	deprecated?: string;
+	/**
+	 * Flags of the same `.flags()` record this one needs: given without them, from the command
+	 * line, the environment, or typed input, the invocation is a usage error. A default does
+	 * not count as given, nor does a boolean's `false`.
+	 *
+	 * @example
+	 * { jq: { type: "string", requires: ["json"] }, json: { type: "boolean" } }
+	 */
+	requires?: readonly string[];
+	/** Only an exclusive group has members — see {@link ExclusiveFlagDef} */
+	flags?: never;
 }
 
 /**
@@ -571,11 +592,66 @@ interface CountFlagDef extends Omit<FlagDefBase, "required">, NoRange {
 }
 
 /**
+ * A member of an {@link ExclusiveFlagDef}: a single-value core flag with its own spellings,
+ * and no `default`, `required`, `negatable`, or `requires`, which belong to the group.
+ */
+export type ExclusiveMemberDef = {
+	[T in ValueType]: TypedFlagDef<T> & {
+		default?: never;
+		required?: never;
+		negatable?: never;
+		requires?: never;
+	};
+}[ValueType];
+
+/**
+ * Mutually exclusive flags, declared as one flags entry: at most one member is given, or
+ * exactly one with `required: true`. The members keep their own spellings; the entry's
+ * value is `{ flag, value }` for the member given (`{ flag }` for a boolean member), or
+ * `undefined`. Typed `run()` and `--input` take the same shape. Sources are compared level
+ * by level: the first of the command line and the environment where any member has a value
+ * decides, and two members there is a usage error naming both. Member names share the
+ * command's flag namespace.
+ *
+ * @example
+ * ```ts
+ * scope: {
+ *   type: "exclusive",
+ *   required: true,
+ *   flags: { "org-id": { type: "string" }, all: { type: "boolean" } },
+ * }
+ * // flags.scope: { flag: "org-id"; value: string } | { flag: "all" }
+ * ```
+ */
+export interface ExclusiveFlagDef extends NoRange {
+	type: "exclusive";
+	/** When `true`, one member must be given */
+	required?: true;
+	/** The members, keyed by their canonical names */
+	flags: Readonly<Record<string, ExclusiveMemberDef>>;
+	description?: never;
+	short?: never;
+	aliases?: never;
+	schema?: never;
+	hidden?: never;
+	deprecated?: never;
+	requires?: never;
+	env?: never;
+	multiple?: never;
+	delimiter?: never;
+	default?: never;
+	choices?: never;
+	parse?: never;
+	negatable?: never;
+}
+
+/**
  * Defines a single named flag for a CLI command.
  *
  * Discriminated by `type` and `multiple` for type-safe `default` values.
  * Boolean toggle fields (`required`, `multiple`) only accept `true`.
- * Besides the {@link ValueType}s, `type: "count"` counts occurrences (`-vvv` is `3`).
+ * Besides the {@link ValueType}s, `type: "count"` counts occurrences (`-vvv` is `3`), and
+ * `type: "exclusive"` declares a group of mutually exclusive flags ({@link ExclusiveFlagDef}).
  *
  * @example
  * ```ts
@@ -591,7 +667,8 @@ export type FlagDef =
 	| CountFlagDef
 	| SchemaStringFlagDef
 	| SchemaBooleanFlagDef
-	| SchemaJsonFlagDef;
+	| SchemaJsonFlagDef
+	| ExclusiveFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;
@@ -710,6 +787,21 @@ type InferArgsTuple<A extends readonly ArgDef[]> = number extends A["length"]
  */
 export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Record<string, never>;
 
+/** One member's value; `D` is bare so a conditional member definition distributes. */
+type ExclusiveMember<K, D, Input extends boolean> = D extends { type: "boolean" }
+	? { flag: K }
+	: { flag: K; value: Input extends true ? InputBaseValue<D> : ResolveBaseType<D> };
+
+/**
+ * An exclusive group's value: the member given, with its value unless it is a boolean. Typed input
+ * cannot supply a conditional member, as for other conditional definitions.
+ */
+type ExclusiveValue<M, Input extends boolean> = {
+	[K in keyof M & string]: [Input, IsUnion<M[K]>] extends [true, true]
+		? never
+		: ExclusiveMember<K, M[K], Input>;
+}[keyof M & string];
+
 /**
  * Infer the resolved type for a single FlagDef:
  *
@@ -721,24 +813,26 @@ type InferFlagValue<F extends FlagDef> = F extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
-	: F extends { type: "count" }
-		? number
-		: F extends { multiple: true }
-			? F extends { required: true }
-				? ResolveBaseType<F>[]
-				: // See InferArgValue: narrow on default presence. With `parse`,
-					// the raw default is `string[]` while ResolveBaseType<F> is the
-					// parsed element type.
-					F extends { default: readonly unknown[] }
+	: F extends { type: "exclusive"; flags: infer M }
+		? ExclusiveValue<M, false> | (F extends { required: true } ? never : undefined)
+		: F extends { type: "count" }
+			? number
+			: F extends { multiple: true }
+				? F extends { required: true }
 					? ResolveBaseType<F>[]
-					: ResolveBaseType<F>[] | undefined
-			: F extends { required: true }
-				? ResolveBaseType<F>
-				: F extends { default: infer Default }
-					? undefined extends Default
-						? ResolveBaseType<F> | undefined
-						: ResolveBaseType<F>
-					: ResolveBaseType<F> | undefined;
+					: // See InferArgValue: narrow on default presence. With `parse`,
+						// the raw default is `string[]` while ResolveBaseType<F> is the
+						// parsed element type.
+						F extends { default: readonly unknown[] }
+						? ResolveBaseType<F>[]
+						: ResolveBaseType<F>[] | undefined
+				: F extends { required: true }
+					? ResolveBaseType<F>
+					: F extends { default: infer Default }
+						? undefined extends Default
+							? ResolveBaseType<F> | undefined
+							: ResolveBaseType<F>
+						: ResolveBaseType<F> | undefined;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.
@@ -761,8 +855,15 @@ export type InferFlags<F> = F extends FlagsDef
 // Programmatic invocation input types
 // ────────────────────────────────────────────────────────────────────────────
 
-/** One structured `run()` value: native URL/JSON, or an occurrence array for repeatable inputs. */
-export type RunInputValue = URL | JsonValue | readonly RunInputValue[];
+/**
+ * One structured `run()` value: native URL/JSON, an occurrence array for repeatable inputs,
+ * or an exclusive group's `{ flag, value }`.
+ */
+export type RunInputValue =
+	| URL
+	| JsonValue
+	| readonly RunInputValue[]
+	| { readonly flag: string; readonly value?: RunInputValue };
 
 /** Runtime-erased structured `run()` input bound by `parseStructured`. */
 export interface RunInputPayload {
@@ -773,33 +874,35 @@ export interface RunInputPayload {
 // Conditional definitions cannot certify supplied values; inspect before distribution.
 type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
 	? never
-	: D extends { type: "boolean" }
-		? boolean
-		: D extends { type: "count" }
-			? number
-			: D extends { schema: infer S extends StandardSchema }
-				? D extends { type: "json" }
-					? InferInput<S>
-					: string
-				: D extends { type: "json" }
-					? JsonValue
-					: "choices" extends keyof D
-						? Exclude<D["choices"], undefined> extends infer Choices extends readonly string[]
-							? [Choices] extends [never]
-								? D extends { type: infer T extends ValueType }
-									? Resolve<T>
-									: never
-								: IsStaticTuple<Choices> extends true
-									? IsClosedName<Choices[number]> extends true
-										? Choices[number]
+	: D extends { type: "exclusive"; flags: infer M }
+		? ExclusiveValue<M, true>
+		: D extends { type: "boolean" }
+			? boolean
+			: D extends { type: "count" }
+				? number
+				: D extends { schema: infer S extends StandardSchema }
+					? D extends { type: "json" }
+						? InferInput<S>
+						: string
+					: D extends { type: "json" }
+						? JsonValue
+						: "choices" extends keyof D
+							? Exclude<D["choices"], undefined> extends infer Choices extends readonly string[]
+								? [Choices] extends [never]
+									? D extends { type: infer T extends ValueType }
+										? Resolve<T>
 										: never
-									: never
-							: never
-						: D extends { parse: (raw: string) => infer _ParseOutput }
-							? string
-							: D extends { type: infer T extends ValueType }
-								? Resolve<T>
-								: never;
+									: IsStaticTuple<Choices> extends true
+										? IsClosedName<Choices[number]> extends true
+											? Choices[number]
+											: never
+										: never
+								: never
+							: D extends { parse: (raw: string) => infer _ParseOutput }
+								? string
+								: D extends { type: infer T extends ValueType }
+									? Resolve<T>
+									: never;
 
 // Resolve the shared input kind before occurrence handling distributes definition unions.
 type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extends [never]
@@ -883,20 +986,27 @@ export type InputArgs<A extends ArgsDef> = number extends A["length"]
 			: never;
 
 // Distribute before inspecting keys: each alternative must permit omission.
-// An `env` binding may supply the value, so typed input can omit it like argv can.
+// An `env` binding may supply the value, so typed input can omit it like argv can; a
+// member's binding may supply a group.
 type RequiredFlagName<D, K> = D extends unknown
 	? D extends { readonly env: FlagEnv }
 		? never
-		: "required" extends keyof D
-			? true extends D["required"]
-				? D extends { default: infer Default }
-					? undefined extends Default
-						? K
-						: never
-					: K
+		: true extends MemberHasEnv<D>
+			? never
+			: "required" extends keyof D
+				? true extends D["required"]
+					? D extends { default: infer Default }
+						? undefined extends Default
+							? K
+							: never
+						: K
+					: never
 				: never
-			: never
 	: never;
+
+type MemberHasEnv<D> = D extends { readonly flags: infer M }
+	? { [K in keyof M]: M[K] extends { readonly env: FlagEnv } ? true : false }[keyof M]
+	: false;
 
 type RequiredFlagNames<F extends FlagsDef> = {
 	[K in keyof F]-?: RequiredFlagName<F[K], K>;
@@ -998,13 +1108,8 @@ export interface CommandMeta {
 	 * entrypoint. Marking a user-facing command `hidden` is supported but
 	 * unusual.
 	 *
-	 * **Scope: commands only.** There is no analogous `hidden` field on
-	 * `FlagDef` or `ArgDef`; flags and positional arguments always surface
-	 * in help, completion, and man output. If you need a flag that does
-	 * not advertise itself, the workaround is to register it as an Extension
-	 * flags entry without a description (omit `description`),
-	 * which suppresses its description body but still lists the spelling
-	 * — there is intentionally no full hide mechanism at the flag layer.
+	 * A flag can be hidden the same way (`FlagDef`'s `hidden`); positional
+	 * arguments cannot.
 	 *
 	 * Tooling contract: any renderer or generator that walks
 	 * `subCommands` to produce a user-facing listing should skip nodes
@@ -1014,6 +1119,14 @@ export interface CommandMeta {
 	 * meta: { name: "__complete", hidden: true, description: "Internal" }
 	 */
 	hidden?: boolean;
+	/**
+	 * Why the command is deprecated, and what to use instead. Running it from the command line
+	 * prints one warning with it on stderr; help marks the command. Independent of `hidden`.
+	 *
+	 * @example
+	 * defineCommand("scan", { deprecated: "Use `scout`." }, recipe)
+	 */
+	deprecated?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

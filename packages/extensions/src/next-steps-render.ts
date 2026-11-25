@@ -46,10 +46,29 @@ function stepArgv(
 	const { args = {}, flags = {} } = input ?? {};
 
 	const options: string[] = [];
-	for (const [name, value] of Object.entries(flags)) {
-		if (value === undefined) continue;
-		if (!Object.hasOwn(command.flags, name)) throw new Error(`unknown flag "--${name}"`);
-		const flag = command.flags[name]!;
+	for (const [key, given] of Object.entries(flags)) {
+		if (given === undefined) continue;
+		if (!Object.hasOwn(command.flags, key)) throw new Error(`unknown flag "--${key}"`);
+		let [name, flag, value] = [key, command.flags[key]!, given];
+		// An exclusive group's value names the member to spell: `{ flag: "all" }` is `--all`.
+		if (flag.flags) {
+			const member = typeof value === "object" && value !== null && "flag" in value ? value : {};
+			if (typeof member.flag !== "string" || !Object.hasOwn(flag.flags, member.flag))
+				throw new Error(`"--${key}" value names none of its flags`);
+			const memberDef = flag.flags[member.flag]!;
+			const boolean = memberDef.type === "boolean";
+			// As `run()` reads it: no other key, and a boolean member takes no value.
+			if (
+				Object.keys(member).some((k) => k !== "flag" && k !== "value") ||
+				(boolean && member.value !== undefined)
+			)
+				throw new Error(
+					`"--${key}" value is not ${boolean ? `{ flag: "${member.flag}" }` : `{ flag: "${member.flag}", value }`}`,
+				);
+			const memberValue = boolean ? true : member.value;
+			if (memberValue === undefined) throw new Error(`"--${member.flag}" value is missing`);
+			[name, flag, value] = [member.flag, memberDef, memberValue];
+		}
 		for (const item of flag.multiple && Array.isArray(value) ? value : [value]) {
 			if (flag.type === "boolean") {
 				if (typeof item !== "boolean") throw new Error(`"--${name}" value is not a boolean`);

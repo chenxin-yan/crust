@@ -371,6 +371,99 @@ describe("commandInputSchema", () => {
 		expect(properties).toEqual({ a: { type: "number" }, b: { type: "integer", maximum: 3 } });
 	});
 
+	it("maps an exclusive group to one { flag, value } object per listed member", async () => {
+		const app = new Crust("cli").flags({
+			scope: {
+				type: "exclusive",
+				required: true,
+				flags: {
+					"org-id": { type: "string", description: "Organization" },
+					all: { type: "boolean", deprecated: "Use --org-id." },
+					legacy: { type: "string", hidden: true },
+				},
+			},
+			target: {
+				type: "exclusive",
+				required: true,
+				flags: { host: { type: "url", env: "HOST" }, local: { type: "boolean" } },
+			},
+			secret: { type: "string", hidden: true },
+			old: { type: "string", deprecated: "Use --new." },
+		});
+		const schema = commandInputSchema(await app.snapshot(), []);
+		expect(schema.properties).toEqual({
+			scope: {
+				oneOf: [
+					{
+						type: "object",
+						description: "Organization",
+						properties: { flag: { const: "org-id" }, value: { type: "string" } },
+						required: ["flag", "value"],
+						additionalProperties: false,
+					},
+					{
+						type: "object",
+						deprecated: true,
+						properties: { flag: { const: "all" } },
+						required: ["flag"],
+						additionalProperties: false,
+					},
+				],
+			},
+			target: {
+				oneOf: [
+					{
+						type: "object",
+						description: "Falls back to $HOST",
+						properties: { flag: { const: "host" }, value: { type: "string", format: "uri" } },
+						required: ["flag", "value"],
+						additionalProperties: false,
+					},
+					{
+						type: "object",
+						properties: { flag: { const: "local" } },
+						required: ["flag"],
+						additionalProperties: false,
+					},
+				],
+			},
+			old: { type: "string", deprecated: true },
+		});
+		// A member's variable may supply `target`.
+		expect(schema.required).toEqual(["scope"]);
+		expect(
+			parseCommandInput(await app.snapshot(), {
+				target: { flag: "host", value: "https://example.com/" },
+				scope: { flag: "all" },
+			}).flags,
+		).toEqual({
+			target: { flag: "host", value: new URL("https://example.com/") },
+			scope: { flag: "all" },
+		});
+		// Another key stays, so `run()` refuses it as it does for every member.
+		expect(
+			parseCommandInput(await app.snapshot(), {
+				target: { flag: "host", value: "https://example.com/", local: true },
+			}).flags,
+		).toEqual({ target: { flag: "host", value: new URL("https://example.com/"), local: true } });
+	});
+
+	it("leaves out a group with no listed member", async () => {
+		const app = new Crust("cli").flags({
+			scope: { type: "exclusive", flags: { legacy: { type: "boolean", hidden: true } } },
+			target: {
+				type: "exclusive",
+				required: true,
+				flags: { old: { type: "string", hidden: true } },
+			},
+			name: { type: "string" },
+		});
+		expect(commandInputSchema(await app.snapshot(), [])).toEqual({
+			type: "object",
+			properties: { name: { type: "string" } },
+		});
+	});
+
 	it("rejects an arg and flag sharing a name, naming the path", async () => {
 		const snapshot = await new Crust("cli")
 			.add(
@@ -381,10 +474,22 @@ describe("commandInputSchema", () => {
 						.action(noop),
 				),
 			)
+			.add(
+				defineCommand("y", (c) =>
+					c
+						.args({ name: "out", type: "string" })
+						.flags({ out: { type: "url", hidden: true } })
+						.action(noop),
+				),
+			)
 			.flags({ raw: { type: "string" } })
 			.snapshot();
 		expect(() => commandInputSchema(snapshot.subCommands.x!, ["x"])).toThrow(
 			'Command "x" declares "name" more than once across args and flags; command input is one flat object',
+		);
+		// A hidden flag is unpublished but still input.
+		expect(() => commandInputSchema(snapshot.subCommands.y!, ["y"])).toThrow(
+			'Command "y" declares "out" more than once across args and flags',
 		);
 		// `raw` is an ordinary name.
 		expect(commandInputSchema(snapshot, []).properties).toEqual({ raw: { type: "string" } });

@@ -103,7 +103,7 @@ An installed command name uses letters, digits, `.`, `_`, and `-`, and starts wi
 
 ### Flag values without argv
 
-`parseFlagValues(flags, env)` runs the flag pipeline on environment values only: delimiter splitting, choices, `parse` or built-in coercion, defaults, requiredness, and Standard Schemas.
+`parseFlagValues(flags, env)` runs the flag pipeline on environment values only: delimiter splitting, choices, `parse` or built-in coercion, defaults, requiredness, `requires`, and Standard Schemas.
 
 - Invalid definitions reject with `DEFINITION`; bad values reject with `PARSE` or `VALIDATION`.
 - Core's messages name the variable, never its value. Standard Schema issue messages are the validator's own and may quote it.
@@ -125,10 +125,13 @@ It throws, naming `path`, when an arg and a flag share a name.
 | `type: "json"`                     | `{}` (any JSON)                                                                                                              |
 | `choices`                          | `{ type: "string", enum }`                                                                                                   |
 | `variadic` (any mode) / `multiple` | `{ type: "array", items }`                                                                                                   |
-| `required` without `default`       | listed in `required`, unless the flag has an `env` binding                                                                   |
+| `required` without `default`       | listed in `required`, unless the flag, or a member of the group, has an `env` binding                                        |
 | flag `env`                         | The description ends with `(falls back to $NAME)`, or is `Falls back to $NAME`; a list names every variable, comma-separated |
 | Standard Schema                    | Its input JSON Schema when `run()` accepts that shape; otherwise the declared token type (`string` for schema args)          |
 | custom `parse`                     | The declared token type; the command validates and transforms when it runs                                                   |
+| `type: "exclusive"`                | `{ oneOf }` with one object per listed member: `{ flag: { const }, value }`, or only `flag` for a boolean member             |
+| flag `hidden`; all-hidden group    | Left out; a hidden flag's name still collides with an arg's                                                                  |
+| `deprecated`                       | `deprecated: true`                                                                                                           |
 
 Standard Schema definitions:
 

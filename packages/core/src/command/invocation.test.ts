@@ -1244,3 +1244,46 @@ console.log("alive");`,
 		15_000,
 	);
 });
+
+describe("deprecation warnings", () => {
+	const app = new Crust("app")
+		.flags({
+			"kernel-memory": { type: "string", deprecated: "Use --memory instead.", env: "KMEM" },
+			scope: {
+				type: "exclusive",
+				flags: { old: { type: "boolean", deprecated: "Use --all." }, all: { type: "boolean" } },
+			},
+		})
+		.command("db", { deprecated: "Use `data`." }, (db) =>
+			db.command("scan", (scan) => scan.action(() => {})),
+		)
+		.action(() => {});
+
+	async function warnings(argv: string[]): Promise<string[]> {
+		const stderr: string[] = [];
+		expect(await app.execute({ argv, io: { stderr: lineSink(stderr) } })).toBe(0);
+		return stderr;
+	}
+
+	it("warns once for each deprecated command and flag given on the command line", async () => {
+		expect(await warnings(["--kernel-memory", "1g", "--kernel-memory", "2g", "--old"])).toEqual([
+			'Warning: flag "--kernel-memory" is deprecated. Use --memory instead.',
+			'Warning: flag "--old" is deprecated. Use --all.',
+		]);
+		expect(await warnings(["db", "scan"])).toEqual([
+			'Warning: command "app db" is deprecated. Use `data`.',
+		]);
+		expect(await warnings(["--all"])).toEqual([]);
+	});
+
+	it("stays silent for values from the environment or typed input", async () => {
+		vi.stubEnv("KMEM", "1g");
+		try {
+			expect(await warnings([])).toEqual([]);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+		const outcome = await app.run(["db", "scan"], {});
+		expect(outcome.stderr).toBe("");
+	});
+});

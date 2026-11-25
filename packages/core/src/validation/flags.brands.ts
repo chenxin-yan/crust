@@ -1,5 +1,5 @@
 import type { DefiningOf } from "../api/context.ts";
-import type { FlagDef, FlagsDef } from "../types.ts";
+import type { ExclusiveMemberDef, FlagDef, FlagsDef } from "../types.ts";
 import type { IsUnion, KeysOfAnyBranch, LocalValueBrand, UnknownKeysBrand } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -83,7 +83,11 @@ type PresentRecord<F> = false extends StrictNulls
 
 type RecordErrors<F, Def> = DropEmpty<{
 	[K in keyof F as KnownFlagKey<K>]: K extends string
-		? UndefinedFlagBrand<F, K> & UnknownKeysBrand<F[K], Def> & FlagValueBrand<F[K]>
+		? UndefinedFlagBrand<F, K> &
+				UnknownKeysBrand<F[K], Def> &
+				FlagValueBrand<F[K]> &
+				RequiresBrand<F, F[K]> &
+				MemberErrors<F[K]>
 		: K extends number
 			? // `keyof` keeps the number, so the flag would have no string key (`keyof F & string`).
 				{ readonly FIX_NUMBER_KEY: "Flag names must be string keys; quote a numeric name" }
@@ -92,6 +96,24 @@ type RecordErrors<F, Def> = DropEmpty<{
 
 // Only index signatures are dropped; number and symbol keys stay so they can be rejected.
 type KnownFlagKey<K> = string extends K ? never : number extends K ? never : K;
+
+// `requires` names flags of the same record; an open name proves nothing either way.
+type RequiresBrand<F, D> = D extends { readonly requires: readonly (infer R extends string)[] }
+	? string extends R
+		? {}
+		: [Exclude<R, keyof F>] extends [never]
+			? {}
+			: {
+					readonly FIX_REQUIRES: `requires names "${Exclude<R, keyof F>}", which is not a flag of this record`;
+				}
+	: {};
+
+// An exclusive group's members are checked as a record of their own, under its `flags`.
+type MemberErrors<D> = D extends { readonly type: "exclusive"; readonly flags: infer M }
+	? unknown extends RecordErrors<M, ExclusiveMemberDef>
+		? {}
+		: { readonly flags: RecordErrors<M, ExclusiveMemberDef> }
+	: {};
 
 // Only these fields can make one flag's values invalid; most flags skip the check.
 type FlagValueBrand<D> = KeysOfAnyBranch<D> & ("choices" | "parse" | "schema") extends never
