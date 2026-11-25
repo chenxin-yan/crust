@@ -29,6 +29,17 @@ Add subcommands in either way, or mix both in one app:
 - **`.command()` inline:** small CLIs, or short subcommands used only by this app.
 - **`defineCommand()` + `.add()`:** separate command files or reusable definitions.
 
+## How a command line is routed
+
+Crust reads a command line from the left to choose the command that runs:
+
+- **Subcommand names choose the command.** `tool build` runs `build`. A subcommand's name or alias always wins.
+- **The command that runs reads every flag, wherever it was typed.** `tool -c prod build` and `tool build -c prod` are the same: `build` reads `-c`. A subcommand may reuse a letter its parent uses for something else; the meaning of the command that runs applies. This follows [clig.dev](https://clig.dev/#arguments-and-flags), which asks for flags that work in any order, not git or docker, where a flag belongs to the command it follows.
+- **A flag only a subcommand knows goes after its name.** Before the name, Crust can't tell whether the flag takes a value, so `tool --minify build` fails with `Unknown flag "--minify"; flags of subcommand "build" go after its name`. A flag the command that runs doesn't know is the same `Unknown flag` error on either side of its name.
+- **A reused spelling takes a value at every level or at none.** A parent's `-c <file>` and a subcommand's boolean `-c` would split `tool -c a.txt build` differently from `tool build -c a.txt`. This is a [definition check](/docs/api/crust#definition-checks): a `DEFINITION` error from source and in `crust build`.
+- **A command's action is its default.** `tool` alone runs the root's `.action()`, if it has one. Words that name no subcommand are the action's [arguments](/docs/guide/arguments-and-flags#arguments) when it declares any, and an [unknown command](#unknown-commands) when it declares none.
+- **A group shows its help.** With [`help()`](/docs/modules/extensions/help) installed, `tool` alone prints its help and exits `0`, even when a required flag is unset; without `help()`, it fails with `Missing command. Available: build` and exit code `2`. Anything typed after a group's name is checked like any command's input first, so `tool --level bogus` is a usage error.
+
 ## Grow in one file
 
 `.command(name, config?, callback)` defines a subcommand's flags and action in place. The optional `config` is the same metadata `defineCommand()` takes, such as the `description` help lists. Call `.command()` inside the callback to nest another level.
@@ -158,6 +169,21 @@ $ echo $?
 2
 ```
 
-`tool` from [Grow in one file](#grow-in-one-file) has subcommands but no action of its own, so an unknown name fails with exit code `2`, the [usage error](/docs/guide/error-handling#exit-status) status.
+`tool` from [Grow in one file](#grow-in-one-file) has subcommands but no action of its own, so an unknown name fails with exit code `2`, the [usage error](/docs/guide/error-handling#exit-status) status. A parent whose `.action()` declares no arguments fails the same way.
 
-If the parent has its own `.action()`, matching subcommands still win, and unmatched words become its [positional arguments](/docs/guide/arguments-and-flags#arguments).
+If the parent's `.action()` declares arguments, matching subcommands still win, and other words become its [arguments](/docs/guide/arguments-and-flags#arguments). The action can still decline a word: `throw unknownCommand(command, name)` (from `@crustjs/core`, with the action's `command`) raises the same `COMMAND_NOT_FOUND` error Crust raises, so [`didYouMean()`](/docs/modules/extensions/did-you-mean) still suggests a subcommand.
+
+## User aliases
+
+To let users define their own shortcuts, such as `gh co 12` for `gh pr checkout 12`, expand them before Crust reads argv:
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/commands-aliases.ts
+</include>
+
+```sh
+$ gh co 12
+checking out #12
+```
+
+The aliases are input, not commands: help, completion, and typo suggestions don't list them, and this recipe expands only the first word.

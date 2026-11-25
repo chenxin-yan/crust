@@ -23,7 +23,7 @@ Options:
   -h, --help                   Show help
 ```
 
-`help()` owns the recursive `--help` and `-h` flag, and shows help when the selected command has no Command Action.
+`help()` owns the recursive `--help` and `-h` flag, and shows help when the selected command has no Command Action, once its input checks pass: `my-cli --level bogus` is still a usage error. A group with nothing typed after its name skips those checks, so `my-cli` alone shows help even when a required flag is unset.
 
 ## Behavior
 

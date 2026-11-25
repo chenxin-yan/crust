@@ -275,6 +275,7 @@ describe("host artifact acceptance", () => {
 			"is already registered on this command",
 			'must not start with "no-"',
 			"must be one character",
+			"may reuse a parent's flag spelling",
 		]) {
 			expect(bundle).not.toContain(message);
 		}

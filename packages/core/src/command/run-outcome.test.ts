@@ -79,7 +79,7 @@ describe("captured run outcomes", () => {
 			stderr: "",
 		});
 	});
-	it("handles the invocation before required validation and captures hook output", async () => {
+	it("validates before noAction handles the invocation, and captures hook output", async () => {
 		const id = defineExtensionId("handled");
 		const app = new Crust("app").flags({ mode: { type: "string", required: true } }).extend(
 			defineExtension(id).noAction((ctx) => {
@@ -87,7 +87,12 @@ describe("captured run outcomes", () => {
 			}),
 		);
 		const erased: AnyCrust = app;
-		expect(await erased.run([])).toEqual({
+		expect(await erased.run([])).toMatchObject({
+			status: "failed",
+			error: { code: "VALIDATION", message: 'Missing required flag "--mode"' },
+			exitCode: 2,
+		});
+		expect(await erased.run([], { flags: { mode: "fast" } })).toEqual({
 			status: "handled",
 			by: id,
 			exitCode: 0,

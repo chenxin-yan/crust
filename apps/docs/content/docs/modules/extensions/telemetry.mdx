@@ -103,13 +103,13 @@ The event never contains argument or flag values: `command` holds only the names
 
 The event reports the outcome the Extension's `postRun` hook sees:
 
-- `completed`: the Command Action finished. A command without an action also reports `completed` unless an Extension with a `noAction` hook, such as [`help()`](/docs/modules/extensions/help), takes it.
+- `completed`: the Command Action finished. A command without an action and without subcommands also reports `completed` unless an Extension with a `noAction` hook, such as [`help()`](/docs/modules/extensions/help), takes it; one with subcommands reports `failed` (`Missing command`) instead.
 - `handled`: a flag handler (`--help`, `--version`, `--llms`) or a `noAction` hook ended the invocation.
 - `failed`: the action, a hook, or validation threw. A run cancelled with Ctrl-C or `SIGTERM` reports `failed` (an `AbortError`), or `completed` if the action ignored the cancellation.
 
 Not covered:
 
-- Failures while routing or parsing argv, before a command is selected: an unknown command (`acme nope`, or `acme keys nope` under a group without an action) or an unknown flag fails before any `setup`, so no event is sent. Once a command is selected, its validation runs after `setup` and reports `failed`: a missing required argument, a value of the wrong type (`--replicas many` for a number flag), or an extra word after a command that has an action (`acme deploy nope` reports `["acme", "deploy"]`).
+- Failures while routing or parsing argv, before a command is selected: an unknown command (`acme nope`, or `acme keys nope` under a group whose action, if any, declares no arguments) or an unknown flag fails before any `setup`, so no event is sent. Once a command is selected, its validation runs after `setup` and reports `failed`: a missing required argument, a value of the wrong type (`--replicas many` for a number flag), or an extra word after a command that has an action (`acme deploy nope` reports `["acme", "deploy"]`).
 - The `telemetry` command's own invocations (see above).
 - Outcome changes by later hooks: another Extension's `postRun` that throws fails a completed invocation, but every `postRun` receives the outcome as it was, so the event still says `completed`.
 - The process exit code.

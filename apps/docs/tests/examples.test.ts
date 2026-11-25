@@ -164,6 +164,14 @@ it("commands guide sections example prints what the guide shows", async () => {
 	expect(guide).toContain(`$ my-cli deploy --help\n${result.stdout}\`\`\``);
 });
 
+it("commands guide alias example expands only a first word that is an alias", () => {
+	expect(runGuideExample("commands-aliases.ts", ["co", "12"])).toMatchObject({
+		status: 0,
+		stdout: "checking out #12\n",
+	});
+	expect(runGuideExample("commands-aliases.ts", ["pr", "co", "12"])).toMatchObject({ status: 2 });
+});
+
 it.each([
 	[["b", "a", "b"], 0, "b\n"],
 	[["z", "a"], 1, ""],

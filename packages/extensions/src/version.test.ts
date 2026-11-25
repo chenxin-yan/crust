@@ -53,6 +53,21 @@ describe("version", () => {
 		expect(stdout).toBe("app v2.0.0\n");
 	});
 
+	it("keeps --version on the root, before or after a subcommand name", async () => {
+		const app = new Crust("app")
+			.extend(version("1.2.3"))
+			.command("install", (install) => install.action(() => {}));
+		for (const argv of [
+			["--version", "install"],
+			["install", "--version"],
+		]) {
+			const result = await captureExecute(app, argv);
+			expect(result.stdout, argv.join(" ")).toBe("");
+			expect(result.stderr).toContain('Unknown flag "--version"');
+			expect(result.exitCode).toBe(2);
+		}
+	});
+
 	it("version extension supports plain format", async () => {
 		const app = new Crust("app").extend(version("1.2.3", { format: "plain" })).action(() => {});
 

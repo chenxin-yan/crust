@@ -202,6 +202,25 @@ describe("help", () => {
 		expect(output).not.toContain("--no-help");
 	});
 
+	it("help extension prints a bare group's help, and checks any input typed to it", async () => {
+		const app = new Crust("app")
+			.extend(help())
+			.flags({
+				level: { type: "string", choices: ["debug", "info"] },
+				token: { type: "string", required: true },
+			})
+			.add(defineCommand("build", (cmd) => cmd.action(() => {})));
+
+		const bare = await captureExecute(app, []);
+		expect(bare.exitCode).toBe(0);
+		expect(stripAnsi(bare.stdout)).toContain("Commands:");
+
+		const invalid = await captureExecute(app, ["--token", "t", "--level", "bogus"]);
+		expect(invalid.exitCode).toBe(2);
+		expect(invalid.stdout).toBe("");
+		expect(invalid.stderr).toContain("--level");
+	});
+
 	it("lists every command without building any, even when a sibling recipe throws", async () => {
 		const built: string[] = [];
 		const app = new Crust("app").extend(help()).add(

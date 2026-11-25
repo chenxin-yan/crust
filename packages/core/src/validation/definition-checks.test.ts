@@ -166,6 +166,24 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 				)
 				.snapshot(),
 	],
+	[
+		"flag-shape-mismatch",
+		() =>
+			new Crust("cli")
+				.flags({ config: { type: "string", short: "c" } })
+				.command("cp", (c) => c.flags({ copy: { type: "boolean", short: "c" } }).action(() => {}))
+				.snapshot(),
+	],
+	[
+		"flag-shape-mismatch",
+		() =>
+			new Crust("cli")
+				.flags({ verbose: { type: "boolean" } })
+				.command("db", (c) =>
+					c.command("migrate", (m) => m.flags({ verbose: { type: "number" } }).action(() => {})),
+				)
+				.snapshot(),
+	],
 	["empty-id", () => defineExtensionId("")],
 	["empty-id", () => defineExtensionId(" x")],
 	[
@@ -198,6 +216,13 @@ describe("definition checks", () => {
 			expect(await definitionReason(define)).toBe(reason);
 		},
 	);
+
+	it("names a reused astral short with one dash when its shape differs", async () => {
+		const app = new Crust("cli")
+			.flags({ rocket: { type: "string", short: "🚀" } })
+			.command("c", (c) => c.flags({ r: { type: "boolean", short: "🚀" } }).action(() => {}));
+		await expect(app.snapshot()).rejects.toThrow(/^Flag "-🚀" takes no value on command "cli c"/);
+	});
 
 	it.each(checkedRules.map(([reason, define]) => ({ reason, define })))(
 		"$reason is not checked in a built artifact",

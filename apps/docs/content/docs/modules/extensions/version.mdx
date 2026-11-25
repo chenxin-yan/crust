@@ -14,7 +14,7 @@ $ my-cli --version
 my-cli v1.2.3
 ```
 
-`version()` owns the root-only `--version` and `-v` flag. It prints to stdout instead of running the Command Action. Subcommands reject it: `my-cli deploy --version` is an unknown flag.
+`version()` owns the root-only `--version` and `-v` flag. It prints to stdout instead of running the Command Action. Subcommands reject it wherever it is typed, since the command that runs reads every flag: `my-cli deploy --version` and `my-cli --version deploy` are both an unknown flag. A subcommand may give `-v` its own meaning, such as `--verbose`, as long as it takes no value: `my-cli -v deploy` then passes it to `deploy`.
 
 ## API
 

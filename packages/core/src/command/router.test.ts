@@ -227,56 +227,115 @@ describe("resolveCommand — known-flag skipping", () => {
 		expect(result.argv).toEqual(["--quiet", "--", "translate"]);
 	});
 
-	it("rejects a forwarded flag whose child spelling has a different token shape", () => {
-		// Parent: --config <value>; child: --config as boolean. The value token
-		// was already consumed under the parent's shape, so forwarding would
-		// misparse — routing must reject instead.
-		const translate = makeNode({
-			meta: "translate",
-			flags: { config: { type: "boolean", description: "config toggle" } },
-			run() {},
-		});
-		const root = makeNode({
-			meta: "app",
-			flags: { config: { type: "string", description: "config file" } },
-			subCommands: { translate },
-		});
-		expect(() => resolveCommand(root, ["--config", "a.json", "translate"])).toThrow(
-			'Flag "--config" cannot be used before subcommand "translate"',
-		);
-	});
-
-	it("names a rejected inline-value flag without its value", () => {
+	it("forwards a flag the subcommand does not know, for its parser to report", () => {
 		const translate = makeNode({ meta: "translate", run() {} });
+		translate.meta.aliases = ["tr"];
 		const root = makeNode({
 			meta: "app",
 			flags: { token: { type: "string", short: "t", description: "token" } },
 			subCommands: { translate },
 		});
-		for (const [token, flag] of [
-			["--token=s3cr3t", "--token"],
-			["-ts3cr3t", "-t"],
+		for (const argv of [
+			["--token", "s3cr3t", "translate"],
+			["-ts3cr3t", "tr"],
 		]) {
-			expect(() => resolveCommand(root, [token!, "translate"])).toThrow(
-				expect.objectContaining({
-					code: "PARSE",
-					message: `Flag "${flag}" cannot be used before subcommand "translate" because "translate" does not accept it.`,
-					details: { flag, reason: "flag-not-forwardable" },
-				}),
-			);
+			const result = resolveCommand(root, argv);
+			expect(result.commandPath).toEqual(["app", "translate"]);
+			expect(result.argv).toEqual(argv.slice(0, -1));
 		}
 	});
 
-	it("validates forwarded flags when descending through an alias", () => {
-		const translate = makeNode({ meta: "translate", run() {} });
-		translate.meta.aliases = ["tr"];
+	it("forwards a flag through a subcommand that does not know it to one that does", () => {
+		const config: FlagsDef[string] = { type: "string", short: "c", description: "config" };
+		const leaf = makeNode({ meta: "leaf", flags: { config }, run() {} });
+		const mid = makeNode({ meta: "mid", subCommands: { leaf } });
+		const root = makeNode({ meta: "app", flags: { config }, subCommands: { mid } });
+		const result = resolveCommand(root, ["-c", "prod", "mid", "leaf"]);
+		expect(result.commandPath).toEqual(["app", "mid", "leaf"]);
+		expect(result.argv).toEqual(["-c", "prod"]);
+	});
+
+	it("hints that a flag only a later subcommand knows goes after its name", () => {
+		const leaf = makeNode({
+			meta: "leaf",
+			flags: { force: { type: "boolean", short: "f", description: "force" } },
+			run() {},
+		});
+		const mid = makeNode({ meta: "mid", subCommands: { leaf } });
 		const root = makeNode({
 			meta: "app",
-			flags: { quiet: { type: "boolean", description: "quiet" } },
-			subCommands: { translate },
+			flags: { config: { type: "string", short: "c", description: "config" } },
+			subCommands: { mid },
 		});
-		expect(() => resolveCommand(root, ["--quiet", "tr"])).toThrow(
-			'Flag "--quiet" cannot be used before subcommand "tr"',
+		for (const argv of [
+			["--force", "mid", "leaf"],
+			["--force=1", "mid", "leaf"],
+			["mid", "-f", "leaf"],
+			["--force", "--config=x", "mid", "leaf"],
+		]) {
+			expect(() => resolveCommand(root, argv, true)).toThrow(
+				expect.objectContaining({
+					code: "PARSE",
+					message: expect.stringMatching(
+						/^Unknown flag "(--force|-f)"; flags of subcommand "(mid )?leaf" go after its name$/,
+					),
+					details: { flag: argv.includes("-f") ? "f" : "force", reason: "unknown-flag" },
+				}),
+			);
+		}
+		// Nobody knows it, or the subcommand word follows `--` or is a flag's value: the parser
+		// reports the plain error.
+		for (const argv of [
+			["--bogus", "mid", "leaf"],
+			["--force", "--", "mid", "leaf"],
+			["--force", "--config", "mid", "leaf"],
+			["--force", "-c", "mid", "leaf"],
+		]) {
+			expect(resolveCommand(root, argv, true).commandPath).toEqual(["app"]);
+		}
+		// Only argv routing hints: a typed path, or the failure renderer recovering the route, does not.
+		expect(resolveCommand(root, ["--force", "mid", "leaf"]).commandPath).toEqual(["app"]);
+	});
+
+	it("does not hint past a word the action's arguments take", () => {
+		const ls = makeNode({
+			meta: "ls",
+			flags: { long: { type: "boolean", short: "l", description: "long" } },
+			run() {},
+		});
+		const root = makeNode({
+			meta: "app",
+			args: [{ name: "file", type: "string" }],
+			subCommands: { ls },
+			run() {},
+		});
+		// `app notes.txt ls` runs the root action, so `ls -l` would not have run either.
+		expect(resolveCommand(root, ["-l", "notes.txt", "ls"], true).commandPath).toEqual(["app"]);
+	});
+});
+
+describe("resolveCommand — words that name no subcommand", () => {
+	const child = () => makeNode({ meta: "status", run() {} });
+
+	it("is an unknown command when the command declares no arguments", () => {
+		const root = makeNode({ meta: "app", subCommands: { status: child() }, run() {} });
+		expect(() => resolveCommand(root, ["stauts"])).toThrow(
+			expect.objectContaining({
+				code: "COMMAND_NOT_FOUND",
+				details: expect.objectContaining({ input: "stauts" }),
+			}),
 		);
+	});
+
+	it("is an argument of a command whose action declares arguments", () => {
+		const root = makeNode({
+			meta: "app",
+			args: [{ name: "file", type: "string" }],
+			subCommands: { status: child() },
+			run() {},
+		});
+		const result = resolveCommand(root, ["stauts"]);
+		expect(result.commandPath).toEqual(["app"]);
+		expect(result.argv).toEqual(["stauts"]);
 	});
 });

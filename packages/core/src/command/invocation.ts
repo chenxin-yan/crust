@@ -49,6 +49,7 @@ import {
 import {
 	addedChildrenOf,
 	checkProvidedContextFlags,
+	checkReusedFlagShapes,
 	childEntriesOf,
 	cloneFlagRegistry,
 	commandDefinitionInternal,
@@ -60,8 +61,15 @@ import {
 	type AddedChild,
 	type ChildEntry,
 	type CommandNode,
+	type FlagShapes,
 } from "./node.ts";
-import { commandNotFound, resolveCommand, type CommandRoute } from "./router.ts";
+import {
+	commandNotFound,
+	missingCommand,
+	resolveCommand,
+	snapshotPaths,
+	type CommandRoute,
+} from "./router.ts";
 import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
 import type { CommandShape, ShapeRunOutcome } from "./typed-run.ts";
 
@@ -603,6 +611,7 @@ export function buildExtensionTree(
 		path: string,
 		isRoot: boolean,
 		contributor?: ExtensionId,
+		ancestorFlagShapes?: FlagShapes,
 	): CommandNode => {
 		// Extension providers are application-wide, so an extended Extension's Contexts reach every command.
 		for (const id of source.usedExtensions) {
@@ -646,6 +655,8 @@ export function buildExtensionTree(
 				}
 			}
 		}
+		// Set by the definition check once this node's flags are final; children build later.
+		let flagShapes: FlagShapes | undefined;
 		const prepared: CommandNode = {
 			...source,
 			meta: { ...source.meta },
@@ -657,6 +668,7 @@ export function buildExtensionTree(
 					`${path} ${entry.name}`,
 					false,
 					contributor ?? contributedBy.get(entry.name),
+					flagShapes,
 				),
 			),
 			addedChildren: undefined,
@@ -680,6 +692,7 @@ export function buildExtensionTree(
 				...demandedFactories(prepared.demands),
 				...hookContexts,
 			]);
+			flagShapes = checkReusedFlagShapes(prepared, path, ancestorFlagShapes ?? new Map());
 		}
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
@@ -726,7 +739,7 @@ interface ResolvedInput {
 }
 
 function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
-	const route = resolveCommand(root, argv);
+	const route = resolveCommand(root, argv, true);
 	return { argv, route, parsed: parseArgs(route.command, route.argv) };
 }
 
@@ -779,6 +792,7 @@ function resolveStructuredInput(
 function lazySnapshots(
 	prepared: PreparedInvocation,
 	command: CommandNode,
+	commandPath: readonly string[],
 ): { readonly rootCommand: CommandSnapshot; readonly command: CommandSnapshot } {
 	const project = createSnapshotProjector(prepared.rootNode);
 	return {
@@ -786,7 +800,10 @@ function lazySnapshots(
 			return project(prepared.rootNode);
 		},
 		get command() {
-			return project(command);
+			const snapshot = project(command);
+			// `unknownCommand(command, name)` reads it.
+			snapshotPaths.set(snapshot, commandPath);
+			return snapshot;
 		},
 	};
 }
@@ -886,7 +903,7 @@ async function dispatch(
 		signal,
 	);
 
-	const snapshots = lazySnapshots(prepared, resolvedNode);
+	const snapshots = lazySnapshots(prepared, resolvedNode, route.commandPath);
 	// Setups register cleanup only while they run; one shared object keeps per-invocation
 	// identity (e.g. WeakMap keys) from setup through onError.
 	let settingUp = false;
@@ -935,13 +952,18 @@ async function dispatch(
 	});
 	onExtensionContext?.(extensionContext);
 
-	const terminal = async () => {
+	const validate = async () => {
 		validateParsed(resolvedNode, bound);
 
 		// Standard Schemas on arg/flag definitions own value validation and
 		// transformation; actions and flag-owning Contexts receive schema outputs.
 		const validated = await applySchemas(resolvedNode, bound);
 		resolver.setValidatedFlags(validated.flags);
+		return validated;
+	};
+
+	const terminal = async () => {
+		const validated = await validate();
 
 		let result: unknown;
 		if (resolvedNode.run) {
@@ -1034,12 +1056,20 @@ async function dispatch(
 			}
 			// After every setup, so the selector sees what setups bound; before any handler output.
 			if (prepared.renderer) output.choose(await prepared.renderer.select(extensionContext));
-			const handler =
-				selectHandler(prepared.handlers, parsed, resolvedNode === rootNode) ??
-				(resolvedNode.run ? undefined : prepared.noAction);
+			const handler = selectHandler(prepared.handlers, parsed, resolvedNode === rootNode);
+			const isGroup = Object.keys(resolvedNode.subCommands).length > 0;
 			if (handler) {
 				await handler.run(extensionContext);
 				outcome = { status: "handled", by: handler.by };
+			} else if (!resolvedNode.run && (prepared.noAction || isGroup)) {
+				// A command without an action checks its input as one with an action does. A group typed
+				// bare shows help or names its commands, as cobra does, even when a required value is
+				// missing; typed `run()` input is code, whose required values TypeScript enforces.
+				const bareGroup = isGroup && "argv" in input && route.argv.length === 0;
+				if (!bareGroup) await validate();
+				if (!prepared.noAction) throw missingCommand(resolvedNode);
+				await prepared.noAction.run(extensionContext);
+				outcome = { status: "handled", by: prepared.noAction.by };
 			} else {
 				// Gates such as login checks precede only an action, never `--help` or a fallback.
 				if (resolvedNode.run) {
@@ -1137,7 +1167,11 @@ async function renderFailure(
 		} catch {
 			// Routing itself failed: the root stands in, as documented on `ExtensionContext.command`.
 		}
-		const snapshots = lazySnapshots(prepared, route?.command ?? prepared.rootNode);
+		const snapshots = lazySnapshots(
+			prepared,
+			route?.command ?? prepared.rootNode,
+			route?.commandPath ?? [prepared.rootNode.meta.name],
+		);
 		context = Object.freeze({
 			argv: [...argv],
 			get rootCommand() {
