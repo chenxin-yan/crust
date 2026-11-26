@@ -115,7 +115,7 @@ export type BodyNamesOf<Op> = Op extends { requestBody?: unknown }
 type OperationInput<Op> = Flatten<
 	(Op extends { parameters: infer Parameters }
 		? ParamPart<Parameters, "path"> & ParamPart<Parameters, "query"> & HeaderPart<Parameters>
-		: { readonly header?: AcceptOverride }) &
+		: { readonly header?: AcceptOverride | undefined }) &
 		BodyPart<Op>
 >;
 

@@ -89,13 +89,17 @@ const isScalar = (value: unknown): value is Scalar =>
  */
 export function buildRequest(op: Operation, input: RequestInput = {}): OperationRequest {
 	// The model leaves out Accept parameters, as OpenAPI says; the caller may still send one.
-	const accept = Object.keys(input.header ?? {}).find((name) => name.toLowerCase() === "accept");
+	const accept = Object.entries(input.header ?? {}).find(
+		([name, value]) => value !== undefined && name.toLowerCase() === "accept",
+	)?.[0];
 	const params: readonly Param[] =
 		accept === undefined
 			? op.params
 			: [...op.params, { name: accept, in: "header", required: false }];
 	for (const location of LOCATIONS) {
-		for (const name of Object.keys(input[location] ?? {})) {
+		for (const [name, value] of Object.entries(input[location] ?? {})) {
+			// A name holding `undefined` is absent.
+			if (value === undefined) continue;
 			if (!params.some((param) => param.in === location && param.name === name)) {
 				throw invalid(op, `no ${location} parameter "${name}"`);
 			}
