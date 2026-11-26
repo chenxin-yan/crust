@@ -34,7 +34,7 @@ The client prints nothing itself: it does not know your command's output stream.
 
 ## Several accounts
 
-To let a user keep more than one login with your server, such as a work account and a personal one, pass `profiles: { env: "ACME_PROFILE" }` to `createAuth()`. Then `auth.profile(flags.profile)` signs in to, reads, or signs out of one named login, `auth.login({ profile: async (tokens) => … })` names the profile after the account once the user has signed in, `acme profile use work` (`auth.profiles.use()`) picks the one later runs use, and `acme profile list` (`auth.profiles.list()`) shows them. `ACME_PROFILE=work` picks a profile for one run, and so can a `--profile` flag on the API commands ([Auth that reads a flag](/docs/modules/openapi#auth-that-reads-a-flag)). See [Profiles](/docs/modules/auth#profiles).
+To let a user keep more than one login with your server, such as a work account and a personal one, pass `profiles: { env: "ACME_PROFILE" }` to `createAuth()`. Then `auth.profile(flags.profile)` signs in to, reads, or signs out of one named login, `auth.login({ profile: async (tokens) => … })` names the profile after the account once the user has signed in, a login makes its profile the one later runs use, `acme profile use work` (`auth.profiles.use()`) switches to another, and `acme profile list` (`auth.profiles.list()`) shows them. `ACME_PROFILE=work` picks a profile for one run, and so can a `--profile` flag on the API commands ([Auth that reads a flag](/docs/modules/openapi#auth-that-reads-a-flag)). See [Profiles](/docs/modules/auth#profiles).
 
 ## More than one server
 

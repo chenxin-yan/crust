@@ -84,7 +84,8 @@ const accounts = createAuth({
 	profiles: { env: "ACME_PROFILE" },
 });
 
-// `acme login --profile work`; without the flag, the profile is named after the account.
+// `acme login --profile work`; without the flag, the profile is named after the account. Either
+// way, later runs use the profile that was signed in to.
 const profileLogin = defineCommand("login", (command) =>
 	command
 		.flags({ profile: { type: "string", description: "The profile to sign in to" } })
@@ -120,7 +121,7 @@ const profileList = defineCommand("list", (command) =>
 	}),
 );
 
-// `acme profile use work`: the profile every later run uses.
+// `acme profile use work`: switches to another profile for every later run.
 const profileUse = defineCommand("use", (command) =>
 	command
 		.args({ name: "name", type: "string", required: true })

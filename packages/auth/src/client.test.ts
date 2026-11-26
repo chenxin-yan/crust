@@ -1416,7 +1416,7 @@ describe("profiles", () => {
 		expect(
 			Object.values(records).map((record) => (record as { identity: unknown }).identity),
 		).toEqual([{ issuer: world.issuer, clientId: "cli", profile: "work", apiOrigins: [API] }]);
-		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: true }]);
 	});
 
 	it("token() and status() read the file once, so the current profile and its login are one snapshot", async () => {
@@ -1472,7 +1472,7 @@ describe("profiles", () => {
 			const moved = key.replace("work#", "moved#");
 			return { ...document!, records: { ...document!.records, [moved]: document!.records[key] } };
 		});
-		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: true }]);
 	});
 
 	it("use() refuses a corrupt login or one that belongs to another profile, writing nothing", async () => {
@@ -1556,6 +1556,7 @@ describe("profiles", () => {
 		const work = profile("work");
 		await signIn(auth);
 		await signIn(work);
+		await auth.profiles.use("default");
 		expect((await auth.token()).value).toBe("AT1");
 		expect((await profile("default").token()).value).toBe("AT1");
 		const { token } = work;
@@ -1629,7 +1630,7 @@ describe("profiles", () => {
 		const { auth, signIn, app, requests } = profiled();
 		await signIn(auth.profile("work"));
 		await signIn(auth.profile("b-side"));
-		await signIn(auth);
+		await signIn(auth.profile("default"));
 		await auth.profile("b-side").logout();
 		const otherIssuer = uniqueIssuer();
 		await storeLogin(
@@ -1676,12 +1677,12 @@ describe("profiles", () => {
 		expect(keyring.writes()).toBe(1);
 	});
 
-	it("the remembered profile survives other profiles' logins, refreshes and logouts, and its own logout clears it", async () => {
+	it("the current profile survives other profiles' refreshes and logouts, and its own logout clears it", async () => {
 		const { auth, signIn, document } = profiled();
 		await signIn(auth.profile("work"));
-		await auth.profiles.use("work");
 		const personal = auth.profile("personal");
 		await signIn(personal);
+		await auth.profiles.use("work");
 		await (
 			await personal.token()
 		).refresh!({});
@@ -1692,10 +1693,54 @@ describe("profiles", () => {
 		expect(document()).not.toHaveProperty("currentProfile");
 	});
 
-	it("a login does not change the current profile", async () => {
+	it("a login makes its profile the current one, in the write that stores it", async () => {
+		const { auth, signIn, document } = profiled({ profilesEnv: "ACME_PROFILE" });
+		vi.stubEnv("ACME_PROFILE", "");
+		const current = async () => (await auth.status()).profile;
+		await signIn(auth.profile("work"));
+		expect(await current()).toEqual({ name: "work", via: "current" });
+		expect((await auth.token()).value).toBe("AT1");
+		// A function's name, a given name, and the profile the variable picks for one run.
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, profile: () => "octocat" });
+		expect(await current()).toEqual({ name: "octocat", via: "current" });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, profile: "personal" });
+		expect(await current()).toEqual({ name: "personal", via: "current" });
+		vi.stubEnv("ACME_PROFILE", "ci");
+		await signIn(auth);
+		vi.stubEnv("ACME_PROFILE", "");
+		expect(await current()).toEqual({ name: "ci", via: "current" });
+		// The current profile's own login keeps it.
+		await signIn(auth);
+		expect(Object.values(document().currentProfile)).toEqual(["ci"]);
+		expect(await auth.profiles.list()).toEqual([
+			{ name: "ci", current: true },
+			{ name: "octocat", current: false },
+			{ name: "personal", current: false },
+			{ name: "work", current: false },
+		]);
+	});
+
+	it("a login that stores nothing leaves the current profile, and a client without profiles records none", async () => {
 		const { auth, signIn } = profiled();
 		await signIn(auth.profile("work"));
-		expect((await auth.status()).profile).toEqual({ name: "default", via: "default" });
+		// A logout of the profile while the user signs in makes its login stale.
+		const stale = await rejection(
+			auth.login({
+				onCode: noCode,
+				profile: "personal",
+				onUrl: async (prompt) => {
+					await auth.profile("personal").logout();
+					browser().onUrl(prompt);
+				},
+			}),
+		);
+		expect(stale).toBeInstanceOf(StaleCommitError);
+		expect((await auth.status()).profile).toEqual({ name: "work", via: "current" });
+		const unprofiled = setup();
+		await unprofiled.auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		expect(
+			JSON.parse(readFileSync(join(unprofiled.dir, "credentials.json"), "utf8")),
+		).not.toHaveProperty("currentProfile");
 	});
 
 	it("login({ profile }) stores the login as the profile a function names from the new tokens, or as a given name", async () => {
@@ -1710,13 +1755,13 @@ describe("profiles", () => {
 			},
 		});
 		expect(seen).toEqual(["AT1"]);
-		expect(await auth.profiles.list()).toEqual([{ name: "octocat", current: false }]);
-		expect((await auth.profile("octocat").token()).value).toBe("AT1");
+		expect(await auth.profiles.list()).toEqual([{ name: "octocat", current: true }]);
+		expect((await auth.token()).value).toBe("AT1");
 		await auth.login({ onUrl: browser().onUrl, onCode: noCode, profile: "work" });
 		expect((await auth.profile("work").token()).value).toBe("AT2");
 		expect(await auth.status()).toMatchObject({
-			source: "none",
-			profile: { name: "default", via: "default" },
+			source: "login",
+			profile: { name: "work", via: "current" },
 		});
 	});
 
@@ -1724,11 +1769,11 @@ describe("profiles", () => {
 		const { auth } = profiled();
 		// Not a fresh literal, so TypeScript allows the extra property.
 		const options = { onUrl: browser().onUrl, onCode: noCode, profile: "personal" };
-		await auth.profile("work").login(options);
-		await auth.profile().login({ ...options, onUrl: browser().onUrl });
+		await auth.profile().login(options);
+		await auth.profile("work").login({ ...options, onUrl: browser().onUrl });
 		expect(await auth.profiles.list()).toEqual([
-			{ name: "default", current: true },
-			{ name: "work", current: false },
+			{ name: "default", current: false },
+			{ name: "work", current: true },
 		]);
 		const { auth: unprofiled } = setup();
 		await unprofiled.login({ ...options, onUrl: browser().onUrl });

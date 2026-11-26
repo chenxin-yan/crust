@@ -278,8 +278,8 @@ export interface CreateAuthOptions extends AuthServerOptions {
 export interface ProfilesOptions {
 	/**
 	 * An environment variable, such as `ACME_PROFILE`, whose value (trimmed) names the current
-	 * profile when it is not blank. Read at each call; it wins over the profile chosen with
-	 * `profiles.use()`.
+	 * profile when it is not blank. Read at each call; it wins over the profile last logged in to
+	 * or chosen with `profiles.use()`.
 	 */
 	env?: string;
 }
@@ -382,8 +382,8 @@ export interface AuthStatus {
 export interface ProfileAuthStatus extends AuthStatus {
 	/**
 	 * The profile and why it was picked: `"argument"`, the name given to `profile()`; `"env"`,
-	 * the profiles `env` variable; `"current"`, the one chosen with `profiles.use()`;
-	 * `"default"`, none of those. Absent for `"env"`.
+	 * the profiles `env` variable; `"current"`, the one last logged in to or chosen with
+	 * `profiles.use()`; `"default"`, none of those. Absent for `"env"`.
 	 */
 	readonly profile?: {
 		readonly name: string;
@@ -429,7 +429,9 @@ export interface ProfileClient extends AuthClient {
 
 /**
  * The client `createAuth()` returns with `profiles`. Its own methods use the current profile:
- * the profiles `env` variable's, else the one chosen with `profiles.use()`, else `"default"`.
+ * the profiles `env` variable's, else the one last logged in to or chosen with `profiles.use()`,
+ * else `"default"`. Every login, of this client or of a `profile()`, makes its profile the
+ * current one.
  */
 export interface ProfileAuthClient extends ProfileClient {
 	/** `login()`, which may store the login as another profile than the current one. */

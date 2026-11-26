@@ -98,12 +98,13 @@ interface TokenSourceInternals {
 	/**
 	 * `beginLogin()`, whose commit reports a plaintext write to `onWarning`. With `observedIn`, an
 	 * earlier snapshot of the file, the commit is stale against that snapshot instead of the file
-	 * as it is now.
+	 * as it is now. `amend` changes the document the commit writes, in the same write.
 	 */
 	beginLogin(options: {
 		signal?: AbortSignal;
 		onWarning?: OnWarning;
 		observedIn?: CredentialsDocument;
+		amend?: (document: CredentialsDocument) => CredentialsDocument;
 	}): Promise<LoginTicket>;
 }
 
@@ -497,10 +498,12 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			signal,
 			onWarning,
 			observedIn,
+			amend = (document) => document,
 		}: {
 			signal?: AbortSignal;
 			onWarning?: OnWarning;
 			observedIn?: CredentialsDocument;
+			amend?: (document: CredentialsDocument) => CredentialsDocument;
 		} = {}): Promise<LoginTicket> {
 			throwIfAborted(signal);
 			if (openLogins.has(id)) throw new LoginInProgressError();
@@ -604,7 +607,7 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 									}
 									const next = withFileKey(current, writeKey);
 									discarded = next.discarded;
-									return withRecord(next.document, stored);
+									return amend(withRecord(next.document, stored));
 								}, stop);
 								if (writeKey.kind === "plaintext") onWarning?.({ code: "plaintext-storage" });
 								return redacted(

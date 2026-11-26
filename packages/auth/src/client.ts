@@ -250,16 +250,17 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 				);
 			}
 			throwIfAborted(signal);
-			// The login's token source, or the function that names its profile after sign-in.
+			// The login's profile, or the function that names it after sign-in. No name without profiles.
 			const target =
 				typeof profile === "function"
 					? profile
 					: profile === undefined
-						? (await select()).source
-						: sourceOf(checkProfile(profile, "profile"));
+						? await select()
+						: { source: sourceOf(checkProfile(profile, "profile")), profile: { name: profile } };
 			const server = await discover(config, issuer, { signal, fetch });
 			const save = async (
 				source: TokenSource,
+				profileName: string | undefined,
 				tokens: () => Promise<TokenSet>,
 				observedIn?: CredentialsDocument,
 			) => {
@@ -267,6 +268,9 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 					signal,
 					onWarning,
 					observedIn,
+					// A login makes its profile the current one, in the write that stores the login.
+					amend: (document) =>
+						profileName === undefined ? document : withCurrentProfile(document, profileName),
 				});
 				try {
 					// Recorded with the login, so every refresh asks for the same resource.
@@ -279,8 +283,9 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 				}
 			};
 			// Opened before the flow, so a logout while it runs makes the commit fail, not undo it.
-			if (typeof target !== "function")
-				return save(target, () => signIn(server, mode, loginOptions));
+			if (typeof target !== "function") {
+				return save(target.source, target.profile?.name, () => signIn(server, mode, loginOptions));
+			}
 			// The profile is named only after sign-in, so its commit is checked against the file as it
 			// was before: a logout or login of that profile meanwhile still makes it fail.
 			const before =
@@ -288,7 +293,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 				(await files.update((current) => current ?? emptyDocument(), signal));
 			const tokens = await signIn(server, mode, loginOptions);
 			const profileName = checkProfile(await unlessAborted(target(tokens), signal), "profile");
-			return save(sourceOf(profileName), async () => tokens, before);
+			return save(sourceOf(profileName), profileName, async () => tokens, before);
 		}
 
 		const loginToken = (
@@ -366,6 +371,16 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 
 	const profileEnv = profiles.env;
 	const server = serverKey({ issuer, clientId });
+	/** `document` with `profileName` as the current profile of this server and client id. */
+	function withCurrentProfile(
+		document: CredentialsDocument,
+		profileName: string,
+	): CredentialsDocument {
+		return withCurrentProfiles(document, {
+			...currentProfiles(document, files.path),
+			[server]: profileName,
+		});
+	}
 	/** The profile the profiles `env` variable names, when it is set and not blank. */
 	function envProfile(): Profile | undefined {
 		if (profileEnv === undefined) return undefined;
@@ -425,9 +440,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			} catch (error) {
 				named({ name: chosen, via: "argument" })(error);
 			}
-			const choices = currentProfiles(document, files.path);
-			choices[server] = chosen;
-			return withCurrentProfiles(document ?? emptyDocument(), choices);
+			return withCurrentProfile(document ?? emptyDocument(), chosen);
 		}, signal);
 	}
 
