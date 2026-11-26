@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineContext, defineExtension, defineExtensionId } from "@crustjs/core";
 import { bold } from "@crustjs/style";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -29,6 +29,18 @@ describe("captureExecute", () => {
 
 		const result = await captureExecute(app, []);
 		expect(result).toEqual({ stdout: "a\nb\nno newline", stderr: "warn\n", exitCode: 0 });
+	});
+
+	it("replaces the app's Contexts for the run with the provide option", async () => {
+		const clock = defineContext("clock").setup(() => "real");
+		const app = new Crust("test-cli")
+			.provide(clock())
+			.action(async ({ ctx, stdout }) => stdout(await ctx.clock));
+
+		expect(await captureExecute(app, [], { provide: [clock.of("fake")] })).toMatchObject({
+			stdout: "fake\n",
+		});
+		expect(await captureExecute(app, [])).toMatchObject({ stdout: "real\n" });
 	});
 
 	it("strips escape codes under FORCE_COLOR unless raw is set", async () => {

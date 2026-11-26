@@ -400,7 +400,7 @@ export type ApiCommandDefinition<
 		{ readonly preview: PreviewShape },
 		JsonValue | undefined,
 		{},
-		readonly JsonValue[] | undefined
+		undefined
 	>,
 	{ api: ApiClient<Operations, AuthDeps> } & AuthDeps
 >;
@@ -411,8 +411,8 @@ export type ApiCommandDefinition<
  * response body to stdout (its exact bytes to a pipe or file; as text to a terminal, failing
  * instead for a binary body), and fails with {@link ApiResponseError} on a non-2xx status. Under
  * the `json()` Extension's `--json`, `api` returns its data as the command result instead: the
- * operations, the definition, or the parsed response body; `--paginate` yields each page body as
- * an event.
+ * operations, the definition, or the parsed response body; with `--paginate`, every page body in
+ * one array.
  */
 export function createApiCommand(
 	client: ContextFactory<"api", void, ApiClient>,
@@ -542,8 +542,8 @@ export function createApiCommand(
 						}
 						return undefined;
 					}
-					// Each page body is an event of json()'s NDJSON stream.
-					if (flags.paginate && json) return bodies();
+					// Under --json, every page body is in the result, as one array.
+					if (flags.paginate && json) return await Array.fromAsync(bodies());
 					let result: JsonValue | undefined;
 					for await (const value of bodies()) result = value;
 					return result;

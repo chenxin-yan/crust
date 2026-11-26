@@ -85,14 +85,66 @@ describe("async generator actions", () => {
 		]);
 	});
 
-	it("streams an async generator object a normal async action returns", async () => {
+	it("returns an async generator object an ordinary action returns as its result, undrained", async () => {
+		let started = false;
 		async function* count() {
+			started = true;
 			yield "a";
 			return "b";
 		}
-		const app = new Crust("cli").action(async () => count());
+		const generator = count();
+		const app = new Crust("cli").action(async () => generator);
 
-		expect(await app.run([])).toMatchObject({ status: "completed", result: "b", events: ["a"] });
+		const outcome = await app.run([]);
+
+		expect(outcome.status === "completed" && outcome.result).toBe(generator);
+		expect(outcome).not.toHaveProperty("events");
+		expect(started).toBe(false);
+	});
+
+	it("streams a generator a non-async action returns, as its type says", async () => {
+		async function* count() {
+			yield 1;
+			return "end";
+		}
+		const app = new Crust("cli").action(() => count());
+
+		const outcome = await app.run([]);
+
+		expect(outcome).toMatchObject({ status: "completed", result: "end", events: [1] });
+	});
+
+	it("awaits an async onEvent before resuming the action, and fails when it rejects", async () => {
+		const log: string[] = [];
+		const app = new Crust("cli").action(async function* () {
+			yield 1;
+			log.push("resumed");
+			return 2;
+		});
+
+		await app.run(
+			[],
+			{},
+			{
+				onEvent: async () => {
+					await new Promise((resolve) => setTimeout(resolve, 5));
+					log.push("consumed");
+				},
+			},
+		);
+		const rejection = new Error("consumer failed");
+		const failed = await app.run(
+			[],
+			{},
+			{
+				onEvent: async () => {
+					throw rejection;
+				},
+			},
+		);
+
+		expect(log).toEqual(["consumed", "resumed"]);
+		expect(failed).toMatchObject({ status: "failed", error: rejection, events: [1] });
 	});
 
 	it("treats an async iterable that is not a generator as an ordinary result", async () => {

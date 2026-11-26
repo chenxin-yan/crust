@@ -89,20 +89,16 @@ export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] exten
 		: IsUnion<Ds[number]> extends true
 			? AttachedCommandSpellingsSlow<Ds>
 			: IsClosedName<N> extends true
-				? IsClosedName<Al[number]> extends true
-					? N | Al[number]
-					: string
+				? N | NarrowAliases<Al>
 				: AttachedCommandSpellingsSlow<Ds>
 	: AttachedCommandSpellingsSlow<Ds>;
 
+// Aliases known only at runtime add no spelling: typed paths use the canonical name, and the
+// other commands' paths stay checked.
 type AttachedCommandSpellingsSlow<Ds extends readonly unknown[]> = [Ds] extends [readonly []]
 	? never
 	: IsStaticTuple<Ds> extends true
 		? HasClosedNames<Ds> extends true
-			? false extends {
-					[I in keyof Ds]: IsClosedName<DefinitionAliases<Ds[I]>[number]>;
-				}[number]
-				? string
-				: CommandDefinitionSpellings<Ds[number]>
+			? CommandDefinitionSpellings<Ds[number]>
 			: string
 		: string;

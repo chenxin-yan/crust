@@ -41,7 +41,7 @@ https://api.example.com/health
 
 `.use(api)` says “I need this Context”; `.provide(api())` supplies it. Add the command after providing its dependencies—reversing the order is a type error.
 
-`ctx` also exposes the Contexts that a used Context's setup [uses](#contexts-that-use-other-contexts), and the command demands them too.
+A command reads the Contexts it names, and demands exactly those. To read one that `api`'s setup [uses](#contexts-that-use-other-contexts), name it too: `.use(api, config)`.
 
 A group that only adds commands doesn't `.use()` their Contexts. Its demands include its children's, checked where the group is added:
 
@@ -194,7 +194,13 @@ Provide every dependency. Order within one `.provide()` call does not matter. Se
   ../../../examples/guide/contexts-doubles.ts#replacement
 </include>
 
-The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs.
+The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs. An `.of()` value needs none of the real setup's dependencies, and it fits wherever the real instance does, such as a parameter typed `ReturnType<typeof database>`. Type such a parameter with that alone: a union with `ReturnType<typeof database.of>` fails with `FIX_DEPENDENCY_TYPE`.
+
+To swap a Context on an app that is already assembled, pass `provide` to [`run()`](/docs/api/crust#runpath-input-options) or the [testing helpers](/docs/modules/testing#captureoptions). It replaces the same-name Context for that invocation only. These calls type it against the Contexts the app provides at its root; for a Context a command provides itself, use the app's `execute({ provide })`, which takes any instance:
+
+<include lang="ts" meta='title="work.test.ts"'>
+  ../../../examples/guide/contexts-doubles.ts#provide-option
+</include>
 
 <Callout type="warn">
   A disposable supplied through `.of()` is still disposed by each invocation that reads it. Use a

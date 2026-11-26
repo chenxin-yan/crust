@@ -15,6 +15,8 @@ type RunTasks = NonNullable<NonNullable<UserConfig["run"]>["tasks"]>;
 /** tsdown options shared by every published library; packages add `entry`. */
 export const pack = {
 	fixedExtension: false,
+	// Keep shared-chunk export names readable: compiler errors print them (`import("…").Crust`, not `.H`).
+	outputOptions: { minifyInternalExports: false },
 	publint: "ci-only",
 	attw: {
 		enabled: "ci-only",

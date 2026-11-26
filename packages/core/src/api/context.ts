@@ -77,9 +77,8 @@ export interface ContextInstance<
 	// Flags a command that uses this Context parses: its own and its setup dependencies', transitively.
 	UF extends FlagsDef = OF,
 > extends Defining<ContextInstance<Name, Value, OF, Deps, UF>> {
-	readonly [contextProof]?: string extends keyof OF | keyof Deps
-		? unknown
-		: (state: [OF, Deps]) => void;
+	// Owned flags are invariant; `keyof Deps` stays out of this check, which would make `Deps` invariant too.
+	readonly [contextProof]?: string extends keyof OF ? unknown : (state: OF) => void;
 	readonly name: Name;
 	readonly ownedFlags: FlagsDef;
 	/** Validated {@link ContextBuilder.sections}, frozen at declaration. */
@@ -90,14 +89,27 @@ export interface ContextInstance<
 	readonly factory: AnyContextFactory;
 	setup(input: ContextSetup<OF, ContextMap>): Awaitable<Value>;
 	readonly _ownedFlags?: OF;
-	/** @internal — phantom carrying the transitive dependency closure */
-	readonly _deps?: Deps;
+	/**
+	 * @internal — phantom carrying the transitive dependency closure. Contravariant: an instance
+	 * that needs less, such as an `.of()` value, stands in for one that needs more.
+	 */
+	readonly _deps?: (deps: Deps) => void;
 	/** @internal — phantom carrying the flags a `.use()` of an Extension providing it installs */
 	readonly _useFlags?: UF;
 }
 
 /** Any Context instance: the open bound for provider lists; never evidence for trusted attachment. */
 export type AnyContextInstance = ContextInstance<string, unknown, any, any>;
+
+/**
+ * An instance that can replace one of `Contexts` (name to value): same name, a value of its type.
+ * An open record accepts any instance, as `any` so a typed app stays assignable to `AnyCrust`.
+ */
+export type ContextReplacement<Contexts extends object> = string extends keyof Contexts
+	? any
+	: {
+			[K in keyof Contexts & string]: ContextInstance<K, Contexts[K], any, any, any>;
+		}[keyof Contexts & string];
 
 /** Whatever a Context setup produces, erased at the runtime registry. */
 export type ContextValue = Awaited<ReturnType<AnyContextInstance["setup"]>>;
@@ -216,20 +228,23 @@ export function validateContextAvailability(
 	contexts: readonly AnyContextInstance[],
 	sources: readonly (AnyContextInstance | AnyContextFactory)[],
 ): void {
-	const names = new Set(contexts.map((instance) => instance.name));
+	// Last wins, as in the resolver.
+	const providers = new Map(contexts.map((instance) => [instance.name, instance]));
 	const visited = new Set<AnyContextInstance | AnyContextFactory>();
 	const visit = (source: AnyContextInstance | AnyContextFactory): void => {
 		if (visited.has(source)) return;
 		visited.add(source);
 		const name = contextNameOf(source);
-		if (!names.has(name)) {
+		const provider = providers.get(name);
+		if (!provider) {
 			throw new CrustError("DEFINITION", `No provider for Context "${name}"`, {
 				subject: "context",
 				name,
 				reason: "missing-context",
 			});
 		}
-		for (const dependency of source.use) visit(dependency);
+		// A demanded factory needs what its provider's setup uses: nothing for an `.of()` value.
+		for (const dependency of ("contextName" in source ? provider : source).use) visit(dependency);
 	};
 	for (const source of sources) visit(source);
 }
@@ -283,13 +298,21 @@ export type ContextUseFlags<
 				? Acc
 				: AppendedFlags<Acc, FlagsDef>;
 
+/** The Contexts a `.use()` reads: their values and their dependencies', transitively. */
 export type ContextDependencies<Use extends readonly AnyContextFactory[]> =
 	IsStaticTuple<Use> extends true
 		? FactoriesOutput<Use> & FactoriesDeps<Use>
 		: Record<string, ContextValue>;
 
+/**
+ * The Contexts a `.use()` demands: only those it names. What their setups use is demanded
+ * where each is provided, so a provided `.of()` value demands nothing more.
+ */
+export type ContextDemands<Use extends readonly AnyContextFactory[]> =
+	IsStaticTuple<Use> extends true ? FactoriesOutput<Use> : Record<string, ContextValue>;
+
 export type ContextDepsOf<C> = C extends AnyContextInstance
-	? DefiningOf<C> extends { readonly _deps?: infer Deps extends ContextMap }
+	? DefiningOf<C> extends { readonly _deps?: (deps: infer Deps extends ContextMap) => void }
 		? Deps
 		: {}
 	: {};

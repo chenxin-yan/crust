@@ -72,6 +72,12 @@ Options for `captureExecute()` and `runInteractive()`:
 
 <include lang="ts">../../../examples/modules/testing.ts#env</include>
 
+Both helpers also take `provide`: Context instances, such as [`.of()`](/docs/guide/contexts#replace-a-context-in-tests) doubles, that replace the app's same-name Contexts for this run only, so a test needs no app factory. It is typed against the Contexts the app provides at its root:
+
+```ts
+await captureExecute(app, ["ps"], { provide: [engine.of(fakeEngine)] });
+```
+
 The environment and the working directory belong to the process, so one run at a time may replace them: a call with `env` or `cwd`, or `withEnv()`, throws while another run is active. A run without them that starts during a replacement sees the replaced environment and directory. Run these tests one after another (Vitest runs the tests of one file in order unless they are `concurrent`). For `runInteractive()`, the replacement lasts until `done` settles: a `waitFor()` that times out cancels the run, and a test that can fail before awaiting `done` otherwise should call `cancel()` and then await `done`, for example in `afterEach`. An action that ignores `signal` keeps the replacement until it returns.
 
 <auto-type-table path="../../../../../packages/testing/src/capture.ts" name="CaptureOptions" />

@@ -1,4 +1,5 @@
 import type { Equal, Expect } from "../tests/helpers.ts";
+import type { InferArgs as PublicInferArgs, InferFlags as PublicInferFlags } from "./index.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -7,6 +8,14 @@ import type {
 	InferArgs,
 	InferFlags,
 } from "./types.ts";
+
+// The package exports the inference helpers.
+type _publicFlags = Expect<
+	Equal<PublicInferFlags<{ n: { type: "number"; default: 1 } }>, { n: number }>
+>;
+type _publicArgs = Expect<
+	Equal<PublicInferArgs<[{ name: "file"; type: "string"; required: true }]>, { file: string }>
+>;
 
 // InferArgs type inference
 {

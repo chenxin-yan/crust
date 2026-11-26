@@ -206,3 +206,28 @@ function _openInvalidDefinitions() {
 	// @ts-expect-error -- an open collection must retain independently invalid default membership
 	new Crust("app").args(...args);
 }
+
+// `parse` on a non-string flag names the fix
+function _typecheckParseIsForStringFlags() {
+	// @ts-expect-error -- FIX_PARSE: `parse` is for string flags
+	new Crust("cli").flags({ n: { type: "number", parse: (raw: string) => Number(raw) } });
+	new Crust("cli").flags({ n: { type: "string", parse: (raw: string) => Number(raw) } });
+}
+
+// A required `multiple` flag is a non-empty tuple, in the action and in typed input
+function _typecheckRequiredMultipleIsNonEmpty() {
+	const app = new Crust("cli")
+		.flags({
+			id: { type: "string", multiple: true, required: true },
+			tag: { type: "string", multiple: true },
+		})
+		.action(({ flags }) => {
+			const first: string = flags.id[0];
+			const tags: string[] | undefined = flags.tag;
+			return [first, tags];
+		});
+	const ids: readonly string[] = ["a"];
+	void app.run([], { flags: { id: ["a"], tag: ids } });
+	// @ts-expect-error -- a required multiple flag needs at least one value
+	void app.run([], { flags: { id: [] } });
+}

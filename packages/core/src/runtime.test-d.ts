@@ -133,6 +133,19 @@ function _localAliasProofIsNotDestinationProof(aliases: string[]) {
 	new Crust("cli").add(defineCommand("child", { aliases: ["c", "c"] }, (b) => b));
 }
 
+function _runtimeAliasesKeepOtherPathsTyped(aliases: string[]) {
+	const app = new Crust("cli")
+		.add(defineCommand("test", { aliases }, (c) => c.action(() => 1)))
+		.command("why", (c) => c.action(() => 2));
+	const why = app.run(["why"]);
+	type _why = Expect<Equal<typeof why, Promise<RunOutcome<number>>>>;
+	void app.run(["test"]);
+	// @ts-expect-error -- "why" has no children, whatever "test"'s aliases are
+	app.at(["why", "impossible"]);
+	// @ts-expect-error -- a runtime alias is no typed path
+	void app.run(["t"]);
+}
+
 function _sectionShapesStayTyped() {
 	// @ts-expect-error -- consumer identities are branded, including on checked configs
 	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: ["unbranded"] }] });
@@ -307,30 +320,30 @@ function _localInputHolders() {
 	void identity(arg).run([], { args: { optional: "ok" } });
 }
 
-function _unprovenChoices(
+function _widenedChoicesTypeInputAsTheirElement(
 	choices: string[],
 	optional: readonly ["allowed"] | undefined,
 	conditional: readonly ["allowed"] | readonly ["other"],
+	templates: readonly ("vue" | "react")[],
 ) {
 	const app = new Crust("app").flags({
 		mode: { type: "string", choices },
 		safe: { type: "boolean" },
 	});
-	// @ts-expect-error -- a widened collection does not prove future membership
-	void app.run([], { flags: { mode: "forbidden" } });
-	const assigned = { flags: { mode: "forbidden" } };
-	// @ts-expect-error -- compatibility must not bypass choice membership
-	void app.run([], assigned);
+	// A widened list types input as its element type; the runtime checks membership.
+	void app.run([], { flags: { mode: "any text" } });
 	void app.run([], { flags: { safe: true } });
-	const local = importFlag(choices);
-	// @ts-expect-error -- a locally checked definition is not future input proof
-	void new Crust("app").flags(local).run([], { flags: { mode: "forbidden" } });
+	void new Crust("app")
+		.flags({ mode: importFlag(choices) })
+		.run([], { flags: { mode: "any text" } });
 	type Flags = InputFlags<{ mode: { type: "string"; choices: string[] } }>;
-	// @ts-expect-error -- exported flags cannot prove widened membership
-	const _flags: Flags = { mode: "forbidden" };
+	type _flags = Expect<Equal<Flags["mode"], string | undefined>>;
 	type Args = InputArgs<[{ name: "mode"; type: "string"; choices: string[] }]>;
-	// @ts-expect-error -- arguments use the same membership owner
-	const _args: Args = { mode: "forbidden" };
+	type _args = Expect<Equal<Args["mode"], string | undefined>>;
+	const closed = new Crust("app").flags({ template: { type: "string", choices: templates } });
+	void closed.run([], { flags: { template: "vue" } });
+	// @ts-expect-error -- a closed element union still rejects other values
+	void closed.run([], { flags: { template: "svelte" } });
 	void new Crust("app")
 		.args({ name: "mode", type: "string", choices: optional })
 		// @ts-expect-error -- optional choices can constrain a supplied value
@@ -556,29 +569,26 @@ function _conditionalArgumentTuples(condition: boolean) {
 	void tree.run(["conditional"], { args: condition ? { a: "ok" } : { b: "ok" } });
 }
 
-function _infiniteChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) {
+function _templateChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) {
 	const choices = [choice] as const;
 	const flag = defineFlag({ type: "string", choices });
 	const app = new Crust("app").flags({ mode: flag });
-	// @ts-expect-error -- one actual choice does not prove every member of its template domain
+	// A template choice types input as its template; the runtime checks the actual member.
 	void app.run([], { flags: { mode: "mode-other" } });
-	void app.run([]);
-	// @ts-expect-error -- an infinite choice domain does not prove supplied membership
 	void app.run([], { flags: { mode: choice } });
-	const checked = new Crust("app").flags({ mode: defineFlag({ type: "string", choices }) });
-	// @ts-expect-error -- local checking cannot prove an infinite set of supplied values
-	void checked.run([], { flags: { mode: "mode-other" } });
+	void app.run([]);
+	// @ts-expect-error -- outside the template
+	void app.run([], { flags: { mode: "other" } });
 	type Input = InputFlags<{
 		mode: { type: "string"; choices: typeof choices };
 	}>;
-	// @ts-expect-error -- assigned exported inputs use the same membership proof
-	const input: Input = { mode: "mode-other" };
-	void input;
+	type _input = Expect<Equal<Input["mode"], `mode-${string}` | undefined>>;
 	defineFlag({ type: "string", choices, default: "mode-other" });
 	defineArg("mode", { type: "string", choices, default: "mode-other" });
 	const args = new Crust("app").args(defineArg("mode", { type: "string", choices: [numeric] }));
-	// @ts-expect-error -- fixed-length numeric choice tuples are not finite identity evidence
 	void args.run([], { args: { mode: "123" } });
+	// @ts-expect-error -- not a numeric string
+	void args.run([], { args: { mode: "abc" } });
 	void new Crust("app")
 		.flags({ mode: defineFlag({ type: "string", choices: ["mode-a", "mode-b"] }) })
 		.run([], { flags: { mode: "mode-b" } });
@@ -628,6 +638,7 @@ function _templateSpellingEntryPoints(
 	void app.run(["safe"], { args: { value: "ok" } });
 	// @ts-expect-error -- known canonical requirements remain known despite open aliases
 	void app.run(["safe"]);
+	// @ts-expect-error -- an alias known only by its template is no typed path; the name is
 	void app.run(["mode-other"]);
 	const inline = new Crust("app").command(name, (c) => c);
 	void inline.run(["mode-other"]);

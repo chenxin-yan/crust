@@ -1163,7 +1163,7 @@ describe("Extension named hooks", () => {
 		const gate = defineExtension(defineExtensionId("gate"))
 			.flags({ stop: { type: "boolean" } })
 			.handle("stop", (ctx) => {
-				seenPort = ctx.flags.port;
+				seenPort = (ctx.flags as Record<string, unknown>).port;
 			})
 			.postRun((_ctx, outcome) => {
 				outcomeBy = outcome.status === "handled" ? outcome.by : "";
@@ -1199,7 +1199,7 @@ describe("Extension named hooks", () => {
 			const port = { type: "number", default: 3000, env: "PORT" } as const;
 			const gate = defineExtension(defineExtensionId("gate"))
 				.flags({ stop: { type: "boolean", recursive: true } })
-				.preRun((ctx) => void seen.push(ctx.flags.port))
+				.preRun((ctx) => void seen.push((ctx.flags as Record<string, unknown>).port))
 				.handle("stop", () => {})
 				.onError((error) => void errors.push(error));
 			const app = new Crust("cli")

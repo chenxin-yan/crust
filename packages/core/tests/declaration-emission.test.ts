@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -65,7 +65,7 @@ export const authenticatedApi = defineContext("authenticated-api")
 	}));
 
 // A declared Context bag preserves the factory's value type; .use() chains
-// accumulate demand and the transitive dependency closure
+// accumulate the named Contexts
 export const deploy = defineCommand("deploy", (cmd) =>
 	cmd
 		.use(auth)
@@ -80,10 +80,10 @@ export const deploy = defineCommand("deploy", (cmd) =>
 // ContextInstance tuples, and its contributed CommandDefinition tuple; a
 // TS2742 regression here must fail emission.
 export const telemetry = defineExtension(defineExtensionId("telemetry"))
-	.use(authenticatedApi)
+	.use(auth, authenticatedApi)
 	.provide(auth())
 	.add(deploy)
-	.preRun(async ({ ctx }) => void (await ctx.auth));
+	.postRun(async ({ ctx }) => void (await ctx.auth));
 
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")
@@ -147,14 +147,16 @@ const pool = defineContext("pool")
 const query = defineCommand("query", (cmd) =>
 	cmd.use(pool).action(async ({ ctx }) => void (await ctx.pool)),
 );
-// @ts-expect-error -- pool's transitive config dependency is unmet at .add()
-new Crust("cli").provide(pool.of({ url: "fake" })).add(query);
+// @ts-expect-error -- a real pool's config dependency is unmet where it is provided
+new Crust("cli").provide(pool()).add(query);
 // @ts-expect-error -- inline .use(pool) demand is unmet at the call site
 new Crust("cli").command("query", (cmd) => cmd.use(pool).action(() => {}));
 
 // Controls: the same shapes compile once demands are met, so the directives above only
 // pass for the unmet demand, not for an unrelated error on their line.
-new Crust("cli").provide(config(), pool.of({ url: "fake" })).add(query);
+new Crust("cli").provide(config(), pool()).add(query);
+// A provided \`.of()\` value needs nothing, so pool's config dependency is not demanded.
+new Crust("cli").provide(pool.of({ url: "fake" })).add(query);
 new Crust("cli").provide(config(), pool()).command("query", (cmd) => cmd.use(pool).action(() => {}));
 export const sameDemands: typeof extended = base.extend(extension);
 `;
@@ -264,5 +266,11 @@ describe("declaration emission for consumers", () => {
 		const output = result.stdout.toString() + result.stderr.toString();
 		expect(output).toBe("");
 		expect(result.status).toBe(0);
+	});
+
+	it("imports shared-chunk types under their own names, which compiler errors print", () => {
+		const declarations = readFileSync(join(corePkg, "dist/index.d.ts"), "utf8");
+		expect(declarations).toMatch(/^import \{[^}]*\bCrust\b[^}]*\} from "\.\//m);
+		expect(declarations).not.toMatch(/^import \{[^}]* as [^}]*\} from "\.\//m);
 	});
 });

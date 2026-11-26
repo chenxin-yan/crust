@@ -106,7 +106,7 @@ type ContextFactoriesOf<
 
 type FactoryContexts<F> = F extends AnyContextFactory ? UsedContexts<[F]> : never;
 
-// The Contexts of `Fs` with their dependencies: those of each factory a spread array may hold, as the client declares them all.
+// The Contexts of `Fs`: those of each factory a spread array may hold, as the client declares them all.
 type ClientDeps<Fs extends readonly AnyContextFactory[]> = [Fs[number]] extends [never]
 	? {}
 	: UnionToIntersection<FactoryContexts<Fs[number]>> extends infer Deps extends ContextMap

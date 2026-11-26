@@ -238,7 +238,7 @@ describe("schema interaction with Extensions", () => {
 		let actionSaw: unknown;
 
 		const probe = defineExtension(defineExtensionId("probe")).preRun((ctx) => {
-			preRunSaw = ctx.flags.port;
+			preRunSaw = (ctx.flags as Record<string, unknown>).port;
 		});
 
 		const app = new Crust("cli")

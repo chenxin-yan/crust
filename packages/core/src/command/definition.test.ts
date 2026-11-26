@@ -30,6 +30,17 @@ describe("command definitions", () => {
 		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
 
+	it("adds an .as() copy without the original's aliases", async () => {
+		const ls = defineCommand("ls", { aliases: ["l"] }, (command) => command.action(() => "ls"));
+		const app = new Crust("cli").add(ls, ls.as("ps"));
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.subCommands.ls?.meta.aliases).toEqual(["l"]);
+		expect(snapshot.subCommands.ps?.meta).not.toHaveProperty("aliases");
+		expect(await app.run(["l"])).toMatchObject({ status: "completed", result: "ls" });
+		type _psHasNoAliases = Expect<Equal<keyof (typeof app)["_types"]["tree"], "ls" | "l" | "ps">>;
+	});
+
 	it("rejects a later batch recipe returning an earlier recipe's fluent builder", async () => {
 		const events: string[] = [];
 		let retained: CommandDefinitionBuilder<{ "from-first": { type: "boolean" } }, []> | undefined;
@@ -135,7 +146,11 @@ describe("command definitions", () => {
 		const sub = defineCommand("sub", (cmd) => cmd.use(db).provide(cache()));
 		const app = new Crust("cli").provide(db()).add(sub);
 		await expect(app.snapshot()).rejects.toThrow(
-			'Flag "conn" collides with existing flag "conn" on command "sub"',
+			'Flag "conn" of Context "cache" collides with existing flag "conn" of Context "db" on command "sub"',
+		);
+		// Written before `.provide()`, a command's own flag is named as the command's.
+		expect(() => new Crust("cli").flags({ conn: { type: "string" } }).provide(cache())).toThrow(
+			'Flag "conn" of Context "cache" collides with existing flag "conn" on command "cli"',
 		);
 		// Without `.use(db)`, the recipe does not parse db's flags, so nothing collides.
 		const free = defineCommand("sub", (cmd) => cmd.provide(cache()));

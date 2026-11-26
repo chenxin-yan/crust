@@ -10,6 +10,7 @@ import {
 	type ContextMap,
 	type ContextsOutput,
 	type ContextsOwnedFlags,
+	type ContextReplacement,
 	type ContextUseFlags,
 	type DefiningOf,
 } from "../api/context.ts";
@@ -219,8 +220,8 @@ export interface CommandDefinition<
 > {
 	/** The subcommand name this definition is added under */
 	readonly name: Name;
-	/** The same definition under a different name; configured aliases travel with it. */
-	as<const N extends string>(name: N): CommandDefinition<N, Aliases, Shape, Deps>;
+	/** The same definition under a different name, without its aliases, which name the original. */
+	as<const N extends string>(name: N): CommandDefinition<N, readonly [], Shape, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
 		readonly _aliases?: Aliases;
@@ -639,9 +640,57 @@ type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extend
 	? Base & Next
 	: { [K in keyof Base as K extends LiteralKeys<Next> ? never : K]: Base[K] } & Next;
 
+/** `readonly [id, flag names]` for each literal Extension id registered so far; see `ReplacedFlagNames`. */
+type ExtensionFlagNamesOf<S extends AnyBuilderFacts> = Exclude<S["extensionFlagNames"], undefined>;
+
+/** An Extension's literal id; `never` for a runtime-only one, which the types cannot follow. */
+type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
+	? IsUnion<Id> extends true
+		? never
+		: IsClosedName<Id> extends true
+			? Id
+			: never
+	: never;
+
+// Only a registration that certainly happens retires an id: not a conditional or open list.
+type DefiniteExtensionIds<Es extends readonly AnyExtension[]> =
+	IsStaticTuple<Es> extends true ? LiteralExtensionId<Es[number]> : never;
+
+/**
+ * Flag names an Extension contributes, for a later same-id registration; an open record names
+ * none. Not the flags of the Contexts its hooks `.use()`: their provider still supplies them.
+ */
+type ContributedFlagNames<E> = keyof (ExtensionOwnFlags<E> &
+	ExtensionProvidedFlags<E>) extends infer K
+	? string extends K
+		? never
+		: K
+	: never;
+
+// A same-id registration replaces the earlier one at runtime, so the flags only the earlier one
+// contributed are gone; the later one's own come back through `ReplaceEntries`.
+type ReplacedFlagNames<S extends AnyBuilderFacts, Es extends readonly AnyExtension[]> = Extract<
+	ExtensionFlagNamesOf<S>,
+	readonly [DefiniteExtensionIds<Es>, unknown]
+>[1];
+
 type WithoutNames<Base, Names> = [Names] extends [never]
 	? Base
 	: { [K in keyof Base as K extends Names ? never : K]: Base[K] };
+
+// A flat union of pairs: a nested record per `.extend()` call hits TS2589 at about 48 calls.
+type RegisteredFlagNames<Names extends object, Es extends readonly AnyExtension[]> = [
+	DefiniteExtensionIds<Es>,
+] extends [never]
+	? Names
+	: | Exclude<Names, readonly [DefiniteExtensionIds<Es>, unknown]>
+		| (Es[number] extends infer E
+				? E extends unknown
+					? [LiteralExtensionId<E>] extends [never]
+						? never
+						: readonly [LiteralExtensionId<E>, ContributedFlagNames<E>]
+					: never
+				: never);
 
 // Extension commands join the tree like `.add()`: a colliding command is a definition error.
 // Resolving with `infer R` keeps a chain of `.extend()` calls from deferring one nested tree per
@@ -730,8 +779,8 @@ function isCommandRecipe(value: CommandConfig | CommandRecipe | undefined): valu
  *
  * The recipe runs once per `.add()`, receiving a fresh builder.
  *
- * Static metadata belongs in `config`. Use `.as(name)`
- * to add one definition under a different name; configured aliases travel with it.
+ * Static metadata belongs in `config`. Use `.as(name)` to add one definition under a different
+ * name; the copy has no aliases, since they name the original.
  *
  * `name` and the aliases are checked here when the CLI runs from source and in
  * `crust build`.
@@ -775,17 +824,26 @@ export function defineCommand(
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		meta,
 	};
-	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
+	const { aliases: _aliases, ...renamedMeta } = meta;
+	// Aliases are a type-only phantom here; the overloads restate the configured ones.
+	const named = <const DefName extends string>(
+		defName: DefName,
+		definitionMeta: Omit<CommandMeta, "name">,
+	): CommandDefinition<DefName, readonly []> => {
 		return Object.freeze({
 			name: defName,
 			as: <const NewName extends string>(newName: NewName) => {
-				if (process.env.CRUST_INTERNAL_BUILD !== "1") checkChildCommandName(newName, meta.aliases);
-				return named(newName);
+				if (process.env.CRUST_INTERNAL_BUILD !== "1") checkChildCommandName(newName);
+				return named(newName, renamedMeta);
 			},
-			[commandDefinitionInternal]: Object.freeze({ ...internal, name: defName }),
+			[commandDefinitionInternal]: Object.freeze({
+				...internal,
+				name: defName,
+				meta: definitionMeta,
+			}),
 		});
 	};
-	return named(name);
+	return named(name, meta);
 }
 
 function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[] {
@@ -824,7 +882,10 @@ type BuilderFacts<
 	Output extends OutputState | undefined = InitialOutputState,
 	// Extension-provided Context flags registered so far; see `TreeWithInlineFlags`.
 	InlineFlags extends FlagsDef = {},
+	// `readonly [id, flag names]` per literal Extension id registered; see `ReplacedFlagNames`.
+	ExtensionFlagNames extends object = {},
 > = {
+	readonly extensionFlagNames: ExtensionFlagNames;
 	readonly output: Output;
 	readonly actionDeps: ActionDeps;
 	readonly extensionCommands: ExtensionCommandSpellings;
@@ -842,6 +903,7 @@ type AnyBuilderFacts = {
 	readonly extensionCommands?: string | undefined;
 	readonly recursiveFlags?: FlagsDef | undefined;
 	readonly inlineFlags?: FlagsDef | undefined;
+	readonly extensionFlagNames?: object | undefined;
 	readonly demands: ContextMap;
 	readonly recipeDeps?: ContextMap | undefined;
 	readonly providers?: Record<string, ContextValue> | undefined;
@@ -870,20 +932,39 @@ type ExtensionCommandsOf<S extends AnyBuilderFacts> = [S["extensionCommands"]] e
 type AppRecursiveFlagsOf<S extends AnyBuilderFacts> = Exclude<S["recursiveFlags"], undefined>;
 
 /**
- * `schema` is the `.output()` schema; `actionReturn` wraps the action's awaited return
+ * `schema` is the `.output()` schema; `actionReturn` holds the action's {@link ActionCompletion}
  * (`undefined` before any `.action()`), kept apart from the result the schema produces.
  */
 type OutputState = {
 	readonly schema: StandardSchema | undefined;
-	readonly actionReturn: readonly [unknown] | undefined;
+	readonly actionReturn: AnyActionCompletion | undefined;
 };
 
 // `actionReturn` stays open (no action, or any) so a builder annotated with the default state,
 // such as `CommandDefinitionBuilder<F, A>`, still accepts one after `.action()`.
 type InitialOutputState = {
 	readonly schema: undefined;
-	readonly actionReturn: readonly [unknown] | undefined;
+	readonly actionReturn: AnyActionCompletion | undefined;
 };
+
+// `never` events: an action that never returns (see `ActionCompletion`).
+type AnyActionCompletion = readonly [result: unknown, events: readonly unknown[] | undefined];
+
+/**
+ * What an action returning `R` completes with: its awaited return and no events, or, when it
+ * returns an async generator (an `async function*`), the generator's `return` value and the
+ * values it yields. A promise of a generator is an ordinary result, as at runtime. `any` and
+ * `never` stay whole; a union is taken member by member, since the runtime drains whichever
+ * generator a call returns.
+ */
+type ActionCompletion<R> =
+	IsAny<R> extends true
+		? readonly [result: any, events: readonly unknown[] | undefined]
+		: [R] extends [never]
+			? readonly [result: never, events: never]
+			: R extends AsyncGenerator<infer Event, infer Returned>
+				? readonly [result: Awaited<Returned>, events: readonly Event[]]
+				: readonly [result: Awaited<R>, events: undefined];
 
 type OutputStateOf<S extends AnyBuilderFacts> = Exclude<S["output"], undefined>;
 
@@ -893,17 +974,13 @@ type ActionReturnOf<S extends AnyBuilderFacts> = OutputStateOf<S>["actionReturn"
 
 /**
  * What the action may return: anything, or the `.output()` schema's input (possibly awaited,
- * or the `return` value of an async generator, itself possibly awaited).
+ * or the `return` value of an `async function*`).
  */
 type ActionReturn<S extends AnyBuilderFacts> = [OutputSchemaOf<S>] extends [never]
 	? unknown
 	: | InferInput<OutputSchemaOf<S>>
 		| PromiseLike<InferInput<OutputSchemaOf<S>>>
-		| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>
-		| PromiseLike<AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>>;
-
-/** An awaited action return's value: an async generator's `return` value, else itself. */
-type ActionValue<V> = V extends AsyncGenerator<any, infer Returned> ? Awaited<Returned> : V;
+		| AsyncGenerator<unknown, InferInput<OutputSchemaOf<S>>>;
 
 /**
  * The values an async generator action yields; `undefined` for any other (or no) action. Erased
@@ -914,29 +991,30 @@ type ActionEvents<S extends AnyBuilderFacts> = undefined extends S["output"]
 	? readonly unknown[] | undefined
 	: IsAny<ActionReturnOf<S>> extends true
 		? readonly unknown[] | undefined
-		: ActionReturnOf<S> extends readonly [infer V]
-			? V extends AsyncGenerator<infer Event>
-				? readonly Event[]
-				: undefined
+		: ActionReturnOf<S> extends readonly [
+					unknown,
+					infer Events extends readonly unknown[] | undefined,
+			  ]
+			? Events
 			: undefined;
 
 /**
- * The command result: the awaited action return (an async generator's `return` value), or the
+ * The command result: the awaited action return (an `async function*`'s `return` value), or the
  * `.output()` schema's output, awaited too because the invocation resolves any promise the
  * schema returns.
  */
 type ActionResult<S extends AnyBuilderFacts, R> = [OutputSchemaOf<S>] extends [never]
-	? ActionValue<Awaited<R>>
+	? ActionCompletion<R>[0]
 	: Awaited<InferOutput<OutputSchemaOf<S>>>;
 
-// `.output()` after `.action()` checks the action's awaited return against the new schema;
+// `.output()` after `.action()` checks the action's result against the new schema;
 // a state that may have no action (see `InitialOutputState`) has nothing to check.
 type OutputResultBrand<
-	Return extends readonly [unknown] | undefined,
+	Return extends AnyActionCompletion | undefined,
 	S extends StandardSchema,
 > = undefined extends Return
 	? {}
-	: [ActionValue<NonNullable<Return>[0]>] extends [InferInput<S>]
+	: [NonNullable<Return>[0]] extends [InferInput<S>]
 		? {}
 		: {
 				readonly FIX_OUTPUT: "The action's result does not match this output schema's input type";
@@ -995,7 +1073,8 @@ type AfterUse<
 		Facts["extensionCommands"],
 		AppRecursiveFlagsOf<Facts>,
 		Facts["output"],
-		AppInlineFlagsOf<Facts>
+		AppInlineFlagsOf<Facts>,
+		ExtensionFlagNamesOf<Facts>
 	>,
 	Result,
 	Meta,
@@ -1028,7 +1107,8 @@ type AfterProvide<
 		Facts["extensionCommands"],
 		AppRecursiveFlagsOf<Facts>,
 		Facts["output"],
-		AppInlineFlagsOf<Facts>
+		AppInlineFlagsOf<Facts>,
+		ExtensionFlagNamesOf<Facts>
 	>,
 	Result,
 	Meta,
@@ -1056,7 +1136,7 @@ type AfterAction<
 		readonly actionDeps: Ctx;
 		readonly output: {
 			readonly schema: OutputStateOf<Facts>["schema"];
-			readonly actionReturn: readonly [Awaited<R>];
+			readonly actionReturn: ActionCompletion<R>;
 		};
 	},
 	ActionResult<Facts, R>,
@@ -1105,11 +1185,11 @@ type AfterExtend<
 	// Not `MergeFlags`: re-instantiating an alias revisits its type arguments, so a chain of
 	// `.extend()` calls would nest one `MergeFlags<…>` level per call (TS2589 at about 100 calls).
 	// `ReplaceEntries` is a conditional, resolved at each call.
-	ReplaceEntries<Flags, ExtensionFlags<Es>>,
+	ReplaceEntries<WithoutNames<Flags, ReplacedFlagNames<Facts, Es>>, ExtensionFlags<Es>>,
 	A,
 	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	ExtensionCommandTree<Tree, Es, ExtensionCommandsOf<Facts>>,
-	ReplaceEntries<CtxFlags, ExtensionsProvidedFlags<Es>>,
+	ReplaceEntries<WithoutNames<CtxFlags, ReplacedFlagNames<Facts, Es>>, ExtensionsProvidedFlags<Es>>,
 	BuilderFacts<
 		Facts["demands"] & ExtensionDemandValues<Es>,
 		RecipeDepsOf<Facts>,
@@ -1122,9 +1202,16 @@ type AfterExtend<
 				KnownSpellings<ExtensionsCommandSpellings<Es>>,
 				Exclude<LiteralKeys<Tree>, ExtensionCommandsOf<Facts>>
 		  >,
-		ReplaceEntries<AppRecursiveFlagsOf<Facts>, RecursiveExtensionFlags<Es>>,
+		ReplaceEntries<
+			WithoutNames<AppRecursiveFlagsOf<Facts>, ReplacedFlagNames<Facts, Es>>,
+			RecursiveExtensionFlags<Es>
+		>,
 		Facts["output"],
-		ReplaceEntries<AppInlineFlagsOf<Facts>, ExtensionsProvidedFlags<Es>>
+		ReplaceEntries<
+			WithoutNames<AppInlineFlagsOf<Facts>, ReplacedFlagNames<Facts, Es>>,
+			ExtensionsProvidedFlags<Es>
+		>,
+		RegisteredFlagNames<ExtensionFlagNamesOf<Facts>, Es>
 	>,
 	Result,
 	Meta,
@@ -1151,7 +1238,8 @@ type AfterAdd<
 		State["facts"]["extensionCommands"],
 		AppRecursiveFlagsOf<State["facts"]>,
 		State["facts"]["output"],
-		AppInlineFlagsOf<State["facts"]>
+		AppInlineFlagsOf<State["facts"]>,
+		ExtensionFlagNamesOf<State["facts"]>
 	>,
 	State["result"],
 	State["meta"],
@@ -1225,14 +1313,21 @@ type KnownDepsAt<State extends BuilderState> = State["caps"] extends "recipe"
 	? string
 	: keyof State["ctx"] & string;
 
-// An inline child's builder: it parses the Context-owned flags its parent has at the call site.
-// Recursive Extension flags stay out: readers apply them to every command (see `AppShape`).
-type InlineCommandBuilder<State extends BuilderState> = CommandDefinitionBuilder<
-	State["ctxFlags"],
+// An inline child's builder: it parses the Context-owned flags its parent has at the call site,
+// and the recursive Extension flags registered so far, which every command parses. Its facts
+// carry those on, so its own inline children see them too; readers still apply them to every
+// stored shape (see `AppShape`), which also covers commands added before `.extend()`.
+type InlineCommandBuilder<State extends BuilderState> = Crust<
+	State["ctxFlags"] & AppRecursiveFlagsOf<State["facts"]>,
 	[],
 	State["ctx"],
 	{},
-	State["ctxFlags"]
+	State["ctxFlags"],
+	BuilderFacts<{}, {}, {}, {}, never, AppRecursiveFlagsOf<State["facts"]>>,
+	void,
+	{},
+	string,
+	"recipe"
 >;
 
 type InlineCommandRecipe<State extends BuilderState, N extends string, B> = ((
@@ -1496,14 +1591,20 @@ export class Crust<
 	/**
 	 * Declare Contexts this command consumes without supplying their values.
 	 * Factory references are retained while setup stays lazy. An Extension, or
-	 * Extension factory, stands for the Contexts that Extension provides. The command,
+	 * Extension factory, stands for the Contexts that Extension provides. `ctx` gains these
+	 * Contexts only: to read one their setup uses, name it too. The command,
 	 * and its inline `.command()` children added afterwards, parse the flags these
 	 * Contexts own, and those of the Contexts their setup uses, transitively. A same-name provider of
 	 * another factory must own exactly the declared flags, or preparing the app throws `DEFINITION`.
 	 */
 	use<const Us extends readonly [UseSource, ...UseSource[]] = never>(
-		this: { readonly _types: { readonly caps: "recipe" } },
-		...sources: Us & DeclaredDependencyValuesBrand<UsedContexts<Us>, ProvidersOf<Facts>>
+		...sources: Us &
+			DeclaredDependencyValuesBrand<UsedContexts<Us>, ProvidersOf<Facts>> &
+			(Caps extends "recipe"
+				? {}
+				: {
+						readonly FIX_USE_ON_APP: "An app supplies a Context with .provide(context()); .use() declares the Contexts a command reads";
+					})
 	): AfterUse<Flags, A, Ctx, Tree, CtxFlags, Facts, Result, Us, Meta>;
 
 	use<const Us extends readonly [UseSource, ...UseSource[]]>(
@@ -1607,7 +1708,13 @@ export class Crust<
 			// installed; preparation checks that the provider owns exactly those.
 			if (flags.length === 0 || declared.has(instance.name)) continue;
 			for (const name of flags) {
-				registerFlag(cloned._node, name, instance.ownedFlags[name]!, "owned");
+				registerFlag(
+					cloned._node,
+					name,
+					instance.ownedFlags[name]!,
+					"owned",
+					`Context "${instance.name}"`,
+				);
 			}
 			flagContexts ??= new Map(this._node.flagContexts);
 			flagContexts.set(instance.name, [...(flagContexts.get(instance.name) ?? []), ...flags]);
@@ -1687,15 +1794,24 @@ export class Crust<
 	 * contribute. Repeated calls accumulate Extensions in registration order,
 	 * except that registering an `ExtensionId` again keeps only the last
 	 * registration — its contributions and providers replace the earlier ones
-	 * and its hooks run once, at the later position. ID deduplication is
-	 * runtime-only: a literal flag or command name the later registration
-	 * contributes again takes its type, but removed paths can remain statically
-	 * visible and reject with `COMMAND_NOT_FOUND`. A command both registrations
+	 * and its hooks run once, at the later position. A literal flag or command name
+	 * the later registration contributes again takes its type. For a literal id
+	 * certainly registered again in a later call (not through a conditional
+	 * Extension or list, or an array of unknown length), the flags only the earlier registration
+	 * contributed leave the types too, except in inline `.command()` children declared
+	 * between the two calls, for flags of Contexts the earlier one's hooks `.use()`, and
+	 * when an explicit `MetaKeys` argument (`defineExtension<"version">(id)`) widened the
+	 * id to `string`; removed command paths can remain statically
+	 * visible and reject with `COMMAND_NOT_FOUND`. When a registration that is not
+	 * certain does replace the id, an action reads `undefined` for the earlier flags
+	 * the types kept, and typed input that names them fails with `Unknown flag`.
+	 * A command both registrations
 	 * contribute in one call is typed as either one's result. An `.action()` bound
 	 * before the later registration keeps the earlier flag types, so register
 	 * Extensions before `.action()`. When two Extensions with different ids
 	 * contribute the same flag and a later registration removes one of them, the
-	 * flag keeps the later Extension's type, whichever is left. An Extension with
+	 * flag keeps the later Extension's type in one call, whichever is left, and
+	 * leaves the types when a later call retires an id's flags. An Extension with
 	 * runtime-only command names makes `run()` results `unknown` for Extension
 	 * commands registered up to and in that call, since it may replace their
 	 * registration; app commands keep their types.
@@ -1916,7 +2032,7 @@ export class Crust<
 			: never,
 		path: KnownCommandPath<Path, Tree>,
 		input: CheckedRunInput<S, Input> | OmittableRunInput<S>,
-		options?: InvocationOptions<ShapeEvent<S>>,
+		options?: InvocationOptions<ShapeEvent<S>, ContextReplacement<Ctx>>,
 	): Promise<ShapeRunOutcome<S>>;
 	run<const Path extends readonly string[], const Input>(
 		this: { readonly _types: { readonly caps: "app" } },
@@ -1933,7 +2049,8 @@ export class Crust<
 		]
 			? readonly [
 					options?: InvocationOptions<
-						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, Facts>, NoInfer<Path>>>
+						ShapeEvent<CommandShapeAt<AppShape<A, Flags, Tree, Result, Facts>, NoInfer<Path>>>,
+						ContextReplacement<Ctx>
 					>,
 				]
 			: readonly [invalidInput: never]

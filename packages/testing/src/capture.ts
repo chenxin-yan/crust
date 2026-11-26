@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 
-import type { ExecuteOptions } from "@crustjs/core";
+import type { ContextReplacement, ExecuteOptions } from "@crustjs/core";
 
 /** Variables that replace `process.env`; an `undefined` value leaves its variable out. */
 export type Environment = Readonly<Record<string, string | undefined>>;
@@ -34,6 +34,21 @@ export interface ExecutableApp {
 	// `exactOptionalPropertyTypes`.
 	/** Resolves to the exit code and never rejects, as a Crust app's `execute()` does. */
 	execute(options?: ExecuteOptions): Promise<number>;
+}
+
+/** The helpers' `provide` option, typed against the Contexts `App` provides at its root. */
+export interface ProvideOption<App> {
+	/**
+	 * Context instances that replace the app's same-name Contexts for the run, such as test
+	 * doubles from `factory.of(value)`.
+	 */
+	provide?:
+		| readonly ContextReplacement<
+				App extends { readonly _types: { readonly ctx: infer Ctx extends object } }
+					? Ctx
+					: Record<string, unknown>
+		  >[]
+		| undefined;
 }
 
 /** What one run wrote and how it ended. */

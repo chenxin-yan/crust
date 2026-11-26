@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
-import { Crust, defineCommand } from "../command/crust.ts";
+import { type AnyCrust, Crust, defineCommand } from "../command/crust.ts";
 import type { RunOutcome } from "../command/typed-run.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -191,6 +191,11 @@ describe("Crust .provide()", () => {
 		expect(await app.run(["status"])).toMatchObject({ status: "completed", result: false });
 	});
 });
+
+/** A hook's Context bag as the runtime has it: the types hide flag-dependent Contexts before validation. */
+function bagOf(bag: object): Readonly<Record<string, Promise<unknown>>> {
+	return bag as Readonly<Record<string, Promise<unknown>>>;
+}
 
 const apiKey = defineFlag({ type: "string", short: "k", aliases: ["token"] });
 
@@ -699,7 +704,8 @@ describe("Context-owned flags at use sites", () => {
 				.use(confirm)
 				.postRun(async ({ ctx }) => void seen.push(await ctx.confirm));
 			const list = defineCommand("list", (command) => command.action(() => "list"));
-			const app =
+			// The two registrations differ in type: only a provided Context's flags are the Extension's.
+			const app: AnyCrust =
 				source === "extension"
 					? new Crust("cli").extend(base.provide(confirm())).add(list)
 					: new Crust("cli").provide(confirm()).extend(base).add(list);
@@ -1072,7 +1078,7 @@ describe("Context-owned flags at use sites", () => {
 		const cmd = defineCommand("cmd", (command) =>
 			command
 				.provide(api.of("fake"))
-				.use(api)
+				.use(api, config)
 				.action(async ({ ctx }) => await ctx.config),
 		);
 		const app = new Crust("cli").provide(config(), api()).add(cmd);
@@ -1190,7 +1196,7 @@ describe("Context setup dependencies", () => {
 		);
 	});
 
-	it("fails loud when a transitive dependency above an .of() cut is unprovided", async () => {
+	it("fails loud when a setup reads a transitive dependency above an .of() cut that is unprovided", async () => {
 		const config = defineContext("config").setup(() => "config");
 		const db = defineContext("db")
 			.use(config)
@@ -1198,19 +1204,22 @@ describe("Context setup dependencies", () => {
 		const report = defineContext("report")
 			.use(db)
 			.setup(async ({ ctx }) => await ctx.config);
-		expect(() => new Crust("cli").provide(db.of("fake"), report() as never)).toThrow(
-			'No provider for Context "config"',
-		);
+		// The `.of()` value needs nothing, so preparing the app demands no config; the read fails.
+		const app = new Crust("cli")
+			.provide(db.of("fake"), report() as never)
+			.action(async ({ ctx }) => await (ctx as Record<string, Promise<unknown>>).report);
+
+		await expect(unwrap(app.run([]))).rejects.toThrow('No provider for Context "config"');
 	});
 
-	it("builds Extension hook bags from the declared factory graph across an .of() cut", async () => {
+	it("reads a Context an Extension hook names beside an .of() double that uses it", async () => {
 		const config = defineContext("config").setup(() => "memory://");
 		const db = defineContext("db")
 			.use(config)
 			.setup(async ({ ctx }) => await ctx.config);
 		let seen: string | undefined;
 		const observer = defineExtension(defineExtensionId("of-cut-observer"))
-			.use(db)
+			.use(db, config)
 			.setup(async ({ ctx }) => {
 				seen = await ctx.config;
 			});
@@ -1315,7 +1324,7 @@ describe("lazy Context bags", () => {
 			});
 		const observer = defineExtension(defineExtensionId("degraded-observer"))
 			.use(wrapper)
-			.preRun(async ({ ctx }) => void (await ctx.wrapper));
+			.preRun(async ({ ctx }) => void (await bagOf(ctx).wrapper!));
 		await unwrap(
 			new Crust("cli")
 				.provide(gate(), wrapper())
@@ -1356,7 +1365,7 @@ describe("lazy Context bags", () => {
 			.setup(async ({ ctx }) => await ctx.auth);
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service));
+			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -1385,7 +1394,7 @@ describe("lazy Context bags", () => {
 			});
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
+			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!.catch(() => undefined)));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -1429,7 +1438,7 @@ describe("lazy Context bags", () => {
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
 			.preRun(async (ctx) => {
-				await ctx.ctx.service.catch(() => undefined);
+				await bagOf(ctx.ctx).service!.catch(() => undefined);
 			});
 		const app = new Crust("cli")
 			.provide(auth(), service())
@@ -2002,7 +2011,7 @@ describe("Context setup defer()", () => {
 			});
 		const extension = defineExtension(defineExtensionId("consumer"))
 			.use(service)
-			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
+			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!.catch(() => undefined)));
 		await unwrap(
 			new Crust("cli")
 				.provide(auth(), service())
@@ -2190,5 +2199,67 @@ describe("checked Context definitions", () => {
 			});
 		await unwrap(app.run([], { flags: { token: "original" } }));
 		expect(Object.keys((await app.snapshot()).flags)).toEqual(["token"]);
+	});
+});
+
+describe("Context replacements", () => {
+	const config = defineContext("config").setup(() => ({ region: "eu" }));
+	const workspace = defineContext("workspace")
+		.use(config)
+		.setup(async ({ ctx }) => ({ root: `/${(await ctx.config).region}` }));
+	const list = defineCommand("list", (cmd) =>
+		cmd.use(workspace).action(async ({ ctx }) => (await ctx.workspace).root),
+	);
+
+	it("runs a command whose Context is an `.of()` value without the real one's dependencies", async () => {
+		const app = new Crust("mono").provide(workspace.of({ root: "/fake" })).add(list);
+
+		expect(await app.run(["list"])).toMatchObject({ status: "completed", result: "/fake" });
+	});
+
+	it("replaces a Context for one invocation with the provide option", async () => {
+		const app = new Crust("mono").provide(config(), workspace()).add(list);
+		const hooked: unknown[] = [];
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(workspace)
+			.preRun(async ({ ctx }) => void hooked.push(await ctx.workspace));
+
+		expect(
+			await app.run(["list"], {}, { provide: [workspace.of({ root: "/double" })] }),
+		).toMatchObject({ status: "completed", result: "/double" });
+		expect(await app.run(["list"])).toMatchObject({ status: "completed", result: "/eu" });
+		await app.extend(observer).execute({
+			argv: ["list"],
+			io: { stdout: { write() {} } },
+			provide: [workspace.of({ root: "/hooked" })],
+		});
+		expect(hooked).toEqual([{ root: "/hooked" }]);
+	});
+
+	it("rejects a replacement of another factory that owns other flags", async () => {
+		const text = defineContext("a")
+			.flags({ value: { type: "string", default: "s" } })
+			.setup(({ flags }) => flags.value.length);
+		// Same name and value type; its setup would get the string parsed for `text`'s flag.
+		const number = defineContext("a")
+			.flags({ value: { type: "number", default: 7 } })
+			.setup(({ flags }) => flags.value);
+		const app = new Crust("cli")
+			.provide(text())
+			.command("read", (cmd) => cmd.use(text).action(async ({ ctx }) => await ctx.a));
+
+		await expect(unwrap(app.run(["read"], {}, { provide: [number()] }))).rejects.toThrow(
+			'Context "a" given to the provide option does not own the same flags',
+		);
+		// `crust build` never sees a `provide` option, so a built CLI checks it too.
+		vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
+		await expect(unwrap(app.run(["read"], {}, { provide: [number()] }))).rejects.toThrow(
+			'Context "a" given to the provide option does not own the same flags',
+		);
+		vi.unstubAllEnvs();
+		expect(await app.run(["read"], {}, { provide: [text.of(99)] })).toMatchObject({
+			status: "completed",
+			result: 99,
+		});
 	});
 });

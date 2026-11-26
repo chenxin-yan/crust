@@ -353,9 +353,19 @@ function _typecheckAuthChain() {
 			void ctx.api;
 			return { authorization: `Bearer ${await ctx.profile}` };
 		});
+	const session = defineContext("session")
+		.use(account)
+		.setup(async ({ ctx }) => (await ctx.account).id);
+	defineApi({ spec, baseUrl })
+		.use(session)
+		.auth(async ({ ctx }) => {
+			// @ts-expect-error -- not the Contexts their setups use
+			void ctx.account;
+			return { authorization: `Bearer ${await ctx.session}` };
+		});
 	const whoami = defineCommand("whoami", (command) =>
-		command.use(api.client).action(async ({ ctx }) => {
-			// A command that declares the client declares the Contexts its `auth` reads.
+		command.use(api.client, profile).action(async ({ ctx }) => {
+			// A command reads the Contexts its `auth` reads only by naming them beside the client.
 			type _Profile = Expect<Equal<Awaited<typeof ctx.profile>, string | undefined>>;
 			// A helper generic in the Contexts `auth` reads takes it; one typed with the plain client does not.
 			const helper = <AuthDeps extends ContextMap>(client: ApiClient<unknown, AuthDeps>) =>
@@ -386,7 +396,7 @@ function _typecheckAuthChain() {
 		.add(whoami)
 		.add(
 			defineCommand("me", (command) =>
-				command.use(acme.client).action(async ({ ctx }) => void (await ctx.profile)),
+				command.use(acme.client, profile).action(async ({ ctx }) => void (await ctx.profile)),
 			),
 		);
 

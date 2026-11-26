@@ -71,16 +71,46 @@ function _normalActionsHaveNoEvents() {
 	>;
 }
 
-function _asyncActionReturningAGeneratorStreams() {
+function _aPromiseOfAGeneratorIsTheResult() {
 	async function* count() {
 		yield 1;
 		return "end";
 	}
 	const app = new Crust("cli").action(async () => count());
-	type _result = Expect<Equal<Completed<ReturnType<typeof app.run<[]>>>["result"], string>>;
-	type _events = Expect<
-		Equal<Completed<ReturnType<typeof app.run<[]>>>["events"], readonly number[]>
+	type _result = Expect<
+		Equal<
+			Completed<ReturnType<typeof app.run<[]>>>["result"],
+			AsyncGenerator<number, string, unknown>
+		>
 	>;
+	type _noEvents = Expect<
+		Equal<"events" extends keyof Completed<ReturnType<typeof app.run<[]>>> ? true : false, false>
+	>;
+	const forwarded = new Crust("cli").action(async function* () {
+		return yield* count();
+	});
+	type _forwarded = Expect<
+		Equal<Completed<ReturnType<typeof forwarded.run<[]>>>["events"], readonly number[]>
+	>;
+}
+
+function _aGeneratorOnOneBranchStreamsOnThatBranch() {
+	async function* count() {
+		yield "a";
+		return 2;
+	}
+	const streaming = Math.random() > 0.5;
+	const app = new Crust("cli").action(() => (streaming ? count() : "skipped"));
+	type _result = Expect<
+		Equal<Completed<ReturnType<typeof app.run<[]>>>["result"], number | "skipped">
+	>;
+	type _events = Expect<
+		Equal<Completed<ReturnType<typeof app.run<[]>>>["events"], readonly string[] | undefined>
+	>;
+	void app.run([], {}, { onEvent: (event) => void (event satisfies string) });
+	void app.output(z.union([z.number(), z.string()]));
+	// @ts-expect-error the other branch completes with a string
+	void app.output(z.number());
 }
 
 function _subcommandsAndHandlesKeepEvents() {
@@ -151,24 +181,12 @@ function _outputChecksTheGeneratorReturn() {
 	type _events = Expect<
 		Equal<Completed<ReturnType<typeof app.run<[]>>>["events"], readonly string[]>
 	>;
-	// An async action may return a generator, as the guide documents.
 	async function* progress() {
 		yield "progress";
 		return { id: 1 };
 	}
-	async function* wrongId() {
-		yield "progress";
-		return { id: "1" };
-	}
-	const wrapped = new Crust("cli").output(user).action(async () => progress());
-	type _wrapped = Expect<
-		Equal<Completed<ReturnType<typeof wrapped.run<[]>>>["result"], { id: number }>
-	>;
-	type _wrappedEvents = Expect<
-		Equal<Completed<ReturnType<typeof wrapped.run<[]>>>["events"], readonly string[]>
-	>;
-	// @ts-expect-error the wrapped generator returns a string id
-	new Crust("cli").output(user).action(async () => wrongId());
+	// @ts-expect-error a promise of a generator is a result, not the schema's input
+	new Crust("cli").output(user).action(async () => progress());
 	// @ts-expect-error the generator returns a string id
 	new Crust("cli").output(user).action(async function* () {
 		yield 1;

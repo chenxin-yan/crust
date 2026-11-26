@@ -6,7 +6,11 @@ import {
 	writeProcessOutput,
 } from "@crustjs/utils/terminal";
 
-import { validateContextAvailability } from "../api/context.ts";
+import {
+	definingOf,
+	validateContextAvailability,
+	type AnyContextInstance,
+} from "../api/context.ts";
 import type {
 	ExtensionData,
 	ExtensionHandler,
@@ -58,6 +62,7 @@ import {
 	installContextFlags,
 	lazyChildRecord,
 	registerFlag,
+	sameFlags,
 	type AddedChild,
 	type ChildEntry,
 	type CommandNode,
@@ -835,31 +840,9 @@ function selectHandler(
 	return first;
 }
 
-/**
- * Strict on purpose: an action may return any other async iterable, such as a stream,
- * as its result. `Symbol.asyncIterator` is probed first so an ordinary result's getters
- * (e.g. `next`) are never read here; serialization reads them exactly once.
- */
-function isAsyncGenerator(value: unknown): value is AsyncGenerator {
-	if (typeof value !== "object" || value === null) return false;
-	const candidate = value as Partial<AsyncGenerator>;
-	try {
-		return (
-			Symbol.asyncIterator in candidate &&
-			typeof candidate[Symbol.asyncIterator] === "function" &&
-			typeof candidate.next === "function" &&
-			typeof candidate.return === "function" &&
-			typeof candidate.throw === "function"
-		);
-	} catch {
-		// A result whose properties throw when read (e.g. a strict Proxy) is an ordinary result.
-		return false;
-	}
-}
-
 /** One invocation's action events: the caller's live callback, and every event once a generator action starts. */
 interface ActionEventStream {
-	readonly onEvent?: ((event: unknown) => void) | undefined;
+	readonly onEvent?: ((event: unknown) => unknown) | undefined;
 	events?: unknown[];
 }
 
@@ -902,6 +885,8 @@ async function dispatch(
 	output: InvocationOutput,
 	signal: AbortSignal,
 	stream: ActionEventStream,
+	// The caller's `provide` option: replaces the same-name Contexts for this invocation.
+	provide: readonly AnyContextInstance[] | undefined,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<
@@ -927,7 +912,20 @@ async function dispatch(
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	await using disposal = new AsyncDisposableStack();
+	// The resolver takes the last instance of a name, so a replacement wins.
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
+	for (const replacement of (provide ?? []).map(definingOf)) {
+		const replaced = contexts.findLast(({ name }) => name === replacement.name);
+		// Its setup receives the flags parsed for the Context it replaces.
+		if (replaced && !sameFlags(replaced.ownedFlags, replacement.ownedFlags)) {
+			throw new CrustError(
+				"DEFINITION",
+				`Context "${replacement.name}" given to the provide option does not own the same flags as the Context "${replacement.name}" it replaces: pass the same factory (for example its .of()).`,
+				{ subject: "context", name: replacement.name, reason: "context-flags-not-parsed" },
+			);
+		}
+		contexts.push(replacement);
+	}
 	const resolver = createContextResolver(
 		contexts,
 		resolvedNode.flagContexts,
@@ -1017,8 +1015,13 @@ async function dispatch(
 					actionExitCode = code;
 				},
 			} satisfies CrustCommandContext;
-			result = await resolvedNode.run(context);
-			if (isAsyncGenerator(result)) result = await drain(result, (stream.events = []));
+			// Streams exactly when the action's type says so: it returns an async generator itself,
+			// not a promise of one, so `async () => watch()` returns the generator as its result.
+			const returned = resolvedNode.run(context);
+			result =
+				Object.prototype.toString.call(returned) === "[object AsyncGenerator]"
+					? await drain(returned as AsyncGenerator, (stream.events = []))
+					: await returned;
 		}
 		// An actionless command's `undefined` result still meets its `.output()` contract.
 		const checked = resolvedNode.outputSchema
@@ -1043,7 +1046,7 @@ async function dispatch(
 				if (step.done) return step.value;
 				events.push(step.value);
 				output.renderer?.event?.(step.value);
-				stream.onEvent?.(step.value);
+				await stream.onEvent?.(step.value);
 			}
 		} catch (error) {
 			if (done) throw error;
@@ -1321,6 +1324,7 @@ export async function runInvocation(
 					createInvocationOutput(resolvedIO),
 					signal,
 					stream,
+					options?.provide,
 					undefined,
 					// Recorded before `postRun` runs, as `execute()` does: a hook cannot rewrite the status.
 					async (error) => {
@@ -1463,6 +1467,7 @@ export async function executeInvocation(
 				output,
 				signal,
 				{ onEvent: options?.onEvent },
+				options?.provide,
 				(context) => {
 					extensionContext = context;
 				},

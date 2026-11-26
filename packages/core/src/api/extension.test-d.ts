@@ -3,7 +3,6 @@ import { Crust, defineCommand, type AnyCrust, type RootCommandMeta } from "../co
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
-import type { ParsedFlagValue } from "../types.ts";
 import { defineContext } from "./context.ts";
 import {
 	defineExtension,
@@ -296,7 +295,8 @@ function _positionalCallbacks() {
 		.preRun(({ ctx, flags }) => {
 			// @ts-expect-error Callbacks do not see Contexts declared after them.
 			void ctx.logger;
-			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
+			// @ts-expect-error Nor flags declared after them.
+			void flags.trace;
 		})
 		.use(logger)
 		.flags({ trace: { type: "boolean" } })
@@ -305,7 +305,8 @@ function _positionalCallbacks() {
 			type _trace = Expect<Equal<typeof flags.trace, boolean | undefined>>;
 		})
 		.onError((_error, { flags }) => {
-			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
+			// A routing failure leaves `onError` no parsed flags, so each may be absent.
+			type _trace = Expect<Equal<typeof flags.trace, boolean | undefined>>;
 		});
 }
 
@@ -385,4 +386,133 @@ function _parseCommandArgv() {
 		// @ts-expect-error A path is a list of names, not a definition.
 		await ctx.parseCommandArgv(db, []);
 	});
+}
+
+// Hook flags: the owned flags and those of the used Contexts, each possibly undefined; no others.
+function _hookFlagsAreTheOwnedAndUsedContextFlags() {
+	const settings = defineContext("settings")
+		.flags({ level: { type: "string", choices: ["info", "warn"], default: "info" } })
+		.setup(({ flags }) => flags.level);
+	const plain = defineContext("plain").setup(() => "plain");
+	defineExtension(defineExtensionId("test:hook-flags"))
+		.use(settings, plain)
+		.flags({ trace: { type: "boolean", default: false } })
+		.preRun(async ({ flags, ctx }) => {
+			type _level = Expect<Equal<typeof flags.level, "info" | "warn" | undefined>>;
+			type _trace = Expect<Equal<typeof flags.trace, boolean>>;
+			// @ts-expect-error -- a typo is no flag
+			void flags.levle;
+			// A Context that owns flags rejects before validation, so pre-validation hooks lack it.
+			// @ts-expect-error -- settings owns flags
+			void ctx.settings;
+			const _plain: string = await ctx.plain;
+		})
+		.handle("trace", (ctx) => {
+			// @ts-expect-error -- handlers run before validation too
+			void ctx.ctx.settings;
+		})
+		.postRun(async ({ ctx }) => {
+			const _level: "info" | "warn" = await ctx.settings;
+		});
+}
+
+// A same-id registration that drops a flag removes it from every typed view.
+function _replacingAnExtensionIdRecomputesItsFlags() {
+	const id = defineExtensionId("test:format");
+	const old = defineExtension(id).flags({ format: { type: "string", default: "text" } });
+	const replacement = defineExtension(id).flags({ color: { type: "boolean" } });
+	new Crust("x")
+		.extend(old)
+		.extend(replacement)
+		.action(({ flags }) => {
+			// @ts-expect-error -- the replacement does not contribute format
+			void flags.format;
+			type _color = Expect<Equal<typeof flags.color, boolean | undefined>>;
+		})
+		.command("child", (c) =>
+			c.action(({ flags }) => {
+				// @ts-expect-error -- nor does it reach children
+				void flags.format;
+			}),
+		);
+	new Crust("x")
+		.extend(old)
+		.extend(old)
+		.action(({ flags }) => {
+			type _format = Expect<Equal<typeof flags.format, string>>;
+		});
+	// Another id keeps its flags.
+	new Crust("x")
+		.extend(old)
+		.extend(defineExtension(defineExtensionId("test:other")))
+		.action(({ flags }) => {
+			type _format = Expect<Equal<typeof flags.format, string>>;
+		});
+	// A used Context's flags belong to its provider, which still provides them.
+	const settings = defineContext("settings")
+		.flags({ level: { type: "string", default: "info" } })
+		.setup(({ flags }) => flags.level);
+	const usesSettings = defineExtension(id)
+		.use(settings)
+		.postRun(async ({ ctx }) => void (await ctx.settings));
+	new Crust("x")
+		.provide(settings())
+		.extend(usesSettings)
+		.extend(defineExtension(id))
+		.action(({ flags }) => {
+			type _level = Expect<Equal<typeof flags.level, string>>;
+		});
+	// An Extension that adds commands keeps its id.
+	const withCommand = defineExtension(id)
+		.flags({ format: { type: "string", default: "text" } })
+		.add(defineCommand("hello", (c) => c.action(() => {})));
+	new Crust("x")
+		.extend(withCommand)
+		.extend(replacement)
+		.action(({ flags }) => {
+			// @ts-expect-error -- the replacement does not contribute format
+			void flags.format;
+		});
+}
+
+function _onlyACertainRegistrationRetiresAnId() {
+	const condition = Math.random() > 0.5;
+	const old = defineExtension(defineExtensionId("test:old")).flags({
+		q: { type: "string", required: true },
+	});
+	const same = defineExtension(defineExtensionId("test:old"));
+	const other = defineExtension(defineExtensionId("test:other"));
+	const maybe = defineExtension(defineExtensionId(condition ? "test:old" : "test:other"));
+	const rest: (typeof same)[] = [];
+	// @ts-expect-error -- a union id may be the other one: q stays required
+	void new Crust("x").extend(old).extend(maybe).run([]);
+	const name: string = "old";
+	const template = defineExtension(defineExtensionId(`test:${name}`));
+	// @ts-expect-error -- a template id may be another one: q stays required
+	void new Crust("x").extend(old).extend(template).run([]);
+	// @ts-expect-error -- a conditional list
+	void new Crust("x")
+		.extend(old)
+		.extend(...(condition ? ([same] as const) : ([other] as const)))
+		.run([]);
+	// @ts-expect-error -- a list that may be empty
+	void new Crust("x")
+		.extend(old)
+		.extend(...(condition ? ([same] as const) : ([] as const)))
+		.run([]);
+	// @ts-expect-error -- a conditional element
+	void new Crust("x")
+		.extend(old)
+		.extend(condition ? same : other)
+		.run([]);
+	// @ts-expect-error -- an open list
+	void new Crust("x")
+		.extend(old)
+		.extend(...rest)
+		.run([]);
+	// A certain replacement, alone or beside another Extension, retires q.
+	void new Crust("x").extend(old).extend(same).run([]);
+	void new Crust("x").extend(old).extend(other, same).run([]);
+	// @ts-expect-error -- another id keeps q required
+	void new Crust("x").extend(old).extend(other).run([]);
 }
