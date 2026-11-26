@@ -98,13 +98,12 @@ interface TokenSourceInternals {
 	/**
 	 * `beginLogin()`, whose commit reports a plaintext write to `onWarning`. With `observedIn`, an
 	 * earlier snapshot of the file, the commit is stale against that snapshot instead of the file
-	 * as it is now. `amend` changes the document the commit writes, in the same write.
+	 * as it is now.
 	 */
 	beginLogin(options: {
 		signal?: AbortSignal;
 		onWarning?: OnWarning;
 		observedIn?: CredentialsDocument;
-		amend?: (document: CredentialsDocument) => CredentialsDocument;
 	}): Promise<LoginTicket>;
 }
 
@@ -187,8 +186,8 @@ export function createTokenSource(options: TokenSourceOptions): TokenSource {
 
 /**
  * `createTokenSource()`, or with `profiles` the source of a `createAuth()` profile: a missing
- * record is missing even when another server's login has the same profile, and a logout also
- * forgets the profile if `profiles.use()` chose it.
+ * record is missing even when another server's login has the same profile, a login makes its
+ * profile the current one, and a logout forgets the profile if it is the current one.
  */
 export function tokenSource(options: TokenSourceOptions, profiles: boolean): TokenSource {
 	const identity = checkIdentity(options);
@@ -498,12 +497,10 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			signal,
 			onWarning,
 			observedIn,
-			amend = (document) => document,
 		}: {
 			signal?: AbortSignal;
 			onWarning?: OnWarning;
 			observedIn?: CredentialsDocument;
-			amend?: (document: CredentialsDocument) => CredentialsDocument;
 		} = {}): Promise<LoginTicket> {
 			throwIfAborted(signal);
 			if (openLogins.has(id)) throw new LoginInProgressError();
@@ -607,7 +604,13 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 									}
 									const next = withFileKey(current, writeKey);
 									discarded = next.discarded;
-									return amend(withRecord(next.document, stored));
+									const written = withRecord(next.document, stored);
+									if (!profiles) return written;
+									// A login makes its profile the current one, in the write that stores it.
+									return withCurrentProfiles(written, {
+										...currentProfiles(written, store.path),
+										[serverKey(identity)]: identity.profile,
+									});
 								}, stop);
 								if (writeKey.kind === "plaintext") onWarning?.({ code: "plaintext-storage" });
 								return redacted(
