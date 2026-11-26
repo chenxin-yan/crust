@@ -6,4 +6,4 @@
 
 `typescript` (`>=5.9.0`) is now a required peer dependency of `@crustjs/crust`.
 
-**Breaking:** a project with type errors, without `typescript` installed, or without a `tsconfig.json` in its root no longer builds. Fix the errors, install `typescript` and add a `tsconfig.json`, or pass `--no-typecheck`. A project that needs other `tsc` flags, such as `--runExternalCode` for `@crustjs/openapi`'s content mapper, runs its own `tsc` and builds with `--no-typecheck`.
+**Breaking:** a project with type errors, without `typescript` installed, or without a `tsconfig.json` in its root no longer builds. Fix the errors, install `typescript` and add a `tsconfig.json`, or pass `--no-typecheck`. A project that needs other `tsc` flags, such as `--runExternalCode` for `@crustjs/openapi`'s content mapper, passes them after `--`: `crust build -- --runExternalCode` (`tscArgs` for `build()`).

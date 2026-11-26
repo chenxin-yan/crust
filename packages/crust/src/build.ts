@@ -445,6 +445,11 @@ export type BuildOptions = {
 	 */
 	typecheck?: boolean | undefined;
 	/**
+	 * Extra arguments for the type check's `tsc --noEmit`, such as `["--runExternalCode"]`.
+	 * Rejected when `typecheck` is false.
+	 */
+	tscArgs?: readonly string[] | undefined;
+	/**
 	 * Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`.
 	 * A throw rejects `build()`; on the closing summary lines `.crust/` already holds the new build.
 	 */
@@ -702,7 +707,11 @@ async function prepareEntries(
  * `tsconfig.json`; throws with its output on errors. tsc would otherwise look for
  * a tsconfig.json in parent directories, so the root one is required.
  */
-async function typecheckProject(cwd: string, stdout: LineIO["stdout"]): Promise<void> {
+async function typecheckProject(
+	cwd: string,
+	stdout: LineIO["stdout"],
+	extra: readonly string[],
+): Promise<void> {
 	const skip = "pass --no-typecheck to build without type checking";
 	if (!existsSync(join(cwd, "tsconfig.json"))) {
 		throw new Error(
@@ -720,10 +729,11 @@ async function typecheckProject(cwd: string, stdout: LineIO["stdout"]): Promise<
 	}
 	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 	const tsc = join(dirname(manifestPath), manifest.bin.tsc);
-	stdout(`${dim("Type check:")} typescript ${manifest.version} ${dim("(tsc --noEmit)")}`);
+	const args = ["--noEmit", ...extra];
+	stdout(`${dim("Type check:")} typescript ${manifest.version} ${dim(`(tsc ${args.join(" ")})`)}`);
 	// bin/tsc is a JavaScript launcher (TypeScript 7's starts its native compiler).
 	const runner = resolveBunBuildRunner();
-	const result = await runProcess(runner.command, [tsc, "--noEmit"], {
+	const result = await runProcess(runner.command, [tsc, ...args], {
 		env: runner.env,
 		cwd,
 		stdio: "collect",
@@ -808,7 +818,13 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 				);
 			}
 		}
-		if (options.typecheck ?? true) await typecheckProject(cwd, io.stdout);
+		const tscArgs = options.tscArgs ?? [];
+		if (options.typecheck ?? true) await typecheckProject(cwd, io.stdout, tscArgs);
+		else if (tscArgs.length > 0) {
+			throw new Error(
+				`Arguments for tsc were given (${tscArgs.join(" ")}), but --no-typecheck skips the type check.\n  Drop --no-typecheck, or drop the arguments after --.`,
+			);
+		}
 		const compilers = await selectCompilers(plan, io);
 		// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.
 		const reports = plan.validate

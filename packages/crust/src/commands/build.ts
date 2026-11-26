@@ -15,6 +15,7 @@ import { ARTIFACT_KINDS } from "../distribute.ts";
  * crust build --target bun-linux-x64           # Stage only Linux x64 (crust.artifact: binary)
  * crust build --no-minify                      # Disable minification
  * crust build --no-typecheck                   # Skip the project's tsc --noEmit
+ * crust build -- --runExternalCode             # Pass arguments to that tsc
  * crust build --env-file .env.production       # Inline PUBLIC_* constants from a file
  * ```
  */
@@ -67,7 +68,13 @@ export const buildCommand = defineCommand(
 						"Precompile bun binaries to bytecode for faster startup (default for bun binaries; unsupported otherwise; --no-bytecode to skip)",
 				},
 			})
-			.action(async ({ flags, stdout, stderr }) => {
+			.args({
+				name: "tsc-args",
+				type: "string",
+				variadic: "afterDoubleDash",
+				description: "Arguments for the type check's tsc, such as --runExternalCode",
+			})
+			.action(async ({ args, flags, stdout, stderr }) => {
 				await build({
 					cwd: process.cwd(),
 					artifact: flags.artifact,
@@ -77,6 +84,7 @@ export const buildCommand = defineCommand(
 					bytecode: flags.bytecode,
 					validate: flags.validate,
 					typecheck: flags.typecheck,
+					tscArgs: args["tsc-args"],
 					onLog: (line, stream) => (stream === "stderr" ? stderr : stdout)(line),
 				});
 			}),

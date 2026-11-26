@@ -1085,6 +1085,40 @@ describe("build type check", () => {
 			process.cwd = originalCwd;
 		}
 	}, 60_000);
+
+	it("passes the words after -- to tsc", async () => {
+		writeEntry("export function echo(value) {\n\treturn value;\n}\n");
+		const originalCwd = process.cwd;
+		process.cwd = () => tmpDir;
+		try {
+			const app = new Crust("test").add(buildCommand);
+			const strict = await captureExecute(app, ["build", "--no-validate"]);
+			expect(strict.exitCode).toBe(1);
+			expect(strict.stderr).toContain("error TS7006");
+			const loose = await captureExecute(app, [
+				"build",
+				"--no-validate",
+				"--",
+				"--strict",
+				"false",
+			]);
+			expect(loose.exitCode, loose.stderr).toBe(0);
+			expect(loose.stdout).toContain("(tsc --noEmit --strict false)");
+			// Nothing runs tsc, so there is nowhere to pass them.
+			const skipped = await captureExecute(app, [
+				"build",
+				"--no-validate",
+				"--no-typecheck",
+				"--",
+				"--strict",
+				"false",
+			]);
+			expect(skipped.exitCode).toBe(1);
+			expect(skipped.stderr).toContain("--no-typecheck");
+		} finally {
+			process.cwd = originalCwd;
+		}
+	}, 60_000);
 });
 
 describe("buildCommand", () => {

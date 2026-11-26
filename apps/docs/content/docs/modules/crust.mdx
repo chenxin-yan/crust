@@ -53,6 +53,7 @@ crust build --artifact binary --target bun-linux-x64
 | `--env-file`                    | path, repeatable    | none                | Env file(s) whose [`PUBLIC_*` values](/docs/guide/build-and-distribution#environment-variables) are inlined; relative to the working directory                                                                |
 | `--validate`, `--no-validate`   | boolean             | `true`              | Materialize command definitions and run the [definition checks](/docs/api/crust#definition-checks) before compiling; built artifacts leave those checks out. `--no-validate` also skips Extension build hooks |
 | `--typecheck`, `--no-typecheck` | boolean             | `true`              | Run the project's own `tsc --noEmit` on its root `tsconfig.json` before anything else is built; type errors, a missing `typescript`, or a missing root `tsconfig.json` fail the build                         |
+| `-- <tsc-args>...`              | strings             | none                | Arguments for that `tsc`, after `--`: `crust build -- --runExternalCode`. Rejected with `--no-typecheck`                                                                                                      |
 | `--minify`, `--no-minify`       | boolean             | `true`              | Minify the output                                                                                                                                                                                             |
 | `--bytecode`, `--no-bytecode`   | boolean             | on for Bun binaries | Precompile Bun binaries to [bytecode](/docs/guide/build-and-distribution#bun-binary-startup) for faster startup. `--bytecode` is rejected for runtime packages and Node.js binaries                           |
 
@@ -106,7 +107,7 @@ crust publish --dry-run
 `build()` runs in this order:
 
 1. Validates `bin`, the `crust` block, and its options, with the same errors the CLI prints.
-2. Type-checks the project with its own `tsc --noEmit`, unless `typecheck` is `false`. The error carries `tsc`'s output.
+2. Type-checks the project with its own `tsc --noEmit`, plus `tscArgs`, unless `typecheck` is `false`. The error carries `tsc`'s output.
 3. Selects the compiler and checks it against `engines` (binaries) and tsdown's requirements (Node.js binaries). Node.js binary targets are downloaded and unpacked here.
 4. Stages every package in a temporary folder, writing `manifest.json` last, and replaces `.crust/` with it only when everything succeeded. A failed build keeps the previous `.crust/`.
 
