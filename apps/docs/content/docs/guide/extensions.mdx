@@ -169,7 +169,7 @@ setup → handle → preRun → validation → action → postRun
 | `onError`   | `execute()` failures, in `.extend()` order                                                                          | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
 
 - **`setup`:** every setup runs, so setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup. It runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
-- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully. It also runs for commands an Extension contributes, such as `help deploy`: a gate that should let one through checks `command.extension`, the Extension that contributed it:
+- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully. It also runs for commands an Extension contributes, such as `help deploy`: a gate that should let one through compares `command.extension`, the id of the Extension that contributed it, with that Extension's `id`:
 
 <include lang="ts" meta='title="require-login.ts"'>
   ../../../examples/guide/extensions-gate.ts

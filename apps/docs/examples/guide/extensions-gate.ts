@@ -5,7 +5,7 @@ const signedIn = false;
 
 const requireLogin = defineExtension(defineExtensionId("acme:require-login")).preRun(
 	({ command }) => {
-		if (command.extension === "crust:help") return; // [!code highlight]
+		if (command.extension === help.id) return; // [!code highlight]
 		if (!signedIn) throw new Error("Not signed in: run `app login`");
 	},
 );
