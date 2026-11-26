@@ -418,6 +418,50 @@ describeIfZsh("renderZsh · punctuation shorts", () => {
 	});
 });
 
+/** `:` separates the fields of an `_arguments` spec, so a choice that holds one is escaped. */
+describeIfZsh("renderZsh · choices holding a colon", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [
+				{
+					name: "image",
+					spellings: ["--image"],
+					type: "string",
+					takesValue: true,
+					choices: ["node:22", "node:24"],
+				},
+			],
+			args: [
+				{
+					name: "ref",
+					type: "string",
+					required: false,
+					variadic: false,
+					choices: ["origin:main", "origin:dev"],
+				},
+			],
+			subCommands: [],
+		};
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-colon-"));
+		scriptPath = join(tmpDir, "_mycli");
+		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers a flag's and an argument's choices whole", async () => {
+		expect(await zshComplete(scriptPath, "mycli --image ")).toEqual(["node:22", "node:24"]);
+		expect(await zshComplete(scriptPath, "mycli --image=node:2")).toEqual(["node:22", "node:24"]);
+		expect(await zshComplete(scriptPath, "mycli origin:m")).toEqual(["origin:main"]);
+	});
+});
+
 /** The script calls `<bin> __complete -- <address> <word>`; a stub on PATH answers here. */
 describeIfZsh("renderZsh · complete functions", () => {
 	let tmpDir: string;

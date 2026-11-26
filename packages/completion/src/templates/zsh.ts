@@ -47,9 +47,11 @@ function valueAction(ident: string, value: CompletionFlag | CompletionArg): stri
 	// The address holds validated names joined with spaces: no `:` to end the spec field.
 	if (value.complete !== undefined) return `{_${ident}_complete "${value.complete}"}`;
 	// Choice values are validated by `assertSafeChoiceValue` to contain only
-	// `[A-Za-z0-9_.+:@/-]`, so they can be emitted bare inside the `(…)`
-	// action list without further escaping.
-	if (value.choices !== undefined) return `(${value.choices.join(" ")})`;
+	// `[A-Za-z0-9_.+:@/-]`. Of those only `:` needs escaping inside the `(…)`
+	// action list: bare, it would end the spec field.
+	if (value.choices !== undefined) {
+		return `(${value.choices.map((choice) => choice.replaceAll(":", "\\:")).join(" ")})`;
+	}
 	if (value.valueCompletion === "files") return "_files";
 	if (value.valueCompletion === undefined && value.type === "string") return "_files";
 	return " ";
