@@ -18,8 +18,8 @@ const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
  * Drive a generated bash completion function as bash itself would: source
  * the script (registers `fnName`), set `COMP_WORDS`/`COMP_CWORD` for the
  * cursor position, invoke `fnName`, then print `COMPREPLY` one per line.
- * `line` is `COMP_LINE`; by default the words with no space around a `=`
- * word, as Readline splits `--flag=value`.
+ * `line` is `COMP_LINE`; by default the words with no space around a `=` or
+ * `:` word, as Readline splits `--flag=value` and `node:22`.
  * Returns the candidates sorted so equality checks are order-stable.
  */
 async function runBashCompletion(
@@ -28,7 +28,9 @@ async function runBashCompletion(
 	words: string[],
 	cwd?: string,
 	pathDir?: string,
-	line = words.reduce((l, w, i) => (w === "=" || words[i - 1] === "=" ? l + w : `${l} ${w}`)),
+	line = words.reduce((l, w, i) =>
+		/^[=:]$/.test(w) || /^[=:]$/.test(words[i - 1]!) ? l + w : `${l} ${w}`,
+	),
 ): Promise<string[]> {
 	const compWordsLines = words.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`).join("\n");
 	const compCword = words.length - 1;
@@ -526,10 +528,93 @@ describe("renderBash · complete functions", () => {
 		expect(await complete(["mycli", "deploy", "api"])).toEqual(["api-one", "api-two"]);
 	});
 
+	it("passes a value holding `=` whole, and offers what Readline replaces", async () => {
+		expect(await complete(["mycli", "deploy", "--region", "=", "KEY", "=", "va"])).toEqual([
+			"va-one",
+			"va-two",
+		]);
+		expect(await complete(["mycli", "deploy", "-r", "KEY", "=", "va"])).toEqual([
+			"va-one",
+			"va-two",
+		]);
+	});
+
 	it("offers nothing, silently, when the CLI cannot answer", async () => {
 		expect(
 			await runBashCompletion(scriptPath, "_mycli", ["mycli", "deploy", "--region", ""], tmpDir),
 		).toEqual([]);
+	});
+});
+
+describe("renderBash · values holding a Readline word break", () => {
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [
+			{
+				name: "image",
+				spellings: ["--image"],
+				type: "string",
+				takesValue: true,
+				choices: ["node:22", "node:24", "plain"],
+			},
+		],
+		args: [
+			{
+				name: "ref",
+				type: "string",
+				required: false,
+				variadic: false,
+				choices: ["origin:main", "origin:dev"],
+			},
+		],
+		subCommands: [],
+	};
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-breaks-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1"));
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	const complete = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
+
+	it("completes the rest of a value after `:`, for a flag in both forms and an argument", async () => {
+		// Readline replaces only the text after the last break, so that is what is offered.
+		expect(await complete(["mycli", "--image", "=", "node", ":", "2"])).toEqual(["22", "24"]);
+		expect(await complete(["mycli", "--image", "=", "node", ":"])).toEqual(["22", "24"]);
+		expect(await complete(["mycli", "--image", "node", ":", "2"])).toEqual(["22", "24"]);
+		expect(await complete(["mycli", "origin", ":", "m"])).toEqual(["main"]);
+		// Before the break, the whole value.
+		expect(await complete(["mycli", "--image", "=", "no"])).toEqual(["node:22", "node:24"]);
+		expect(await complete(["mycli", "--image", "no"])).toEqual(["node:22", "node:24"]);
+		// A space ends the value, as COMP_LINE shows.
+		expect(
+			await runBashCompletion(
+				scriptPath,
+				"_mycli",
+				["mycli", "--image", "node", ":", "o"],
+				undefined,
+				undefined,
+				"mycli --image node: o",
+			),
+		).toEqual(["origin:dev", "origin:main"]);
+	});
+
+	it("offers whole words when `=` and `:` do not break words", async () => {
+		const wholeWordScript = join(tmpDir, "whole-word.bash");
+		await writeFile(wholeWordScript, `COMP_WORDBREAKS=" "\nsource ${shQuote(scriptPath)}\n`);
+		const whole = (words: string[]) => runBashCompletion(wholeWordScript, "_mycli", words);
+		expect(await whole(["mycli", "--image=node:2"])).toEqual([
+			"--image=node:22",
+			"--image=node:24",
+		]);
+		expect(await whole(["mycli", "--image", "node:2"])).toEqual(["node:22", "node:24"]);
 	});
 });
 

@@ -383,6 +383,7 @@ export function renderBash(
 	const ident = toShellIdent(binName);
 	const fnName = `_${ident}`;
 	const initFn = `__${ident}_init_completion`;
+	const walkFn = `__${ident}_walk`;
 
 	const rootSubcmds = subcmdWordlist(spec);
 	const rootFlags = flagWordlist(spec);
@@ -447,8 +448,9 @@ export function renderBash(
 	// Cobra-style init shim. Provides cur/prev/words/cword without depending
 	// on the bash-completion package. Adapted from spf13/cobra's
 	// bash_completionsV2.
-	// Readline splits `--flag=value` at `=`; the shim joins it back, as
-	// `_init_completion -n "="` does, so the walk sees one word.
+	// Readline splits `--flag=value` at `=` and `node:22` at `:`; the shim
+	// joins them back, as `_init_completion -n "=:"` does, so the walk sees
+	// one word.
 	// COMP_WORDS drops the spaces; COMP_LINE tells `--flag=value` from
 	// `--flag= value`. A word that is not a prefix of the rest of the line
 	// leaves `gap` at 0, so the shim joins as if no space were there.
@@ -462,10 +464,8 @@ export function renderBash(
 		'\t\tif [[ "$line" == [[:space:]]* ]]; then gap=1; line="${line#"${line%%[![:space:]]*}"}"; fi',
 	);
 	lines.push('\t\tline="${line#"$w"}"');
-	lines.push(
-		'\t\tif (( ! gap )) && [[ "$w" == "=" && ${#words[@]} -gt 0 && "${words[${#words[@]}-1]}" == --* && "${words[${#words[@]}-1]}" != *=* ]]; then',
-	);
-	lines.push('\t\t\twords[${#words[@]}-1]+="="; joined=1');
+	lines.push('\t\tif (( ! gap && ${#words[@]} > 0 )) && [[ -n "$w" && "$w" != *[!=:]* ]]; then');
+	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=1');
 	lines.push("\t\telif (( joined && ! gap )); then");
 	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=0');
 	lines.push("\t\telse");
@@ -525,14 +525,31 @@ export function renderBash(
 		lines.push("");
 	}
 
-	// Main completion function.
+	// Main completion function. The walk offers each candidate as a whole
+	// word. Readline replaces only the text after the word's last break, so
+	// the part of the word before it is taken off each candidate, as
+	// bash-completion's `__ltrim_colon_completions` does for `:`.
 	lines.push(`${fnName}() {`);
 	lines.push("\tlocal cur prev words cword");
 	lines.push("\tif declare -F _init_completion >/dev/null 2>&1; then");
-	lines.push('\t\t_init_completion -n "=" || return');
+	lines.push('\t\t_init_completion -n "=:" || return');
 	lines.push("\telse");
 	lines.push(`\t\t${initFn} || return`);
 	lines.push("\tfi");
+	lines.push(`\t${walkFn}`);
+	lines.push('\tlocal _breaks="" _kept _n');
+	lines.push('\tif [[ "$COMP_WORDBREAKS" == *=* ]]; then _breaks+="="; fi');
+	lines.push('\tif [[ "$COMP_WORDBREAKS" == *:* ]]; then _breaks+=":"; fi');
+	lines.push('\tif [[ -z "$_breaks" || "$cur" != *[$_breaks]* ]]; then return 0; fi');
+	lines.push('\t_kept="${cur%"${cur##*[$_breaks]}"}"');
+	lines.push("\tfor (( _n = 0; _n < ${#COMPREPLY[@]}; _n++ )); do");
+	lines.push('\t\tCOMPREPLY[_n]="${COMPREPLY[_n]#"$_kept"}"');
+	lines.push("\tdone");
+	lines.push("}");
+	lines.push("");
+
+	// The walk: reads and edits the caller's cur, prev, words and cword.
+	lines.push(`${walkFn}() {`);
 	// A short quoted for insertion (`-\'`) is compared in its literal spelling.
 	lines.push("\tlocal _n");
 	lines.push("\tfor (( _n = 1; _n < cword; _n++ )); do");
@@ -596,15 +613,12 @@ export function renderBash(
 	// After `--` nothing is a flag or a flag value: skip to positional slots.
 
 	// `--name=value` partial: split, look up, then offer choice values or
-	// path candidates, or suppress the file fallback. When `=` breaks words
-	// (bash's default), Readline replaces only the text after it, so the
-	// candidates are bare values; otherwise `compgen -P` / the helpers
-	// prefix each with `${_flag}=` to replace the whole word.
+	// path candidates, or suppress the file fallback. `compgen -P` / the
+	// helpers prefix each with `${_flag}=` to make it the whole word.
 	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == --*=* ]]; then');
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
 	lines.push('\t\tlocal _value="${cur#*=}"');
 	lines.push('\t\tlocal _prefix="${_flag}="');
-	lines.push('\t\tif [[ "$COMP_WORDBREAKS" == *=* ]]; then _prefix=""; fi');
 	pushFlagValueCase("\t\t", "$_flag", "$_value", "$_prefix");
 	// Free-form `--name=value`: let bash file-complete the value portion.
 	lines.push("\t\treturn");
