@@ -470,6 +470,12 @@ describe("withFileLock", () => {
 			code: "PATH",
 			message: "filePath must be an absolute path",
 		});
+		// A drive path is absolute only on Windows; elsewhere it names a file in the working directory.
+		if (process.platform !== "win32") {
+			await expect(withFileLock("C:/state.json", fn, { operation: "write" })).rejects.toMatchObject(
+				{ code: "PATH" },
+			);
+		}
 		expect(fn).not.toHaveBeenCalled();
 	});
 

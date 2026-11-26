@@ -519,7 +519,8 @@ export async function withFileLock<T>(
 	fn: () => Promise<T>,
 	options: FileLockOptions,
 ): Promise<T> {
-	if (!process.getBuiltinModule("node:path").win32.isAbsolute(filePath)) {
+	// The host's rule, since the path is opened here: `C:/state.json` is relative outside Windows.
+	if (!process.getBuiltinModule("node:path").isAbsolute(filePath)) {
 		throw new CrustStoreError("PATH", "filePath must be an absolute path", { path: filePath });
 	}
 	const { open, rm } = process.getBuiltinModule("node:fs/promises");

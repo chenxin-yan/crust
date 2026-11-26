@@ -18,7 +18,7 @@ import { help } from "@crustjs/extensions";
 import { prompts } from "@crustjs/prompts/extension";
 import { captureExecute, withEnv } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { defineConfig } from "./config.ts";
 
@@ -364,6 +364,18 @@ describe("get, list and set", () => {
 			replicas: 2,
 		});
 		if (process.platform !== "win32") expect(statSync(userFile()).mode & 0o777).toBe(0o600);
+	});
+
+	it("set() gives the replacement the file's owner, as an elevated save must", async () => {
+		write(userFile(), {});
+		const { uid, gid } = statSync(userFile());
+		const chown = vi.spyOn(process.getBuiltinModule("node:fs/promises"), "chown");
+		try {
+			await acme().config.set({ region: "eu" });
+			expect(chown).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), uid, gid);
+		} finally {
+			chown.mockRestore();
+		}
 	});
 
 	it("set() saves in call order, and saves the values it checked", async () => {

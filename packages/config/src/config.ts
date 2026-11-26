@@ -254,7 +254,7 @@ async function readValues(path: string, parse: (text: string) => unknown): Promi
 
 /**
  * Replaces `path` with `text` in one step, so a failed write leaves the old file whole; the file
- * keeps its mode.
+ * keeps its mode and its owner.
  */
 async function writeFile(path: string, text: string): Promise<void> {
 	const fs = process.getBuiltinModule("node:fs/promises");
@@ -266,7 +266,14 @@ async function writeFile(path: string, text: string): Promise<void> {
 			flag: "wx",
 			mode: existing === undefined ? undefined : existing.mode & 0o7777,
 		});
-		if (existing !== undefined) await fs.chmod(temporary, existing.mode & 0o7777);
+		if (existing !== undefined) {
+			// An elevated save must not take a user's file away. Before the chmod: chown clears the
+			// setuid and setgid bits. Only root can give a file away, so only root's failure counts.
+			await fs.chown(temporary, existing.uid, existing.gid).catch((error: unknown) => {
+				if (process.getuid?.() === 0) throw error;
+			});
+			await fs.chmod(temporary, existing.mode & 0o7777);
+		}
 		await fs.rename(temporary, path);
 	} catch (error) {
 		await fs.rm(temporary, { force: true });
