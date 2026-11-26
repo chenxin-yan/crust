@@ -96,6 +96,53 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 	void invalidCompositions;
 }
 
+// a callback reads only the Contexts its .use() names, which are what it demands
+function _typecheckCallbacksReadOnlyTheContextsTheirUseNames() {
+	const db = defineContext("db")
+		.use(config)
+		.setup(async ({ ctx }) => (await ctx.config).url);
+	// Same name as the config db reads, another value type.
+	const textConfig = defineContext("config").setup(() => "text");
+
+	const readsDb = defineCommand("read", (cmd) =>
+		cmd.use(db).action(async ({ ctx }) => {
+			void (await ctx.db);
+			// @ts-expect-error -- config is db's dependency, not named by this .use()
+			void ctx.config;
+		}),
+	);
+	// Only db is demanded, so another factory's config does not stand in for the read above.
+	new Crust("cli").provide(db.of("fake"), textConfig()).add(readsDb);
+
+	const readsBoth = defineCommand("read", (cmd) =>
+		cmd.use(db, config).action(async ({ ctx }) => {
+			type _Db = Expect<Equal<Awaited<typeof ctx.db>, string>>;
+			type _Config = Expect<Equal<Awaited<typeof ctx.config>, { url: string }>>;
+		}),
+	);
+	new Crust("cli").provide(db.of("fake"), config()).add(readsBoth);
+
+	defineExtension(defineExtensionId("reads-db"))
+		.use(db)
+		.preRun(async ({ ctx }) => {
+			void (await ctx.db);
+			// @ts-expect-error -- a hook reads what its Extension's .use() names, too
+			void ctx.config;
+		});
+	defineExtension(defineExtensionId("reads-both"))
+		.use(db, config)
+		.preRun(async ({ ctx }) => {
+			type _Db = Expect<Equal<Awaited<typeof ctx.db>, string>>;
+			type _Config = Expect<Equal<Awaited<typeof ctx.config>, { url: string }>>;
+		});
+
+	const invalidCompositions = () => {
+		// @ts-expect-error -- naming config demands it: another factory's config does not fit
+		new Crust("cli").provide(db.of("fake"), textConfig()).add(readsBoth);
+	};
+	void invalidCompositions;
+}
+
 // .use() takes an Extension or its factory for the Contexts it provides
 function _typecheckUseTakesAnExtensionForTheContextsItProvides() {
 	const greeter = defineContext("greeter").setup(() => (name: string) => `hi ${name}`);

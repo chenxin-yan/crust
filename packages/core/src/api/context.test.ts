@@ -1078,7 +1078,7 @@ describe("Context-owned flags at use sites", () => {
 		const cmd = defineCommand("cmd", (command) =>
 			command
 				.provide(api.of("fake"))
-				.use(api)
+				.use(api, config)
 				.action(async ({ ctx }) => await ctx.config),
 		);
 		const app = new Crust("cli").provide(config(), api()).add(cmd);
@@ -1212,26 +1212,14 @@ describe("Context setup dependencies", () => {
 		await expect(unwrap(app.run([]))).rejects.toThrow('No provider for Context "config"');
 	});
 
-	it("fails loud when an action reads a transitive dependency above an .of() cut that is unprovided", async () => {
-		const config = defineContext("config").setup(() => "config");
-		const db = defineContext("db")
-			.use(config)
-			.setup(async ({ ctx }) => await ctx.config);
-		const app = new Crust("cli")
-			.provide(db.of("fake"))
-			.command("read", (cmd) => cmd.use(db).action(async ({ ctx }) => await ctx.config));
-
-		await expect(unwrap(app.run(["read"]))).rejects.toThrow('No provider for Context "config"');
-	});
-
-	it("builds Extension hook bags from the declared factory graph across an .of() cut", async () => {
+	it("reads a Context an Extension hook names beside an .of() double that uses it", async () => {
 		const config = defineContext("config").setup(() => "memory://");
 		const db = defineContext("db")
 			.use(config)
 			.setup(async ({ ctx }) => await ctx.config);
 		let seen: string | undefined;
 		const observer = defineExtension(defineExtensionId("of-cut-observer"))
-			.use(db)
+			.use(db, config)
 			.setup(async ({ ctx }) => {
 				seen = await ctx.config;
 			});

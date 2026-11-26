@@ -21,7 +21,6 @@ import type {
 	ExtensionData,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
-	UsedContextDemands,
 	UsedContexts,
 	UseSource,
 } from "../api/extension.ts";
@@ -1068,7 +1067,7 @@ type AfterUse<
 	CtxFlags & UsedContextFlags<Us>,
 	BuilderFacts<
 		Facts["demands"],
-		MergeContext<RecipeDepsOf<Facts>, UsedContextDemands<Us>>,
+		MergeContext<RecipeDepsOf<Facts>, UsedContexts<Us>>,
 		ProvidersOf<Facts>,
 		ActionDepsOf<Facts>,
 		Facts["extensionCommands"],
@@ -1592,7 +1591,8 @@ export class Crust<
 	/**
 	 * Declare Contexts this command consumes without supplying their values.
 	 * Factory references are retained while setup stays lazy. An Extension, or
-	 * Extension factory, stands for the Contexts that Extension provides. The command,
+	 * Extension factory, stands for the Contexts that Extension provides. `ctx` gains these
+	 * Contexts only: to read one their setup uses, name it too. The command,
 	 * and its inline `.command()` children added afterwards, parse the flags these
 	 * Contexts own, and those of the Contexts their setup uses, transitively. A same-name provider of
 	 * another factory must own exactly the declared flags, or preparing the app throws `DEFINITION`.

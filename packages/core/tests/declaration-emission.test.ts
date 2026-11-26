@@ -65,7 +65,7 @@ export const authenticatedApi = defineContext("authenticated-api")
 	}));
 
 // A declared Context bag preserves the factory's value type; .use() chains
-// accumulate the named demands and the bag's transitive dependency closure
+// accumulate the named Contexts
 export const deploy = defineCommand("deploy", (cmd) =>
 	cmd
 		.use(auth)
@@ -80,7 +80,7 @@ export const deploy = defineCommand("deploy", (cmd) =>
 // ContextInstance tuples, and its contributed CommandDefinition tuple; a
 // TS2742 regression here must fail emission.
 export const telemetry = defineExtension(defineExtensionId("telemetry"))
-	.use(authenticatedApi)
+	.use(auth, authenticatedApi)
 	.provide(auth())
 	.add(deploy)
 	.postRun(async ({ ctx }) => void (await ctx.auth));

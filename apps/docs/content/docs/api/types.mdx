@@ -326,7 +326,7 @@ app.provide(config()); // runs setup lazily in each invocation
 app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test double
 ```
 
-`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags and sections. It is assignable wherever the factory's own instance is (`ReturnType<typeof config>`), and it demands nothing: a command that `.use()`s the Context needs only the Context itself, not what the real setup would read. Reading such a dependency through the command's `ctx` then fails with `No provider for Context`. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
+`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags and sections. It is assignable wherever the factory's own instance is (`ReturnType<typeof config>`), and it demands nothing: a command that `.use()`s the Context needs only the Context itself, not what the real setup would read. A command's `ctx` holds only the Contexts its `.use()` names, so it reads such a dependency only by naming it, which demands it. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
 
 ### `ContextSetup` and `ContextBag`
 
@@ -355,7 +355,7 @@ The awaited value a factory produces: `FactoryValueOf<typeof config>` is what `a
 
 ### `UseSource` and `UsedContexts`
 
-For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`. `ContextReplacement<Contexts>` is an instance that can replace one of an app's Contexts (name to value), as `run()`'s `provide` option takes.
+For a library whose own `.use()` forwards to a command's. `UseSource` is what a command's `.use()` accepts: a Context factory, an Extension or an Extension factory. `UsedContexts<Us>` is the `ContextMap` a `.use(...Us)` call adds to `ctx`: the Contexts it names, or an Extension's provided ones, not what their setups use. `ContextReplacement<Contexts>` is an instance that can replace one of an app's Contexts (name to value), as `run()`'s `provide` option takes.
 
 ## Extension types
 

@@ -998,9 +998,7 @@ async function dispatch(
 			const context = {
 				args: validated.args,
 				flags: validated.flags,
-				// The declared factories first: an `.of()` instance's empty `use` list would leave a
-				// transitive read typed through `.use()` undefined instead of failing loud.
-				ctx: resolver.bag([...resolvedNode.demands, ...resolvedNode.inheritedDemands, ...contexts]),
+				ctx: resolver.bag(contexts),
 				signal,
 				get command() {
 					return snapshots.command;

@@ -29,7 +29,6 @@ import {
 	type AnyContextInstance,
 	type ContextBag,
 	type ContextDemands,
-	type ContextDependencies,
 	type ContextMap,
 	type ContextUseFlags,
 	type ContextValue,
@@ -573,36 +572,11 @@ export type AnyExtensionFactory = ((...args: any[]) => AnyExtension) & { readonl
  */
 export type UseSource = AnyContextFactory | AnyExtension | AnyExtensionFactory;
 
-type ExtensionContexts<E> =
-	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
-		? ContextsOutput<Provide> & ContextsDependencies<Provide>
-		: {};
-
-type UseSourceContexts<S> = S extends AnyContextFactory
-	? ContextDependencies<[S]>
-	: S extends AnyExtensionFactory
-		? ExtensionContexts<ReturnType<S>>
-		: ExtensionContexts<S>;
-
-// Tail-recursive so one `.use()` takes 46+ sources without TS2589.
-type UseSourcesContexts<Us extends readonly unknown[], Acc = {}> = Us extends readonly [
-	infer H,
-	...infer T,
-]
-	? UseSourcesContexts<T, Acc & UseSourceContexts<H>>
-	: Acc;
-
-/** The Contexts (and their dependencies) a `.use()` call puts in `ctx`. */
-export type UsedContexts<Us extends readonly UseSource[]> = Us extends readonly AnyContextFactory[]
-	? ContextDependencies<Us>
-	: IsStaticTuple<Us> extends true
-		? UseSourcesContexts<Us>
-		: Record<string, ContextValue>;
-
 type UseSourceDemands<S> = S extends AnyContextFactory
 	? ContextDemands<[S]>
 	: ExtensionProvidesOutput<S extends AnyExtensionFactory ? ReturnType<S> : S>;
 
+// Tail-recursive so one `.use()` takes 46+ sources without TS2589.
 type UseSourcesDemands<Us extends readonly unknown[], Acc = {}> = Us extends readonly [
 	infer H,
 	...infer T,
@@ -611,15 +585,15 @@ type UseSourcesDemands<Us extends readonly unknown[], Acc = {}> = Us extends rea
 	: Acc;
 
 /**
- * The Contexts a `.use()` call demands: those it names, or an Extension's provided ones. What
- * their setups use is demanded where each is provided (see {@link ContextDemands}).
+ * The Contexts a `.use()` call puts in `ctx` and demands: those it names, or an Extension's
+ * provided ones. What their setups use is demanded where each is provided, not read (see
+ * {@link ContextDemands}).
  */
-export type UsedContextDemands<Us extends readonly UseSource[]> =
-	Us extends readonly AnyContextFactory[]
-		? ContextDemands<Us>
-		: IsStaticTuple<Us> extends true
-			? UseSourcesDemands<Us>
-			: Record<string, ContextValue>;
+export type UsedContexts<Us extends readonly UseSource[]> = Us extends readonly AnyContextFactory[]
+	? ContextDemands<Us>
+	: IsStaticTuple<Us> extends true
+		? UseSourcesDemands<Us>
+		: Record<string, ContextValue>;
 
 type ExtensionProvidesOutput<E> =
 	DefiningOf<E> extends ExtensionData<any, infer Provide, any, any, RootMetaKey>
@@ -729,7 +703,7 @@ type ExtensionHook<
 > = NonNullable<
 	ExtensionHooks<
 		F & ContextUseFlags<Use>,
-		ContextDependencies<BeforeValidation extends true ? PreValidationContexts<Use> : Use>,
+		ContextDemands<BeforeValidation extends true ? PreValidationContexts<Use> : Use>,
 		MetaKeys
 	>[Name]
 >;

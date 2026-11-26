@@ -41,7 +41,7 @@ https://api.example.com/health
 
 `.use(api)` says “I need this Context”; `.provide(api())` supplies it. Add the command after providing its dependencies—reversing the order is a type error.
 
-`ctx` also exposes the Contexts that a used Context's setup [uses](#contexts-that-use-other-contexts), and the command demands them too.
+A command reads the Contexts it names, and demands exactly those. To read one that `api`'s setup [uses](#contexts-that-use-other-contexts), name it too: `.use(api, config)`.
 
 A group that only adds commands doesn't `.use()` their Contexts. Its demands include its children's, checked where the group is added:
 

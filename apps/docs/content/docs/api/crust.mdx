@@ -21,7 +21,7 @@ Exact overloads and generic constraints live in [`command/crust.ts`](https://git
 - Neither `defineCommand()` nor `.add()` runs the recipe. Each addition materializes independently on first use by an invocation, snapshot, or documentation pass.
 - Help and typo suggestions read only the config, never the recipe.
 - Successful materialization is cached; a recipe that throws may run again on a later attempt. Don't rely on recipe side effects.
-- `.use(logging)` declares demand for a Context factory; `.provide(logging())` supplies an instance. A reusable definition's `ctx` holds the Contexts it declares with [`.use()`](#usefactories) or provides, and the Contexts their setup uses, transitively.
+- `.use(logging)` declares demand for a Context factory; `.provide(logging())` supplies an instance. A reusable definition's `ctx` holds the Contexts it declares with [`.use()`](#usefactories) or provides, not the Contexts their setup uses.
 - A definition demands the Contexts it declares with `.use()`, plus those demanded by the commands it adds with `.add()` or `.command()` that it doesn't provide itself. TypeScript checks the demands where the definition is added; the root reports one that nothing provides. At runtime, they are checked when the recipe materializes against the providers where it was added.
 - `definition.as(name)` returns the same definition under another name, so one definition can be added twice. The copy has no aliases: they name the original.
 
@@ -159,6 +159,7 @@ const serve = new Crust("serve").flags({
 Recipe-only. Declares the Context factories a reusable definition consumes, without providing instances.
 
 - Requires at least one factory; repeated calls accumulate.
+- `ctx` holds the named Contexts. To read a Context their setup uses, name it too, which demands it.
 - Demands and their transitive dependencies are checked when the definition materializes, not at `.add()`.
 - The command parses the flags these Contexts own, and those of the Contexts their setup uses, transitively. So do inline `.command()` children added after the call. The builder's flag type includes them.
 - If the Context resolved under that name comes from a different same-name factory, that provider must own exactly the declared flags: the same names with equal definitions, where a `parse` function or schema must be the same object. The Contexts its setup uses may own only flags the command parses. Otherwise preparation throws `DEFINITION` (`context-flags-not-parsed`); change the declared Context, or provide the same factory.

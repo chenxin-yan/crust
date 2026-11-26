@@ -183,7 +183,7 @@ outcome: completed
 ```
 
 - `.provide()` installs Context instances across the command tree.
-- `.use()` declares which factories the hooks need. An Extension that supplies and reads a Context needs both.
+- `.use()` declares which factories the hooks need, and hooks read only those, not the Contexts their setups use. An Extension that supplies and reads a Context needs both.
 - To use an app-supplied Context instead, omit the Extension's `.provide()` and call `.provide(logger())` on the app before `.extend(logging)`. TypeScript requires that order; at runtime, the reverse works too.
 - A provided Context's [documentation sections](/docs/guide/contexts#documentation-owned-by-a-context) appear once, on the root.
 
