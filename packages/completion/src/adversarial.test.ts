@@ -43,17 +43,21 @@ describe("walker · validation", () => {
 		expect(() => walkCommand(model)).toThrow(/invalid flag name/);
 	});
 
-	it("rejects choice values containing spaces", async () => {
-		const cli = new Crust("bad")
+	it("keeps a choice the scripts cannot hold out of them: the CLI answers for that definition", async () => {
+		const cli = new Crust("safe")
 			.flags({
-				target: {
-					type: "string",
-					choices: ["a", "two words", "c"],
-				},
+				target: { type: "string", choices: ["a", "two words", "$(x)"] },
+				plain: { type: "string", choices: ["a", "b"] },
 			})
+			.args({ name: "plan", type: "string", choices: ["-1", "it's"] })
 			.action(() => {});
-		const model = await cli.snapshot();
-		expect(() => walkCommand(model)).toThrow(/unsupported choice value/);
+		const spec = walkCommand(await cli.snapshot());
+		expect(spec.flags.map(({ name, choices, complete }) => ({ name, choices, complete }))).toEqual([
+			{ name: "target", choices: undefined, complete: "safe --target" },
+			{ name: "plain", choices: ["a", "b"], complete: undefined },
+		]);
+		expect(spec.args[0]).toMatchObject({ complete: "safe plan" });
+		expect(spec.args[0]?.choices).toBeUndefined();
 	});
 
 	it("strips control characters from descriptions instead of throwing", async () => {

@@ -6,8 +6,8 @@ import {
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
-import { completerOf } from "./complete.ts";
-import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
+import { choiceCompleter, completerOf } from "./complete.ts";
+import { assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag, StringCompletion } from "./spec.ts";
 
 /**
@@ -52,20 +52,24 @@ function valueShape(
 			return { type: "string", valueCompletion: "none" };
 		case "string":
 			return choices !== undefined && choices.length > 0
-				? { type: "string", choices: choices.map(assertSafeChoiceValue) }
+				? { type: "string", choices }
 				: { type: "string" };
 		case undefined:
 			return { type: "string" };
 	}
 }
 
-/** The `complete` address of the definition at `target` when `command` has a completer for it. */
+/**
+ * The `complete` address of the definition at `target` when the CLI answers for it: it has a
+ * complete function, or `choices` the scripts cannot hold.
+ */
 function completeAddress(
 	command: CommandSnapshot,
 	node: CommandDocumentation,
 	target: string,
+	choices: readonly string[] | undefined,
 ): { complete?: string } {
-	return completerOf(command, target) === undefined
+	return (completerOf(command, target) ?? choiceCompleter(choices)) === undefined
 		? {}
 		: { complete: [...node.path, target].join(" ") };
 }
@@ -90,8 +94,8 @@ function walkFlag(
 		...(def.multiple || def.type === "count" ? { multiple: true as const } : {}),
 	};
 
-	const live = completeAddress(command, node, `--${def.name}`);
-	// A complete function replaces the choices, so they are not held to the scripts' character set.
+	const live = completeAddress(command, node, `--${def.name}`, def.choices);
+	// The CLI answers for the value, so the choices stay out of the scripts.
 	const shape = valueShape(def.type, live.complete === undefined ? def.choices : undefined);
 	return shape.type === "boolean"
 		? { ...common, ...shape, takesValue: false }
@@ -106,7 +110,7 @@ function walkArg(
 ): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const description = normaliseDescription(def.description);
-	const live = completeAddress(command, node, def.name);
+	const live = completeAddress(command, node, def.name, def.choices);
 	return {
 		name: def.name,
 		required: def.required,

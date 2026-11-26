@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
 	assertSafeBinName,
-	assertSafeChoiceValue,
+	isScriptChoice,
 	assertSafeIdentifier,
 	bashCompgenWord,
 	bashSingleQuote,
@@ -49,10 +49,10 @@ describe("assertSafeBinName", () => {
 	});
 });
 
-describe("assertSafeChoiceValue", () => {
-	it("accepts realistic choice values", () => {
+describe("isScriptChoice", () => {
+	it("holds realistic choice values", () => {
 		for (const v of ["browser", "us-east-1", "node@20", "text/plain", "1.0.0", "a:b", "a+b"]) {
-			expect(assertSafeChoiceValue(v)).toBe(v);
+			expect(isScriptChoice(v)).toBe(true);
 		}
 	});
 
@@ -61,8 +61,8 @@ describe("assertSafeChoiceValue", () => {
 		["single quote", "it's"],
 		["backtick", "`whoami`"],
 		["leading hyphen is treated as flag-ish", "-bad"],
-	])("rejects %s", (_label, value) => {
-		expect(() => assertSafeChoiceValue(value)).toThrow(/unsupported choice value/);
+	])("leaves %s to the CLI", (_label, value) => {
+		expect(isScriptChoice(value)).toBe(false);
 	});
 });
 

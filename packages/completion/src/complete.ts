@@ -1,4 +1,7 @@
 import type { CommandSnapshot } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
+
+import { isScriptChoice } from "./escape.ts";
 
 /**
  * Live values for an argument or a flag that takes a value: called with the word being
@@ -15,6 +18,14 @@ export type Completer = (typed: string) => readonly string[] | Promise<readonly 
  */
 export const COMPLETE_COMMAND = "__complete";
 
+/**
+ * The completer that stands in for `choices` the scripts cannot hold as written, such as one
+ * with a space: it answers with every choice, which the scripts quote as they insert it.
+ */
+export function choiceCompleter(choices: readonly string[] | undefined): Completer | undefined {
+	return choices?.every(isScriptChoice) === false ? () => choices : undefined;
+}
+
 /** The completer at a `__complete` address, if the tree under `root` has one there. */
 export function completerAt(root: CommandSnapshot, address: string): Completer | undefined {
 	const [, ...path] = address.split(" ");
@@ -24,7 +35,16 @@ export function completerAt(root: CommandSnapshot, address: string): Completer |
 		command =
 			command && Object.hasOwn(command.subCommands, name) ? command.subCommands[name] : undefined;
 	}
-	return command && completerOf(command, target);
+	if (command === undefined) return undefined;
+	const declared = completerOf(command, target);
+	if (declared !== undefined) return declared;
+	// The choices as the walk read them, schema `enum` included; this command alone, not its subtree.
+	const { args, flags } = buildCommandDocumentation({ ...command, subCommands: {} });
+	return choiceCompleter(
+		target.startsWith("--")
+			? flags.find((flag) => flag.name === target.slice(2))?.choices
+			: args.find((arg) => arg.name === target)?.choices,
+	);
 }
 
 /**

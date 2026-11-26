@@ -46,9 +46,9 @@ import {
 function valueAction(ident: string, value: CompletionFlag | CompletionArg): string {
 	// The address holds validated names joined with spaces: no `:` to end the spec field.
 	if (value.complete !== undefined) return `{_${ident}_complete "${value.complete}"}`;
-	// Choice values are validated by `assertSafeChoiceValue` to contain only
-	// `[A-Za-z0-9_.+:@/-]`. Of those only `:` needs escaping inside the `(…)`
-	// action list: bare, it would end the spec field.
+	// The walk leaves here only choices of `[A-Za-z0-9_.+:@/-]` (`isScriptChoice`).
+	// Of those only `:` needs escaping inside the `(…)` action list: bare, it
+	// would end the spec field.
 	if (value.choices !== undefined) {
 		return `(${value.choices.map((choice) => choice.replaceAll(":", "\\:")).join(" ")})`;
 	}

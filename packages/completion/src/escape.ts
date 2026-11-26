@@ -30,34 +30,15 @@
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 
 /**
- * Choice-value shape accepted for `flags[].choices` and `args[].choices`.
- *
- * Looser than {@link IDENT_PATTERN} so legitimate enumerated values like
- * `us-east-1`, `1.0`, `text/plain`, or `node@20` flow through unchanged,
- * but still excludes whitespace, quotes, and shell metacharacters that
- * would force per-shell escaping inside the emitted action lists
- * (`compgen -W`, zsh `(...)` action, fish `-a`).
- *
- * If a CLI legitimately needs choice values containing whitespace or
- * shell-special characters, we'd need a richer per-shell escaping scheme;
- * that's out of scope for v1. We fail fast with a clear message rather
- * than silently mis-quote.
+ * The choice values the scripts hold as written: `us-east-1`, `1.0`, `text/plain`, `node@20`.
+ * Whitespace, quotes and shell metacharacters would need escaping per shell inside the emitted
+ * action lists (`compgen -W`, zsh `(...)`, fish `-a`), and a leading `-` reads as an option
+ * there. A definition with any other choice is completed by the CLI instead, which the scripts
+ * already quote: see `choiceCompleter`.
  */
-// Require an alphanumeric first character so values can never be confused
-// with flags by completion shells (e.g. bash's `compgen` treating `-x` as
-// an option). Subsequent chars allow the broader safe set.
 const CHOICE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/;
 
-export function assertSafeChoiceValue(value: string): string {
-	if (!CHOICE_VALUE_PATTERN.test(value)) {
-		throw new Error(
-			`completion extension: unsupported choice value ${JSON.stringify(value)} — ` +
-				`must match ${CHOICE_VALUE_PATTERN}. ` +
-				`Whitespace and shell metacharacters are not supported in v1.`,
-		);
-	}
-	return value;
-}
+export const isScriptChoice = (value: string): boolean => CHOICE_VALUE_PATTERN.test(value);
 
 /**
  * Identifier shape accepted for command names, flag names, flag aliases,

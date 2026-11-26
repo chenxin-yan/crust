@@ -214,6 +214,26 @@ describe("complete", () => {
 		);
 	});
 
+	it("prints the choices of a definition whose choices the scripts cannot hold", async () => {
+		const plans = new Crust("mycli", { version: "1.0.0" })
+			.extend(completion())
+			.flags({
+				plan: { type: "string", choices: ["free tier", "pro"] },
+				size: { type: "string", choices: ["s", "m"] },
+				scope: { type: "exclusive", flags: { team: { type: "string", choices: ["a b"] } } },
+			})
+			.args({ name: "target", type: "string", choices: ["-1", "$(x)"] })
+			.action(() => {});
+		const values = async (address: string) =>
+			(await captureExecute(plans, ["__complete", "--", address, "f"])).stdout;
+		// Every choice: the shell keeps those that start with the word.
+		expect(await values("mycli --plan")).toBe("free tier\npro\n");
+		expect(await values("mycli --team")).toBe("a b\n");
+		expect(await values("mycli target")).toBe("-1\n$(x)\n");
+		// Choices the scripts hold are not asked for.
+		expect(await values("mycli --size")).toBe("");
+	});
+
 	it("prints nothing for an address without a complete function", async () => {
 		for (const address of [
 			"mycli deploy --scope",

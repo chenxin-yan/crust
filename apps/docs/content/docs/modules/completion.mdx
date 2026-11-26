@@ -57,7 +57,7 @@ $ my-cli checkout release
 
 - The generated script runs `my-cli __complete`, a hidden command `completion()` adds, which calls the function and prints one value per line. A value containing a line break or a tab is left out.
 - A required flag that another Extension adds to every command applies to `__complete` too, so completion offers no values until that flag is given. Give such a flag an [`env`](/docs/guide/arguments-and-flags#environment-variables) so the shell can supply it.
-- Bash, zsh, and PowerShell insert each value quoted for the shell. Zsh passes the function the word unquoted; bash passes it as typed, so after `pro\ ` the function receives `pro\ `, backslash included.
+- Bash, zsh, and PowerShell insert each value quoted for the shell. Zsh passes the function the word unquoted; bash passes it as typed, so after `pro\ ` the function receives `pro\ `, backslash included, and keeps a value that starts with the word as typed or as inserted.
 - Errors and output on stderr stay off the terminal; a failing function offers nothing.
 - The key exists in every file of a project that imports `@crustjs/completion`. Without `completion()` in `.extend()`, a `complete` key is a `DEFINITION` error (`unowned-key`), from source and in `crust build`. See [Own a definition key](/docs/guide/extensions#own-a-definition-key).
 - `complete` never changes how a value parses: the command still validates what the user types.
@@ -93,13 +93,15 @@ command.flags({
 // my-cli build --target <Tab> offers browser, bun, and node
 ```
 
-String `choices` become static candidates, and so does the string `enum` of a flag's schema. A candidate must start with a letter or digit and hold only letters, digits, and `_ . + : @ / -`; any other value stops `completion <shell>` and `crust build` with an error that names it. A [`complete`](#live-values) function can offer a value outside that pattern. `path` and unconstrained `string` values use file completion where supported, while `url` and `json` values do not. PowerShell offers file names wherever a value has no candidates.
+String `choices` become candidates, and so does the string `enum` of a flag's schema. Choices that start with a letter or digit and hold only letters, digits, and `_ . + : @ / -` are written into the scripts. A definition with any other choice, such as `"free tier"`, is completed like one with a [`complete`](#live-values) function: the script asks the CLI, which answers with the choices, and the shell inserts the value quoted (`free\ tier`). `path` and unconstrained `string` values use file completion where supported, while `url` and `json` values do not. PowerShell offers file names wherever a value has no candidates.
 
 Boolean flags do not consume a value. Hidden commands and their descendants are omitted.
 
 A short may be any character Core accepts, such as ripgrep's `-.`; each script quotes it for its shell. Zsh completes the value of a short `-+` or `-=` only when it is typed `-\+` or `-\=`.
 
 After `--`, no flags or subcommands are offered, and later words keep filling argument slots, as Core parses them. A [`variadic: "afterDoubleDash"`](/docs/guide/arguments-and-flags#only-after---) argument's values are offered only after `--`, and the other arguments' only before it. A command with a [`variadic: "passthrough"`](/docs/guide/arguments-and-flags#from-the-first-positional) argument offers no flags after its first positional. Zsh completes arguments only for commands without subcommands.
+
+Bash completes a value past a `=` or `:` it holds, such as `node:22`. A file path that holds an unescaped `:` may get the wrong ending, a `/` or a space, because Readline looks up only the text after the colon; bash-completion's own colon handling has the same limit.
 
 ## Package-manager and advanced setup
 
