@@ -4,6 +4,7 @@ import { z } from "zod";
 import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import { commandInputSchema } from "./command-input.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
@@ -184,6 +185,95 @@ describe("snapshotCommand", () => {
 		expect(Object.isFrozen(snapshot.flags.verbose)).toBe(true);
 		expect(Object.isFrozen(snapshot.subCommands)).toBe(true);
 		expect(Object.isFrozen(snapshot.subCommands.build)).toBe(true);
+	});
+});
+
+describe("keys packages add", () => {
+	// A package's `ArgExtras`/`FlagExtras`/`CommandExtras` augmentation types these keys; core's
+	// own sources have none, so the casts stand in for it. `tests/owned-keys.test.ts` checks the types.
+	const complete = () => ["a", "b"];
+	const flag = { type: "string", complete, choices: ["a", "b"] } as { type: "string" };
+
+	it("passes them through to the snapshot unchanged, and never copies the keys core reads", () => {
+		const root = createCommandNode("cli");
+		root.meta = { name: "cli", mcp: { readOnly: true } } as typeof root.meta;
+		root.args = [{ name: "file", type: "string", complete } as { name: string; type: "string" }];
+		registerFlag(root, "mode", flag, "local");
+		registerFlag(
+			root,
+			"scope",
+			{ type: "exclusive", flags: { org: flag }, complete } as { type: "exclusive"; flags: {} },
+			"local",
+		);
+		const snapshot = snapshotCommand(root);
+		expect(snapshot.meta).toEqual({ name: "cli", mcp: { readOnly: true } });
+		expect(snapshot.args).toEqual([{ name: "file", type: "string", complete }]);
+		expect(snapshot.flags.mode).toEqual({
+			type: "string",
+			choices: ["a", "b"],
+			negatable: false,
+			complete,
+		});
+		expect(snapshot.flags.scope?.flags?.org).toMatchObject({ complete });
+		expect(snapshot.flags.scope).toMatchObject({ complete });
+	});
+
+	it("passes them through on lazily projected children and Extension commands", async () => {
+		const command = defineCommand("deploy", { mcp: false } as {}, (c) =>
+			c.flags({ mode: flag }).action(() => {}),
+		);
+		const tool = defineExtension(defineExtensionId("tool")).add(
+			defineCommand("serve", { mcp: false } as {}, (c) => c.action(() => {})),
+		);
+		const seen: unknown[] = [];
+		const app = new Crust("cli")
+			.extend(
+				tool,
+				// Owns the keys, so the definition check passes.
+				defineExtension(defineExtensionId("owner"))
+					.owns(...(["mcp", "complete"] as never[]))
+					.postRun(({ rootCommand }) => {
+						const deploy = rootCommand.subCommands.deploy!;
+						seen.push((deploy.meta as { mcp?: unknown }).mcp);
+						seen.push((deploy.flags.mode as { complete?: unknown }).complete);
+					}),
+			)
+			.add(command)
+			.action(() => {});
+		const snapshot = await app.snapshot();
+		expect(snapshot.subCommands.deploy?.meta).toMatchObject({ mcp: false });
+		expect(snapshot.subCommands.serve?.meta).toMatchObject({ mcp: false });
+		await app.run([]);
+		expect(seen).toEqual([false, complete]);
+	});
+
+	it("leaves an argument's key alone when a flag field has its name", async () => {
+		const env = { hint: "local" };
+		const owned = { env, aliases: "abc", negatable: false, deprecated: "x" };
+		const app = new Crust("cli")
+			.extend(defineExtension(defineExtensionId("owner")).owns(...(Object.keys(owned) as never[])))
+			.args({ name: "file", type: "string", required: true, ...(owned as object) })
+			.action(() => {});
+		const snapshot = await app.snapshot();
+		expect(snapshot.args[0]).toEqual({ name: "file", type: "string", required: true, ...owned });
+		expect(commandInputSchema(snapshot, [])).toEqual({
+			type: "object",
+			properties: { file: { type: "string" } },
+			required: ["file"],
+		});
+	});
+
+	it("keeps a key named `__proto__` as a field, not the prototype", () => {
+		const root = createCommandNode("cli");
+		const extra: object = JSON.parse('{"__proto__": {"injected": true}}');
+		root.args = [{ name: "file", type: "string", ...extra }];
+		registerFlag(root, "mode", { type: "string", ...extra }, "local");
+		const snapshot = snapshotCommand(root);
+		for (const def of [snapshot.args[0]!, snapshot.flags.mode!]) {
+			expect(Object.getPrototypeOf(def)).toBe(Object.prototype);
+			expect(Object.hasOwn(def, "__proto__")).toBe(true);
+			expect("injected" in def).toBe(false);
+		}
 	});
 });
 

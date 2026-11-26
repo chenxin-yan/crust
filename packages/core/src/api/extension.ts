@@ -6,10 +6,13 @@ import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { flagRecordEntries, ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
 import type {
+	ArgExtras,
 	Awaitable,
+	CommandExtras,
 	CommandMeta,
 	CommandSectionInput,
 	FlagDef,
+	FlagExtras,
 	FlagsDef,
 	InferFlags,
 	InvocationIO,
@@ -226,7 +229,8 @@ export interface ExtensionContext<
 	 * given explicitly on argv win, even when equal to the default; every other supplied key
 	 * replaces the environment value or default, converted exactly as typed `run()` input is.
 	 * Under typed `run()` nothing came from argv, so supplied keys replace the typed input.
-	 * Each call re-binds against the original input, so the last call wins. Afterwards
+	 * Calls add up, with {@link ExtensionContext.bindText} too: a key bound again takes the later
+	 * value, and keys a later call leaves out keep theirs. Afterwards
 	 * `args`, `flags`, and `sources` report the bound values, and validation and the Command
 	 * Action use them. Flag handlers are chosen from the original input, so a bound flag never
 	 * selects one, even when bound in `setup`. A no-op in `onError` after a routing or argv-syntax failure.
@@ -244,6 +248,27 @@ export interface ExtensionContext<
 	 * ```
 	 */
 	readonly bindInput: (input: RunInputPayload) => void;
+	/**
+	 * Bind text, such as a prompt's answer, as {@link ExtensionContext.bindInput} binds typed
+	 * values, but converted exactly as the same word on the command line: `type`, `choices`,
+	 * a custom `parse`, a repeatable flag's `delimiter`, and boolean words (`yes`, `off`, …). A
+	 * variadic argument or `multiple` flag takes one word per occurrence. Count flags and
+	 * exclusive groups have no text form; bind them with `bindInput`.
+	 *
+	 * @throws {CrustError} The `PARSE` error the same word fails with on the command line, or
+	 *   one of `bindInput`'s
+	 *
+	 * @example
+	 * ```ts
+	 * preRun(ctx) {
+	 *   if (ctx.sources.flags.port === undefined) ctx.bindText({ flags: { port: "8080" } });
+	 * }
+	 * ```
+	 */
+	readonly bindText: (input: {
+		readonly args?: Readonly<Record<string, string | readonly string[]>>;
+		readonly flags?: Readonly<Record<string, string | readonly string[]>>;
+	}) => void;
 }
 
 /** What {@link ExtensionContext.parseCommandArgv} returns: the values the Command Action would receive. */
@@ -521,6 +546,8 @@ export interface ExtensionData<
 	readonly _hookFlags?: HookFlags;
 	readonly [extensionHookProof]?: (deps: HookDeps) => void;
 	readonly id: ExtensionId;
+	/** Definition keys this Extension owns; see {@link ExtensionBuilder.owns}. */
+	readonly owns: readonly string[];
 	readonly flags: Readonly<Record<string, ExtensionFlagDef>>;
 	/** @internal — phantom carrying the declared flag record for the flags' types */
 	readonly _flagDefs?: FlagDefs;
@@ -763,6 +790,17 @@ export interface ExtensionBuilder<
 		MetaKeys,
 		Id
 	>;
+	/**
+	 * Own definition keys that a package adds to argument, flag, or command definitions with
+	 * module augmentation of `ArgExtras`, `FlagExtras`, or `CommandExtras`. Only this Extension
+	 * reads them, from the snapshots. A definition that sets a key no installed Extension owns is a
+	 * `DEFINITION` error (`unowned-key`), from source and in `crust build`. Owning `toJSON`, or
+	 * `inputSchema` or `extension`, which a snapshot sets itself, is a `DEFINITION` error
+	 * (`reserved-name`).
+	 */
+	owns(
+		...keys: readonly Extract<keyof (ArgExtras & FlagExtras & CommandExtras), string>[]
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** Contribute root commands; names and aliases must not collide with any other root command. */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds
@@ -832,6 +870,10 @@ interface ExtensionState extends Omit<ExtensionData, "flags"> {
 
 type ErasedExtensionBuilder = ExtensionBuilder<any, any, any, any, any>;
 
+// Fields a snapshot sets itself, which would replace an owned key of that name, and `toJSON`,
+// which JSON.stringify would call in place of writing the definition.
+const SNAPSHOT_KEYS = new Set(["inputSchema", "extension", "toJSON"]);
+
 function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 	const flags = Object.freeze(toFlagsRecord(state.flags));
 	// Provided Context-owned spellings collide with owned flags but stay Context-owned.
@@ -843,6 +885,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 	}
 	const data: ExtensionData = Object.freeze({
 		id: state.id,
+		owns: Object.freeze([...state.owns]),
 		flags,
 		commands: Object.freeze([...state.commands]),
 		use: Object.freeze([...state.use]),
@@ -866,6 +909,17 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 					...flagRecordEntries(record).map(([name, def]) => [name, ownDefinition(def)] as const),
 				],
 			}),
+		owns: (...keys: readonly string[]) => {
+			const taken = keys.find((key) => SNAPSHOT_KEYS.has(key));
+			if (process.env.CRUST_INTERNAL_BUILD !== "1" && taken !== undefined) {
+				throw new CrustError(
+					"DEFINITION",
+					`Extension "${state.id}" cannot own "${taken}": a snapshot uses that name itself`,
+					{ subject: "extension", name: state.id, reason: "reserved-name" },
+				);
+			}
+			return next({ owns: [...state.owns, ...keys] });
+		},
 		add: (...definitions: readonly CommandDefinition<any, any, any, any>[]) =>
 			next({ commands: [...state.commands, ...definitions] }),
 		setup: (setup: ExtensionHooks["setup"]) => next({ hooks: { ...state.hooks, setup } }),
@@ -928,6 +982,7 @@ export function defineExtension<
 	// SAFETY: metadata requirements are type-only; the runtime handle is identical for every MetaKeys.
 	return createExtension({
 		id,
+		owns: [],
 		use: [],
 		provide: [],
 		flags: [],

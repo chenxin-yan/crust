@@ -38,7 +38,13 @@ export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
 type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
 	| { readonly kind: "count"; value: number }
-	| { readonly kind: "string"; value: string | string[]; readonly env?: string }
+	| {
+			readonly kind: "string";
+			value: string | string[];
+			readonly env?: string;
+			/** Text an Extension bound, which has no command-line spelling to correct. */
+			readonly bound?: true;
+	  }
 	| { readonly kind: "member"; readonly flag: string; readonly value: ArgvFlagValue }
 	| { readonly kind: "invalid"; readonly error: CrustError };
 
@@ -243,7 +249,7 @@ function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): Par
 	if (parsed.kind === "invalid") throw parsed.error;
 	if (parsed.kind === "boolean" || parsed.kind === "count") return parsed.value;
 	if (parsed.kind === "member") return memberValue(def, parsed.flag, parsed.value, coerceFlagValue);
-	const { env } = parsed;
+	const { env, bound } = parsed;
 	const label = env === undefined ? `--${name}` : `--${name} (from $${env})`;
 	const coerce = (value: string, index?: number) => {
 		try {
@@ -251,7 +257,13 @@ function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue): Par
 		} catch (error) {
 			// `-t=vue` keeps the `=`, as POSIX tools do; say how to write what was likely meant.
 			const meant = value.slice(1);
-			if (env !== undefined || !value.startsWith("=") || !meant || !(error instanceof CrustError))
+			if (
+				env !== undefined ||
+				bound ||
+				!value.startsWith("=") ||
+				!meant ||
+				!(error instanceof CrustError)
+			)
 				throw error;
 			const spelling = def.short === undefined ? `--${name}` : `-${def.short}`;
 			// The error is this call's own, so amending its message touches nothing shared.
@@ -284,23 +296,29 @@ function splitOccurrences(values: readonly string[], delimiter: string | undefin
 }
 
 /**
- * Convert an environment value into the shape argv tokens produce, so the
+ * Convert an environment value or bound text into the shape argv tokens produce, so the
  * shared coercion path (`choices`, `parse`, type conversion, schemas) runs
- * identically. A repeatable flag's `delimiter` splits the text; booleans read
- * the same words as positional booleans.
+ * identically. A repeatable flag's `delimiter` splits the text, and zero occurrences
+ * after the split are an omission; booleans read the same words as positional booleans.
+ *
+ * @param words - One word per occurrence; a flag that is not `multiple` takes one
+ * @param variable - The environment variable the text came from; none for bound text
  */
-function envFlagValue(
+function textFlagValue(
 	name: string,
 	def: FlagDef,
-	variable: string,
-	raw: string,
+	words: readonly string[],
+	variable?: string,
 ): ArgvFlagValue | undefined {
-	const occurrences = def.multiple ? splitOccurrences([raw], def.delimiter) : [raw];
+	const occurrences = splitOccurrences(words, def.multiple ? def.delimiter : undefined);
 	if (def.multiple && occurrences.length === 0) return undefined;
 	if (def.type !== "boolean") {
-		return { kind: "string", value: def.multiple ? occurrences : raw, env: variable };
+		const value = def.multiple ? occurrences : occurrences[0]!;
+		return variable === undefined
+			? { kind: "string", value, bound: true }
+			: { kind: "string", value, env: variable };
 	}
-	const label = `--${name} (from $${variable})`;
+	const label = variable === undefined ? `--${name}` : `--${name} (from $${variable})`;
 	try {
 		const values = occurrences.map((text) => coerceValue(text, def, label) as boolean);
 		return { kind: "boolean", value: def.multiple ? values : values[0]! };
@@ -361,7 +379,7 @@ function applyEnvAndDelimiter(
 			continue;
 		}
 		const found = envVariable(def, env);
-		if (found) values[name] = envFlagValue(name, def, ...found);
+		if (found) values[name] = textFlagValue(name, def, [found[1]], found[0]);
 	}
 	return values;
 }
@@ -376,7 +394,7 @@ function envMemberValue(
 ): ArgvFlagValue | undefined {
 	const given = Object.entries(members).flatMap(([flag, def]) => {
 		const found = envVariable(def, env);
-		const value = found && envFlagValue(flag, def, ...found);
+		const value = found && textFlagValue(flag, def, [found[1]], found[0]);
 		if (!value || (value.kind === "boolean" && value.value === false)) return [];
 		return [{ flag, value, label: `"--${flag}" (from $${found[0]})` }];
 	});
@@ -861,6 +879,41 @@ function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue):
 	return coerceStructuredValue(def, value, label);
 }
 
+/** A positional's text, converted as the same word on the command line. */
+function coerceTextArg(
+	def: ArgDef,
+	value: RunInputValue,
+	label: string,
+	index?: number,
+): ParsedArgValue {
+	if (typeof value !== "string") {
+		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS.string} for ${label}.`);
+	}
+	return coerceToken(def, value, label, index);
+}
+
+/** A flag's bound text in the shape argv tokens produce; see {@link textFlagValue}. */
+function textFlagInput(
+	name: string,
+	def: FlagDef,
+	value: RunInputValue,
+): ArgvFlagValue | undefined {
+	const label = `--${name}`;
+	if (def.type === "count" || def.flags) {
+		throw new CrustError("PARSE", `Flag "${label}" has no text form; bind it with bindInput.`);
+	}
+	if (def.multiple && !isOccurrenceArray(value)) {
+		throw new CrustError("PARSE", `Expected an occurrence array for ${label}`);
+	}
+	const words: readonly RunInputValue[] =
+		def.multiple && isOccurrenceArray(value) ? value : [value];
+	if (!words.every((word): word is string => typeof word === "string")) {
+		throw new CrustError("PARSE", `Expected ${STRUCTURED_EXPECTATIONS.string} for ${label}.`);
+	}
+	// Like an environment value: the command line has no word for a boolean flag's value.
+	return textFlagValue(name, def, words);
+}
+
 /**
  * Frozen value sources for definitions: `source(name)` for a supplied one, else `default`
  * when it declares one; definitions without a value are left out.
@@ -1040,11 +1093,13 @@ function positionalGap(argument: string, omitted: string): CrustError {
  *
  * @param env - Environment consulted for omitted flags' `FlagDef.env` fallbacks; none by default
  *   (invocations pass `process.env`)
+ * @param text - Supplied values are text, converted as the same words on the command line
  */
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
 	env: FlagEnvironment = {},
+	text = false,
 ): ArgvParseResult<A, F> {
 	const { args: inputArgs, flags: inputFlags } = input;
 	const positionals: RunInputValue[] = [];
@@ -1107,7 +1162,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	for (const [name, def] of Object.entries(command.effectiveFlags)) {
 		const value = inputFlags && Object.hasOwn(inputFlags, name) ? inputFlags[name] : undefined;
 		if (value === undefined) omitted[name] = def;
-		else flagValues[name] = value;
+		else flagValues[name] = text ? textFlagInput(name, def, value) : value;
 	}
 	const fromEnv = new Set<string>();
 	for (const [name, value] of Object.entries(applyEnvAndDelimiter(omitted, {}, env))) {
@@ -1120,10 +1175,10 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 		command,
 		positionals,
 		flagValues,
-		coerceStructuredValue,
+		text ? coerceTextArg : coerceStructuredValue,
 		(name, def, value) =>
-			fromEnv.has(name)
-				? // SAFETY: applyEnvAndDelimiter produced every value in `fromEnv`.
+			text || fromEnv.has(name)
+				? // SAFETY: textFlagInput or applyEnvAndDelimiter produced the value.
 					coerceFlagValue(name, def, value as ArgvFlagValue)
 				: // SAFETY: every other value came from the caller's structured flags.
 					coerceStructuredFlag(name, def, value as RunInputValue),
@@ -1158,13 +1213,14 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 }
 
 /**
- * Bind structured input over a parse result, as `ExtensionContext.bindInput` does.
+ * Bind structured input over a parse result, as `ExtensionContext.bindInput` and `bindText` do.
  * Values given on argv win; every other supplied key replaces the environment value,
- * default, or typed `run()` value, converted as {@link parseStructured} converts it.
- * Supplied keys that argv already gave are dropped first, so their values are never
+ * default, typed `run()` value, or earlier bound value, converted as {@link parseStructured}
+ * converts it. Supplied keys that argv already gave are dropped first, so their values are never
  * converted and cannot fail; values not replaced are kept without re-resolving defaults.
  *
- * @param parsed - The invocation's original parse result; each call re-binds against it
+ * @param parsed - The parse result to bind over: the invocation's, or an earlier binding's
+ * @param text - Supplied values are text, converted as the same words on the command line
  * @throws {CrustError} `PARSE` on an unknown key, a positional argument supplied after an
  *   omitted earlier one, or a value that fails conversion (including a non-array value for
  *   a variadic argument or `multiple` flag)
@@ -1173,6 +1229,7 @@ export function bindStructuredInput(
 	command: CommandNode,
 	parsed: ArgvParseResult,
 	input: RunInputPayload,
+	text = false,
 ): ArgvParseResult {
 	const { sources } = parsed;
 	const supplied = (
@@ -1203,6 +1260,8 @@ export function bindStructuredInput(
 			),
 		},
 		{ args: inputArgs, flags: inputFlags },
+		{},
+		text,
 	);
 	const pick = (bound: Record<string, ParsedArgValue>, names: Record<string, unknown>) =>
 		Object.fromEntries(Object.keys(names).map((name) => [name, bound[name]]));
@@ -1231,6 +1290,8 @@ export function bindStructuredInput(
 		// Spread, not assignment: an argument may be named `__proto__`.
 		args: { ...parsed.args, ...pick(structured.args, inputArgs) },
 		flags: { ...parsed.flags, ...pick(structured.flags, inputFlags) },
+		// A later binding must not take a bound positional for omitted.
+		suppliedArgs: new Set([...(parsed.suppliedArgs ?? []), ...(structured.suppliedArgs ?? [])]),
 		sources: Object.freeze({
 			args: rebound(sources.args, inputArgs, structured.sources.args),
 			flags: rebound(sources.flags, inputFlags, structured.sources.flags),

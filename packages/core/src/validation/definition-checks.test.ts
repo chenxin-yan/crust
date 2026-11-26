@@ -36,6 +36,10 @@ const action = <B extends CommandDefinitionBuilder<any, any>>(command: B) =>
 
 let captured: AnyCommandDefinitionBuilder | undefined;
 const dynamicFlags: Record<string, ExtensionFlagDef> = {};
+// A package's augmentation types the key whether or not its Extension is installed; the casts
+// stand in for it.
+const hinted = { type: "string", hint: "x" } as { type: "string" };
+const owner = ext("owner").owns(...(["hint"] as never[]));
 
 const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[] = [
 	["empty-spelling", () => new Crust("cli").flags({ "": { type: "string" } })],
@@ -231,6 +235,26 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 				.add(defineCommand("second", () => captured!))
 				.snapshot(),
 	],
+	["unowned-key", () => new Crust("cli").flags({ a: hinted }).snapshot()],
+	["unowned-key", () => new Crust("cli").args({ name: "a", ...hinted }).snapshot()],
+	[
+		"unowned-key",
+		() =>
+			new Crust("cli")
+				.flags({ a: { type: "exclusive", flags: { b: hinted } } })
+				.extend(ext("other").owns(...(["other"] as never[])))
+				.snapshot(),
+	],
+	["unowned-key", () => new Crust("cli").command("deploy", { hint: "x" } as {}, action).snapshot()],
+	[
+		"unowned-key",
+		() =>
+			new Crust("cli")
+				.extend(
+					ext("tool").add(defineCommand("serve", (c) => c.flags({ a: hinted }).action(() => {}))),
+				)
+				.snapshot(),
+	],
 	["factory-id-mismatch", () => ext("a").factory(() => ext("b"))()],
 	[
 		"unknown-handle-flag",
@@ -270,6 +294,15 @@ describe("definition checks", () => {
 			expect(reported).not.toBe(reason);
 		},
 	);
+});
+
+it("accepts a key an installed Extension owns", async () => {
+	const app = new Crust("cli")
+		.flags({ a: hinted })
+		.args({ name: "b", ...hinted })
+		.command("deploy", { hint: "x" } as {}, action)
+		.extend(owner);
+	await expect(app.snapshot()).resolves.toBeDefined();
 });
 
 describe("rules TypeScript owns", () => {

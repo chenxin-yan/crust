@@ -101,5 +101,15 @@ export async function writeSnapshotProtocol(
 			JSON.stringify({ extensions } satisfies BuildReport),
 		);
 	}
-	await writeFile(snapshotPath, JSON.stringify(snapshot));
+	let json: string;
+	try {
+		json = JSON.stringify(snapshot);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(
+			`The Command Snapshot cannot be written as JSON: ${message}\nA default, or a definition key an Extension owns, holds a value JSON cannot carry, such as a BigInt or a cyclic object.`,
+			{ cause: error },
+		);
+	}
+	await writeFile(snapshotPath, json);
 }

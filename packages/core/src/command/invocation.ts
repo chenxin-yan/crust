@@ -75,7 +75,14 @@ import {
 	snapshotPaths,
 	type CommandRoute,
 } from "./router.ts";
-import { createSnapshotProjector, type CommandSnapshot } from "./snapshot.ts";
+import {
+	CORE_ARG_KEYS,
+	CORE_COMMAND_KEYS,
+	CORE_FLAG_KEYS,
+	createSnapshotProjector,
+	extraEntries,
+	type CommandSnapshot,
+} from "./snapshot.ts";
 import type { CommandShape, ShapeRunOutcome } from "./typed-run.ts";
 
 /** The process's stdout or stderr. Only a terminal has a width, and reading it needs the stream. */
@@ -205,6 +212,8 @@ interface PreparedInvocation {
 		readonly by: ExtensionId;
 		readonly select: NonNullable<ExtensionHooks<any, any, any>["renderer"]>;
 	};
+	/** Run a command of the same application as `app.run()` does: the action's `runCommand`. */
+	runCommand: CrustCommandContext["runCommand"];
 }
 
 /**
@@ -518,6 +527,46 @@ function checkExtensionCommandNames(
 }
 
 /**
+ * Reject a definition key Core does not read that no installed Extension owns, such as one a
+ * package adds through `ArgExtras`, `FlagExtras`, or `CommandExtras`: the key's type exists
+ * whether or not its package is installed.
+ */
+function checkOwnedKeys(node: CommandNode, path: string, owned: ReadonlySet<string>): void {
+	const check = (
+		definition: object,
+		core: ReadonlySet<string>,
+		subject: "command" | "argument" | "flag",
+		name: string,
+		label: string,
+	) => {
+		const unowned = extraEntries(definition, core).find(
+			([key, value]) => value !== undefined && !owned.has(key),
+		);
+		if (!unowned) return;
+		throw new CrustError(
+			"DEFINITION",
+			`${label} sets "${unowned[0]}", which no installed Extension owns`,
+			{ subject, name, reason: "unowned-key" },
+		);
+	};
+	check(node.meta, CORE_COMMAND_KEYS, "command", node.meta.name, `Command "${path}"`);
+	for (const def of node.args) {
+		check(
+			def,
+			CORE_ARG_KEYS,
+			"argument",
+			def.name,
+			`Argument "<${def.name}>" of command "${path}"`,
+		);
+	}
+	for (const [name, def] of Object.entries(node.effectiveFlags)) {
+		for (const [flag, flagDef] of [[name, def], ...Object.entries(def.flags ?? {})] as const) {
+			check(flagDef, CORE_FLAG_KEYS, "flag", flag, `Flag "--${flag}" of command "${path}"`);
+		}
+	}
+}
+
+/**
  * Clone the builder tree and apply the final Extension list: providers, commands,
  * and flags reach every command alike, whenever it was added. Nodes are built on
  * first access (see `lazyChildRecord`): an invocation prepares only the path it
@@ -698,6 +747,7 @@ export function buildExtensionTree(
 				...hookContexts,
 			]);
 			flagShapes = checkReusedFlagShapes(prepared, path, ancestorFlagShapes ?? new Map());
+			checkOwnedKeys(prepared, path, new Set(extensions.flatMap((extension) => extension.owns)));
 		}
 		applyNodeContextSections(prepared, path, sectionContextsFor(prepared, isRoot));
 		freezeNode(prepared);
@@ -715,6 +765,8 @@ export function buildExtensionTree(
 		handlers,
 		...(noAction && { noAction }),
 		...(renderer && { renderer }),
+		runCommand: (path, input = {}, options) =>
+			runInvocation(node, { path, input }, options, materializeCommandDefinition),
 	};
 }
 
@@ -905,7 +957,7 @@ async function dispatch(
 			: resolveStructuredInput(rootNode, input.path, input.input);
 	const resolvedNode = route.command;
 	if ("argv" in input) warnDeprecated(rootNode, route, parsed, output.io.stderr);
-	// `bindInput` replaces this; hooks and `terminal()` read it live.
+	// `bindInput` and `bindText` add to this; hooks and `terminal()` read it live.
 	let bound = parsed;
 	// Set by the action's `exitCode(n)`; the last call wins.
 	let actionExitCode = 0;
@@ -962,7 +1014,10 @@ async function dispatch(
 		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.use)),
 		bindInput(payload: RunInputPayload) {
-			bound = bindStructuredInput(resolvedNode, parsed, payload);
+			bound = bindStructuredInput(resolvedNode, bound, payload);
+		},
+		bindText(payload: RunInputPayload) {
+			bound = bindStructuredInput(resolvedNode, bound, payload, true);
 		},
 		stdin: output.io.stdin,
 		stdout: output.io.stdout,
@@ -1014,6 +1069,9 @@ async function dispatch(
 						throw new RangeError(`exitCode(${code}): not an integer.`);
 					actionExitCode = code;
 				},
+				// A fresh invocation, cancelled with this one unless given its own signal.
+				runCommand: (path, payload, options) =>
+					prepared.runCommand(path, payload, { ...options, signal: options?.signal ?? signal }),
 			} satisfies CrustCommandContext;
 			// Streams exactly when the action's type says so: it returns an async generator itself,
 			// not a promise of one, so `async () => watch()` returns the generator as its result.
@@ -1225,6 +1283,7 @@ async function renderFailure(
 			stderr: output.io.stderr,
 			// No action runs after a failure this early, so there is nothing to bind.
 			bindInput() {},
+			bindText() {},
 			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 	}

@@ -94,6 +94,58 @@ Contributed commands work like commands added with `.add()`, including typed `ru
 
 [`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
 
+## Own a definition key
+
+A package can add its own key to argument, flag, or command definitions and read it in its Extension. Add the key to `ArgExtras`, `FlagExtras`, or `CommandExtras` with a `declare module` block in the entry that exports the Extension, and declare it with `.owns()`:
+
+```ts title="acme-hints/index.ts"
+import { defineExtension, defineExtensionId } from "@crustjs/core";
+
+declare module "@crustjs/core" {
+  interface FlagExtras {
+    /** Printed when the flag is left out. */
+    hint?: string;
+  }
+}
+
+export const hints = () =>
+  defineExtension(defineExtensionId("acme:hints"))
+    .owns("hint")
+    .preRun(({ command, sources, stderr }) => {
+      for (const [name, flag] of Object.entries(command.flags)) {
+        if (flag.hint && sources.flags[name] === undefined) stderr(`--${name}: ${flag.hint}`);
+      }
+    });
+```
+
+```ts title="cli.ts"
+import { Crust } from "@crustjs/core";
+import { hints } from "acme-hints";
+
+await new Crust("deploy")
+  .extend(hints())
+  .flags({ region: { type: "string", hint: "Pick the region closest to your users" } })
+  .action(({ flags, stdout }) => stdout(`deploying to ${flags.region ?? "the default region"}`))
+  .execute();
+```
+
+```sh
+$ deploy
+--region: Pick the region closest to your users
+deploying to the default region
+```
+
+- The app changes no `tsconfig`. Once any file in the project imports the package, the key is typed on every definition, in every file, inline `.command()` children and `defineCommand()` files included. Without the package, the key is an unknown-key compile error.
+- Core never reads the key. Snapshots pass it through unchanged, so the Extension reads `flag.hint` typed, without a cast.
+- The value must be JSON data or a function. `crust build` leaves a function out of the snapshot file it writes, and fails on anything else JSON refuses, such as a BigInt or a cyclic object.
+- The key cannot be named `toJSON` or after a field a snapshot sets itself (`inputSchema`, `extension`): `.owns()` refuses it with a `DEFINITION` error (`reserved-name`).
+- A definition that sets a key no installed Extension owns is a `DEFINITION` error (`unowned-key`) from source and in `crust build`: the type exists whenever the package is in the project, even if the app never calls `.extend()` with its Extension.
+
+Two rules keep an owned key safe for every app that uses it:
+
+1. The key is optional, and only its own Extension reads it.
+2. The Extension may supply a value the user left out, with [`bindText()` or `bindInput()`](#bind-values), but never changes how a given value is parsed or typed. A key that changes a value's type or parsing belongs in Core.
+
 ## Hooks
 
 After routing and parsing, an invocation runs these hooks:
@@ -136,15 +188,35 @@ See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
 
 Besides `args`, `flags`, and output, a hook's `ctx` offers:
 
-- **`ctx.bindInput({ args, flags })`** in `setup` or `preRun` binds structured input, such as JSON read from a flag, as [`input()`](/docs/modules/extensions/input) does. Values given explicitly on argv win; other supplied keys replace environment values and defaults, converted as typed `run()` input. Later hooks, validation, and the action see the bound values.
-  - Bind in `setup` so every `preRun` sees the values; it then also happens for `--help` and `--version`. Bind in `preRun` to bind only when the action will run.
-  - The last call wins, and a bound flag never selects a handler.
-  - An unknown key or a value that fails conversion throws a `PARSE` error from the calling hook.
+- **`ctx.bindInput()` and `ctx.bindText()`** supply values the user left out; see [Bind values](#bind-values).
 - **`ctx.sources`** reports where each value came from: `"argv"`, `"run"`, `"env"`, `"bound"`, or `"default"`. For example, with a boolean `verbose` flag (short `-V`) and a `port` flag read from `PORT`, `my-cli -V` with `PORT=9000` set gives `{ args: {}, flags: { verbose: "argv", port: "env" } }`. Use it to skip the keys argv gave before converting input yourself.
 - **`ctx.commandPathOf(definition)`** returns where a command definition is mounted, such as `["my-cli", "deploy"]`, or `undefined`. Use it to print command lines for definitions that app code passes to your Extension.
 - **`ctx.parseCommandArgv(path, argv)`** parses argv for the command at a path, such as `["my-cli", "deploy"]`, without running it, and resolves to its canonical `path` and the `args` and `flags` its action would receive. No hook or Context setup runs, so values other Extensions bind (such as `--input`) are not applied. Use it to explain or preview another command.
 
 See [`ExtensionContext`](/docs/api/types#extensioncontext) for the exact rules.
+
+### Bind values
+
+Two methods bind values into the invocation from `setup` or `preRun`. Later hooks, validation, and the action see the bound values, and `ctx.sources` reports them as `"bound"`.
+
+| Method                           | Takes                                                              | Converted as                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `ctx.bindInput({ args, flags })` | Typed values: a number, a `URL`, parsed JSON                       | Typed `run()` input                                                                                      |
+| `ctx.bindText({ args, flags })`  | Text, such as a prompt's answer: one string, or one per occurrence | The same words on the command line: `type`, `choices`, a custom `parse`, a repeatable flag's `delimiter` |
+
+Use `bindInput` for structured input, such as the JSON [`input()`](/docs/modules/extensions/input) reads from `--input`. Use `bindText` for what a person typed: `bindInput({ flags: { port: "8080" } })` fails, because `"8080"` is not a number, and converting the text yourself first would run a custom `parse` twice. A value `bindText` rejects throws the `PARSE` error the same word gets on the command line, so a prompt can show it and ask again:
+
+```ts
+defineExtension(defineExtensionId("acme:port")).preRun((ctx) => {
+  if (ctx.sources.flags.port === undefined) ctx.bindText({ flags: { port: "8080" } });
+});
+```
+
+- Values given explicitly on argv win, and their supplied values are never converted; other supplied keys replace environment values and defaults.
+- Calls add up, from one Extension or several: a key bound again takes the later value, and the keys a call leaves out keep theirs.
+- Bind in `setup` so every `preRun` sees the values; it then also happens for `--help` and `--version`. Bind in `preRun` to bind only when the action will run.
+- A bound flag never selects a handler.
+- An unknown key or a value that fails conversion throws a `PARSE` error from the calling hook. A count flag or an exclusive group has no text form: bind it with `bindInput`.
 
 ### Renderers
 

@@ -162,6 +162,10 @@ type SharedFlags = InferFlags<typeof shared>; // { region: "us" | "eu" }
 
 `version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from generated listings and suggestions without disabling routing. `deprecated` prints a warning on stderr when the command line runs the command, and help marks it; it is independent of `hidden`. `sections` are rendered by documentation Extensions after their built-in sections.
 
+### `ArgExtras`, `FlagExtras`, and `CommandExtras`
+
+Empty interfaces that argument definitions, flag definitions, and command metadata extend, as do `ArgSnapshot`, `FlagSnapshot`, and `CommandSnapshot.meta`. A package adds an optional key with module augmentation (`declare module "@crustjs/core" { interface FlagExtras { hint?: string } }`), and its Extension declares the key with [`.owns()`](#extensionbuilder). Core never reads such a key and passes it through to snapshots unchanged. See [Own a definition key](/docs/guide/extensions#own-a-definition-key).
+
 ### `CommandSectionInput`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandSectionInput" />
@@ -181,7 +185,7 @@ Renderers filter sections for their audience first, then merge entries with the 
 
 ## Command Snapshots
 
-Command Snapshots are frozen, serializable descriptions of the command tree. They omit Command Actions, parsers, schemas, and Context functions; a command's `.output()` schema appears only as `output: true` plus its JSON Schema, `outputSchema`, and a schema-backed arg or flag's schema only as its input JSON Schema, `inputSchema`; each JSON Schema is present only when the schema can produce one. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
+Command Snapshots are frozen, serializable descriptions of the command tree. Keys a package adds through [`ArgExtras`, `FlagExtras`, or `CommandExtras`](#argextras-flagextras-and-commandextras) pass through with their values unchanged, so they are as serializable as those values. They omit Command Actions, parsers, schemas, and Context functions; a command's `.output()` schema appears only as `output: true` plus its JSON Schema, `outputSchema`, and a schema-backed arg or flag's schema only as its input JSON Schema, `inputSchema`; each JSON Schema is present only when the schema can produce one. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
 
 ### `CommandSnapshot`
 
@@ -296,6 +300,8 @@ The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions).
 
 `ctx` is a lazy `ContextBag` of the Contexts available on the command path. `rootCommand` is the root snapshot, including Extension contributions. `exitCode(n)` sets the invocation's exit code for when the action completes; the action carries on, the last call wins, and a throw replaces it (see [exit status](/docs/guide/error-handling#exit-status)).
 
+`runCommand(path, input?, options?)` runs a command of the same application as [`run()`](/docs/api/crust#runpath-input-options) does and resolves to its [`RunOutcome`](#runoutcomeresult-events), without throwing. It is a fresh invocation, with its own Contexts, Extension hooks, and captured output, so the caller's `provide` replacements don't apply. It is cancelled with the caller's invocation unless `options.signal` is given. It is untyped (paths are `string[]`, input is unchecked until it runs), because a command is defined before the application that holds it. An Extension's command can pair it with `rootCommand` to find and run the app's commands.
+
 ## Context types
 
 Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/context.ts). See [Contexts](/docs/guide/contexts) for worked examples and [Context lifecycle](/docs/api/crust#context-lifecycle) for cleanup rules.
@@ -374,6 +380,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 - Lifecycle setters replace the previous callback: `.setup()`, `.renderer()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings are checked for collisions when the method runs, and contributed command names when the app prepares, by the [definition checks](/docs/api/crust#definition-checks).
+- `.owns(...keys)` declares the keys the Extension owns among those packages add through [`ArgExtras`, `FlagExtras`, and `CommandExtras`](#argextras-flagextras-and-commandextras); repeated calls append. It refuses `toJSON`, `inputSchema`, and `extension` with a `DEFINITION` error (`reserved-name`). A definition that sets a key no installed Extension owns fails preparation with a `DEFINITION` error (`unowned-key`) from the definition checks.
 
 `.factory(define)` returns an [`ExtensionFactory`](#extensionfactory).
 
@@ -435,9 +442,18 @@ Binds structured input from `setup` or `preRun`, with the conversion typed `run(
 - Keys given explicitly on argv are kept, and their supplied values are never converted. A flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`), and a positional argument when argv supplied it.
 - Supplied values replace environment values (including an invalid one) and defaults. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
 - Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
-- Each call re-binds against the original input, so the last call wins. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
+- Calls add up, together with `bindText`: a key bound again takes the later value, and the keys a call leaves out keep theirs. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
 - Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
 - A failure fails the invocation as an error thrown from the calling hook would.
+
+#### `bindText({ args, flags })`
+
+Binds text by the rules of `bindInput`, but converts it exactly as the same word on the command line, for values a person typed, such as a prompt's answer.
+
+- Each value is one string, or an array with one string per occurrence for a variadic argument or a `multiple` flag.
+- Conversion applies `type`, `choices`, a custom `parse`, and a repeatable flag's `delimiter`. A boolean reads the words an environment variable takes (`yes`, `off`, …).
+- A value that fails throws the `PARSE` error the same word gets on the command line, such as `Expected a number for --port.`
+- A count flag or an exclusive group has no text form: bind it with `bindInput`.
 
 #### `sources`
 
@@ -448,10 +464,10 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
 | `run`     | Typed `run()` input. An empty array for a variadic argument or a `multiple` flag gives no value, as on argv                                         |
 | `env`     | The flag's `env` variable                                                                                                                           |
-| `bound`   | Supplied by `bindInput`                                                                                                                             |
+| `bound`   | Supplied by `bindInput` or `bindText`                                                                                                               |
 | `default` | The definition's default                                                                                                                            |
 
-- It reads live: after `bindInput`, the keys it supplied report `bound`; keys a later call no longer supplies report their original source again.
+- It reads live: after `bindInput` or `bindText`, the keys it supplied report `bound`.
 - In `onError` after a routing or argv syntax failure, it is `{ args: {}, flags: {} }`.
 - Use it to drop the keys argv gave before converting structured input yourself, so an invalid overridden value never fails.
 
@@ -472,7 +488,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 - `noAction` runs when the routed command has no Command Action and no flag handler took over, after validation, with the same context, and ends the invocation as `handled`. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-no-action`). Without one, validation runs too; then a command with subcommands fails with a `VALIDATION` error (`Missing command. Available: …`), and any other command completes without a result. A command with subcommands given nothing after its path by `execute()` skips validation, so it reaches `noAction` or `Missing command` even when a required flag is unset.
 - `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet, so the `ctx` of `setup`, `renderer`, flag handlers, and `preRun` leaves out the Contexts that own flags or use one that does, even one whose setup catches that rejection. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
 - `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to the selected [renderer's `error`](#renderer), or Core's default rendering without one. A hook that throws ends the chain and the original failure falls through the same way.
-- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, argv-parse, and typed `run()` input-binding failures skip it; a `bindInput` failure is a failure of the `setup` or `preRun` hook that called it and does not.
+- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, argv-parse, and typed `run()` input-binding failures skip it; a `bindInput` or `bindText` failure is a failure of the `setup` or `preRun` hook that called it and does not.
 
 See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
 

@@ -156,6 +156,25 @@ export interface CrustCommandContext<
 	 * with the thrown value's non-zero integer `exitCode`.
 	 */
 	exitCode: (code: number) => void;
+	/**
+	 * Run a command of this application by path, as `app.run(path, input, options)` does: a fresh
+	 * invocation with its own Contexts, Extension hooks, and captured output, which resolves to its
+	 * outcome and never throws. Untyped, because a command is defined before its application.
+	 * It is cancelled with this invocation unless `options.signal` is given.
+	 *
+	 * @param path - Canonical names below the root, as for `app.run()` (`[]` selects the root)
+	 *
+	 * @example
+	 * ```ts
+	 * const outcome = await runCommand(["db", "migrate"], { flags: { to: 3 } });
+	 * if (outcome.status === "failed") throw outcome.error;
+	 * ```
+	 */
+	runCommand: (
+		path: readonly string[],
+		input?: RunInputPayload,
+		options?: InvocationOptions,
+	) => Promise<ShapeRunOutcome<CommandShape>>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

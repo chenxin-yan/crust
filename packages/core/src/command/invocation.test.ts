@@ -79,6 +79,20 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		});
 	});
 
+	it("says why the snapshot cannot be written when an owned key holds a BigInt", async () => {
+		await stubBuildEnv();
+		const app = new Crust("build-subprocess")
+			.extend(defineExtension(defineExtensionId("owner")).owns(...(["quota"] as never[])))
+			.flags({ limit: { type: "number", quota: 1n } as { type: "number" } })
+			.action(() => {});
+
+		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls.join("\n")).toMatch(
+			/^The Command Snapshot cannot be written as JSON: .*BigInt.*\nA default, or a definition key an Extension owns, holds a value JSON cannot carry/s,
+		);
+	});
+
 	it("runs build hooks in registration order", async () => {
 		const { path, outDir } = await stubBuildEnv();
 		const calls: string[] = [];
