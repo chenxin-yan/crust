@@ -57,14 +57,14 @@ export interface CompletionOptions {
 	 *
 	 * @default "completion"
 	 */
-	command?: string;
+	command?: string | undefined;
 	/**
 	 * Free-form version string embedded in generated script headers. The
 	 * walker does not parse it.
 	 *
 	 * @default The root command's `meta.version`
 	 */
-	version?: string;
+	version?: string | undefined;
 }
 
 /** Render inputs shared by the pure shell renderers. */

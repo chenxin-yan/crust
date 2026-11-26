@@ -1534,7 +1534,10 @@ export type AnyCrust = Pick<
 >;
 
 type DefinedRootMetaKeys<Meta extends RootCommandMeta | undefined> = {
-	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
+	// Not `Required<…>`: under `exactOptionalPropertyTypes` it keeps a declared `| undefined`.
+	[K in RootMetaKey]: [Meta] extends [{ [P in K]-?: Exclude<RootCommandMeta[P], undefined> }]
+		? K
+		: never;
 }[RootMetaKey];
 
 type ExtensionMetaKeys<E> =

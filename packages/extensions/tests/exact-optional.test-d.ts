@@ -1,4 +1,4 @@
-// Compiled by `tsconfig.exact.json` with `exactOptionalPropertyTypes`, as a consumer would:
+// Compiled with `exactOptionalPropertyTypes` (on in the shared tsconfig), as a consumer would:
 // optional inputs commonly filled from optional flags accept an explicit `undefined`.
 import { Crust, defineCommand } from "@crustjs/core";
 import { confirm, createPrompts, input, multiselect, password, select } from "@crustjs/prompts";

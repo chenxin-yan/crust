@@ -46,7 +46,7 @@ export interface TelemetryOptions {
 	 * a dynamic `string` opens it.
 	 * @default "telemetry"
 	 */
-	command?: string;
+	command?: string | undefined;
 	/**
 	 * Delivers one event. Waited for at most 1 second, when `signal` aborts with a `TimeoutError`;
 	 * pass `signal` to the request so it ends too, or it keeps the process alive. Failures are ignored.

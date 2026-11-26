@@ -20,7 +20,7 @@ const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
 /** Options for {@link renderHelp}. */
 export interface RenderHelpOptions {
 	/** Terminal width that descriptions wrap to; they do not wrap when absent. */
-	readonly columns?: number;
+	readonly columns?: number | undefined;
 }
 
 /**

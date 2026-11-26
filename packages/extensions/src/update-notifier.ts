@@ -23,8 +23,8 @@ export type UpdateCommandResolver = (info: {
 
 export interface UpdateNotifierState {
 	lastCheckedAt: number;
-	latestVersion?: string;
-	lastNotifiedVersion?: string;
+	latestVersion?: string | undefined;
+	lastNotifiedVersion?: string | undefined;
 }
 
 export interface UpdateNotifierCacheAdapter {
@@ -66,7 +66,7 @@ interface UpdateNotifierBaseOptions {
 	 *
 	 * @default The root command's `meta.version`
 	 */
-	currentVersion?: string;
+	currentVersion?: string | undefined;
 
 	/**
 	 * The npm package name to check for updates.
@@ -97,7 +97,9 @@ interface UpdateNotifierBaseOptions {
 	 * aborts after `timeoutMs` or when the invocation is cancelled, and the check stops
 	 * waiting then. A missing or empty version, or a throw, is a failed check.
 	 */
-	latestVersion?: (signal: AbortSignal) => string | undefined | Promise<string | undefined>;
+	latestVersion?:
+		| ((signal: AbortSignal) => string | undefined | Promise<string | undefined>)
+		| undefined;
 
 	/**
 	 * Upgrade command shown in the notice.
@@ -128,7 +130,7 @@ interface UpdateNotifierBaseOptions {
 	 * cache: false
 	 * ```
 	 */
-	cache?: false | UpdateNotifierCacheConfig;
+	cache?: false | UpdateNotifierCacheConfig | undefined;
 }
 
 /**
@@ -143,13 +145,7 @@ interface UpdateNotifierBaseOptions {
  * ```
  */
 export type UpdateNotifierOptions = UpdateNotifierBaseOptions &
-	(
-		| { latestVersion?: undefined }
-		| {
-				latestVersion: NonNullable<UpdateNotifierBaseOptions["latestVersion"]>;
-				registryUrl?: undefined;
-		  }
-	);
+	({ latestVersion?: undefined } | { registryUrl?: undefined });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Defaults

@@ -28,7 +28,7 @@ export type RunProcessOptions = {
 	 * output closes, which a surviving descendant holding the pipe delays. An already-aborted
 	 * signal rejects before spawning.
 	 */
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 };
 
 export type RunProcessResult = {

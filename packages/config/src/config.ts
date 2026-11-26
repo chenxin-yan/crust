@@ -138,7 +138,7 @@ export interface ConfigOptions<
 	/** The files' format, as a store's `format`. @default JSON */
 	readonly format?: StoreFormat;
 	/** The files' names. */
-	readonly files?: ConfigFiles;
+	readonly files?: ConfigFiles | undefined;
 	/** Adds `config get`, `set`, `unset` and `list`. @default false */
 	readonly command?: boolean;
 }

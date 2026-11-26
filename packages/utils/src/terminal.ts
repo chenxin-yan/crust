@@ -13,16 +13,16 @@ export type TerminalInput = Readable & {
 /** A writable-compatible output available to terminal libraries. */
 export interface TerminalOutput {
 	readonly isTTY?: boolean;
-	readonly columns?: number;
+	readonly columns?: number | undefined;
 	write(text: string): void;
 }
 
 /** Input and output streams available to terminal libraries. */
 export interface TerminalIO {
-	readonly input?: TerminalInput;
-	readonly output?: TerminalOutput;
+	readonly input?: TerminalInput | undefined;
+	readonly output?: TerminalOutput | undefined;
 	/** Cancels terminal interactions (prompts, spinners, child processes) when aborted. */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignal | undefined;
 }
 
 /** Inputs with an unfinished `readInput`, which pauses between chunks and so escapes the flowing check. */
@@ -255,8 +255,8 @@ const LIVE_FRAME_KEY: unique symbol = Symbol.for("crustjs.terminal.live-frame");
 type TerminalGlobals = {
 	[STORAGE_KEY]?: AsyncLocalStorage<TerminalIO>;
 	[AMBIENT_CALLBACKS_KEY]?: WeakMap<TerminalOutput, AmbientTerminalIO>;
-	[PROCESS_SIGNAL_KEY]?: AbortSignal;
-	[LIVE_FRAME_KEY]?: LiveFrame;
+	[PROCESS_SIGNAL_KEY]?: AbortSignal | undefined;
+	[LIVE_FRAME_KEY]?: LiveFrame | undefined;
 };
 // SAFETY: only declares the optional symbol slots read and initialized below.
 const globals = globalThis as TerminalGlobals;

@@ -380,7 +380,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 *
 	 * @default 40000
 	 */
-	lockTimeout?: number;
+	lockTimeout?: number | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -394,7 +394,7 @@ export interface StoreMutationOptions {
 	 * its lock: it rejects with `signal.reason` and changes nothing. Not observed once the
 	 * mutation holds the lock.
 	 */
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

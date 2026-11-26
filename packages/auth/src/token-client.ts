@@ -88,7 +88,7 @@ export function postForm(
 	fetchImpl: Fetch,
 	endpoint: string,
 	body: URLSearchParams,
-	options: { signal?: AbortSignal; timeoutMs?: number },
+	options: { signal?: AbortSignal | undefined; timeoutMs?: number },
 ): Promise<JsonResponse> {
 	const headers = {
 		"content-type": "application/x-www-form-urlencoded",
@@ -100,7 +100,7 @@ export function postForm(
 /** Creates the token-endpoint client of a discovered server. */
 export function createTokenClient(
 	server: AuthServer,
-	options: { fetch?: Fetch } = {},
+	options: { fetch?: Fetch | undefined } = {},
 ): TokenClient {
 	serverInternals(server);
 	const fetchImpl = options.fetch ?? fetch;

@@ -4,7 +4,7 @@ import type { AgentTarget, Scope } from "./agents.ts";
 export interface SkillMeta {
 	name: string;
 	description: string;
-	version?: string;
+	version?: string | undefined;
 }
 
 export interface RenderedFile {
@@ -25,7 +25,7 @@ export interface InstallSkillOptions {
 	 * only those; a conflict elsewhere still throws. Re-pointing an owned link needs no `force`.
 	 * @default false
 	 */
-	force?: boolean | readonly string[];
+	force?: boolean | readonly string[] | undefined;
 }
 
 export type InstallStatus = "installed" | "repaired" | "up-to-date";
@@ -123,5 +123,5 @@ export interface SkillOptions {
 	 * A literal name keeps the host's command tree type-checked; a dynamic `string` opens it.
 	 * @default "skills"
 	 */
-	command?: string;
+	command?: string | undefined;
 }

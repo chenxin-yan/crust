@@ -18,9 +18,9 @@ export interface OperationOverride<
 	/** Leaves the operation out. Default: the operation's `deprecated`. */
 	readonly exclude?: boolean;
 	/** A group path as typed on the command line, such as `"dns records"`; `""` is the root. Default: the first tag in kebab case, else `""`. */
-	readonly group?: string;
+	readonly group?: string | undefined;
 	/** Default: the operationId in kebab case, without a leading `<group>-`. */
-	readonly name?: string;
+	readonly name?: string | undefined;
 	readonly hidden?: boolean;
 	/** Default: the operation's summary. */
 	readonly description?: string;
@@ -33,7 +33,7 @@ export interface OperationOverride<
 		readonly [Name in InputNamesOf<Op>]?: (ctx: ContextBag<Deps>) => string | Promise<string>;
 	};
 	/** The message `.onConfirm()` gets before each request. Without `.onConfirm()`, the operation is left out. */
-	readonly confirm?: string | false;
+	readonly confirm?: string | false | undefined;
 	/** The next page's request for `--paginate`, or `undefined` after the last page. Default: `defineApi`'s `paginate`. */
 	readonly paginate?: (
 		response: Response,

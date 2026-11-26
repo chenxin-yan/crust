@@ -68,7 +68,7 @@ export type TuiOutcome =
 
 export type TuiObservation = {
 	outcome: TuiOutcome;
-	rendererDestroyed?: boolean;
+	rendererDestroyed?: boolean | undefined;
 	manualTeardownReached?: boolean;
 	keypressListenersBefore?: number;
 	stdinDataListeners?: number;
@@ -201,7 +201,9 @@ const scenarios = {
 	"output-failure": async () => {
 		let failing = false;
 		// Streams frames to stdout, where a write error reaches the renderer; "memory" output does not.
-		const { config } = createTtyConfig({ bufferedOutput: undefined }, (_chunk, _encoding, callback) => {
+		const {
+			config: { bufferedOutput: _memory, ...config },
+		} = createTtyConfig({}, (_chunk, _encoding, callback) => {
 			callback(failing ? new Error("output failed") : null);
 		});
 		return {

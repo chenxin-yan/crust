@@ -49,7 +49,7 @@ function flagLabel(flag: DocumentationFlag): string {
 	return flag.spellings.join(", ") + value + repeats(flag);
 }
 /** Entries by `.group()` heading, in first-seen order; ungrouped ones under `undefined`. */
-function byHeading<T extends { readonly heading?: string }>(
+function byHeading<T extends { readonly heading?: string | undefined }>(
 	entries: readonly T[],
 ): Map<string | undefined, T[]> {
 	const groups = new Map<string | undefined, T[]>();

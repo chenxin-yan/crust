@@ -75,7 +75,7 @@ export type BunPluginDriverOptions = {
 	build: BunPluginDriverBuild;
 	outfile: string;
 	/** Module paths whose leading shebang line is blanked on load. */
-	stripShebang?: string[];
+	stripShebang?: string[] | undefined;
 };
 
 /**

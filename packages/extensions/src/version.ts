@@ -26,7 +26,7 @@ export interface VersionOptions {
 	 *
 	 * @default "v"
 	 */
-	readonly short?: "v" | "V" | false;
+	readonly short?: "v" | "V" | false | undefined;
 }
 
 const versionFlag = {

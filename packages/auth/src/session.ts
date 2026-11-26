@@ -99,7 +99,10 @@ function renderPage(view: CallbackPageView, page: WaitOptions["page"]): string {
 
 export function checkLoopbackOptions(
 	options: Pick<AuthorizationSessionOptions, "hosts" | "ports">,
-): Required<Pick<AuthorizationSessionOptions, "hosts" | "ports">> {
+): {
+	readonly hosts: NonNullable<AuthorizationSessionOptions["hosts"]>;
+	readonly ports: NonNullable<AuthorizationSessionOptions["ports"]>;
+} {
 	const hosts = options.hosts ?? ["127.0.0.1"];
 	const ports = options.ports ?? [0];
 	if (

@@ -8,7 +8,7 @@ export interface OpenBrowserOptions {
 	 * The dev origin, such as `http://127.0.0.1:9000`: plain `http` URLs on exactly this
 	 * origin may open. Only for an issuer configured with `allowInsecureLoopback`.
 	 */
-	allowInsecureLoopbackOrigin?: string;
+	allowInsecureLoopbackOrigin?: string | undefined;
 }
 
 const LOOPBACK_ORIGIN = /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?$/;

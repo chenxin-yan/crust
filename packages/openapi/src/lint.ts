@@ -23,7 +23,7 @@ import {
 export interface LintInput {
 	readonly spec: OpenApiSpec;
 	/** The rule for every operation; an entry naming a parameter the operation lacks is ignored. */
-	readonly each?: (operation: Operation) => OperationOverride | undefined;
+	readonly each?: ((operation: Operation) => OperationOverride | undefined) | undefined;
 	/** Exceptions by operationId; a field set here replaces the rule's field. */
 	readonly override?: Readonly<Record<string, OverrideEntry>>;
 	/** Names and aliases of the app's own commands, by group path. */

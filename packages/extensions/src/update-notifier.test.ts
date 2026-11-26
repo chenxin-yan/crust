@@ -301,7 +301,9 @@ describe("updateNotifier post-run hook", () => {
 	 * Run an application with the extension so its post-run hook sees a completed outcome.
 	 * Defaults to `pkgName` at 1.0.0 with `memoryCache`; `cache: undefined` selects the built-in store.
 	 */
-	async function runNotifier(options: Partial<UpdateNotifierOptions> = {}) {
+	async function runNotifier(
+		options: Partial<UpdateNotifierOptions> & { currentVersion?: string } = {},
+	) {
 		const exitCode = await new Crust(pkgName)
 			.extend(
 				updateNotifier({

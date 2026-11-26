@@ -81,7 +81,7 @@ function stubFetch(respond: (call: FetchCall) => Response = () => new Response("
 	return calls;
 }
 
-type BuildOptions = Partial<DefineApiOptions> & { readonly auth?: ApiAuth };
+type BuildOptions = Partial<DefineApiOptions> & { readonly auth?: ApiAuth | undefined };
 
 function buildApi({
 	auth = () => ({ authorization: "Bearer secret" }),
@@ -1638,7 +1638,7 @@ describe("the api client", () => {
 	it("follows redirects itself so auth headers never reach another origin", async () => {
 		const seen: Record<
 			string,
-			{ method?: string; key?: unknown; type?: unknown; cookie?: unknown }
+			{ method?: string | undefined; key?: unknown; type?: unknown; cookie?: unknown }
 		> = {};
 		const record: RequestListener = (request, response) => {
 			seen[`${request.headers.host} ${request.url}`] = {

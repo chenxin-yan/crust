@@ -25,7 +25,10 @@ export type { TerminalInput, TerminalIO, TerminalOutput } from "@crustjs/utils/t
 export { withTerminalIO } from "@crustjs/utils/terminal";
 
 /** Streams a prompt draws on, and the signal that cancels it. */
-export type PromptIO = Required<Pick<TerminalIO, "input" | "output">> & Pick<TerminalIO, "signal">;
+export type PromptIO = {
+	readonly input: TerminalInput;
+	readonly output: TerminalOutput;
+} & Pick<TerminalIO, "signal">;
 
 /**
  * Resolve explicit, ambient, then process-global streams; the signal resolves from explicit IO,
@@ -109,7 +112,7 @@ export interface PromptConfig<S, T> {
 	/** Initial state for the prompt */
 	readonly initialState: S;
 	/** Optional partial theme; merged onto `defaultTheme` styles detected from the output stream. */
-	readonly theme?: PartialPromptTheme;
+	readonly theme?: PartialPromptTheme | undefined;
 	/**
 	 * Optional: render the final submitted state.
 	 * Called after submit with the final state and submitted value.

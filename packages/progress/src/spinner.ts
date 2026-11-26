@@ -86,7 +86,7 @@ export interface SpinnerHandleOptions {
 	 */
 	readonly spinner?: SpinnerType;
 	/** Per-spinner theme overrides. */
-	readonly theme?: PartialProgressTheme;
+	readonly theme?: PartialProgressTheme | undefined;
 	/**
 	 * SIGINT policy.
 	 *
@@ -411,7 +411,7 @@ export function spinner(
 	options: SpinnerHandleOptions & { readonly task?: undefined },
 ): SpinnerHandle;
 export function spinner<T>(
-	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] },
+	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] | undefined },
 ): Promise<T> | SpinnerHandle {
 	const handle = createSpinnerHandle(options);
 	const { task } = options;

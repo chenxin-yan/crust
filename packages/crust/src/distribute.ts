@@ -52,14 +52,14 @@ type PublishPackageMetadata = {
 
 type RootPublishPackageJson = PublishPackageMetadata & {
 	/** The `crust.external` packages, with the user's ranges; absent when there are none. */
-	dependencies?: Record<string, string>;
+	dependencies?: Record<string, string> | undefined;
 	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
 	optionalDependencies?: Record<string, string>;
 	/** The user's `exports`, carried only when present and every target is staged; see `validateStagedExports`. */
-	exports?: JsonValue;
+	exports?: JsonValue | undefined;
 	/** The user's peer contract for what `exports` references (types, re-exports); see `validatePeerDependencies`. */
-	peerDependencies?: Record<string, string>;
-	peerDependenciesMeta?: JsonObject;
+	peerDependencies?: Record<string, string> | undefined;
+	peerDependenciesMeta?: JsonObject | undefined;
 	os?: never;
 	cpu?: never;
 	libc?: never;

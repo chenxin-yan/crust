@@ -46,30 +46,30 @@ export interface ArgSnapshot extends Readonly<ArgExtras> {
 	/** Argument name as defined, e.g. `"file"`. */
 	readonly name: string;
 	/** Value type (`"string"`, `"number"`, …); absent for schema-backed args. */
-	readonly type?: ValueType;
+	readonly type?: ValueType | undefined;
 	/** Human-readable description for help text. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 	/**
 	 * `true` when the argument must be given: declared `required`, or its schema rejects a
 	 * missing value (one that validates synchronously).
 	 */
-	readonly required?: boolean;
+	readonly required?: boolean | undefined;
 	/** How the argument collects its values into an array; see `ArgDef`'s `variadic`. */
-	readonly variadic?: VariadicMode;
+	readonly variadic?: VariadicMode | undefined;
 	/** Static enum of accepted values, e.g. `["json", "text"]`. */
-	readonly choices?: readonly string[];
+	readonly choices?: readonly string[] | undefined;
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
 	/** The smallest value a `number` or `integer` argument accepts. */
-	readonly min?: number;
+	readonly min?: number | undefined;
 	/** The largest value a `number` or `integer` argument accepts. */
-	readonly max?: number;
+	readonly max?: number | undefined;
 	/**
 	 * Draft 2020-12 JSON Schema of the values a schema-backed arg accepts
 	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
 	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
 	 */
-	readonly inputSchema?: Readonly<Record<string, unknown>>;
+	readonly inputSchema?: Readonly<Record<string, unknown>> | undefined;
 }
 
 /**
@@ -90,57 +90,57 @@ export interface FlagSnapshot extends Readonly<FlagExtras> {
 	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`. */
 	readonly type: FlagDef["type"];
 	/** Human-readable description for help text. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
-	readonly short?: string;
+	readonly short?: string | undefined;
 	/** Additional aliases without dashes; one-character aliases accept one or two dashes. */
-	readonly aliases?: readonly string[];
+	readonly aliases?: readonly string[] | undefined;
 	/**
 	 * `true` when the flag must be given: declared `required`, or its schema rejects a missing
 	 * value (one that validates synchronously).
 	 */
-	readonly required?: boolean;
+	readonly required?: boolean | undefined;
 	/** `true` when the flag can repeat and collects values into an array. */
-	readonly multiple?: boolean;
+	readonly multiple?: boolean | undefined;
 	/** The value's name in documentation (`--memory <bytes>`); absent when not declared. */
-	readonly valueName?: string;
+	readonly valueName?: string | undefined;
 	/** `true` when the flag accepts generated `--no-<name>` spellings: a boolean with `default: true` or `negatable: true`. */
 	readonly negatable: boolean;
 	/** Static enum of accepted values, e.g. `["debug", "info", "error"]`. */
-	readonly choices?: readonly string[];
+	readonly choices?: readonly string[] | undefined;
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
 	/** Declared environment variable names; never their values. */
-	readonly env?: FlagEnv;
+	readonly env?: FlagEnv | undefined;
 	/** The smallest value a `number` or `integer` flag accepts. */
-	readonly min?: number;
+	readonly min?: number | undefined;
 	/** The largest value a `number` or `integer` flag accepts. */
-	readonly max?: number;
+	readonly max?: number | undefined;
 	/** Delimiter that splits a repeatable flag's string argv values and environment text into occurrences. */
-	readonly delimiter?: string;
+	readonly delimiter?: string | undefined;
 	/**
 	 * Draft 2020-12 JSON Schema of the values a schema-backed flag accepts
 	 * (`~standard.jsonSchema.input`). Absent without a schema or when the schema
 	 * cannot produce JSON Schema. Not frozen: treat it as immutable.
 	 */
-	readonly inputSchema?: Readonly<Record<string, unknown>>;
+	readonly inputSchema?: Readonly<Record<string, unknown>> | undefined;
 	/** `true` when the flag is left out of listings; it still parses. */
-	readonly hidden?: boolean;
+	readonly hidden?: boolean | undefined;
 	/** Why the flag is deprecated, and what to use instead. */
-	readonly deprecated?: string;
+	readonly deprecated?: string | undefined;
 	/** An exclusive group's members (`type: "exclusive"`), keyed by their canonical names. */
-	readonly flags?: Readonly<Record<string, FlagSnapshot>>;
+	readonly flags?: Readonly<Record<string, FlagSnapshot>> | undefined;
 	/**
 	 * The Extension that declares this flag with its `flags` (e.g. `--help`,
 	 * `--json`); absent for local and Context-owned flags. Command input
 	 * (`commandInputSchema()` in `@crustjs/core/tooling`) leaves these flags out.
 	 */
-	readonly extension?: ExtensionId;
+	readonly extension?: ExtensionId | undefined;
 	/**
 	 * `true` for a flag the command does not declare in its own `.flags()`: a Context-owned or
 	 * recursive Extension flag. Help lists these under "Global options".
 	 */
-	readonly inherited?: true;
+	readonly inherited?: true | undefined;
 }
 
 /**

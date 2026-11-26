@@ -66,7 +66,7 @@ export interface DefineApiOptions<Id extends string = string> {
 	 * credentials through `.auth()`: headers this function adds itself also go to the other origins
 	 * redirects and next pages lead to.
 	 */
-	readonly fetch?: (input: URL, init: RequestInit) => Promise<Response>;
+	readonly fetch?: ((input: URL, init: RequestInit) => Promise<Response>) | undefined;
 	/**
 	 * The pinned OpenAPI document: a `file:` URL, such as
 	 * `new URL("./acme.openapi.jsonc", import.meta.url)`, read when a command first needs it, with
@@ -85,9 +85,9 @@ export interface DefineApiOptions<Id extends string = string> {
 	 * must be http(s); off the base URL's origin it is requested without credential headers.
 	 * Returning the previous request again (same URL and method, `init` reused) fails instead of looping.
 	 */
-	readonly paginate?: (
-		response: Response,
-	) => ApiRequest | undefined | Promise<ApiRequest | undefined>;
+	readonly paginate?:
+		| ((response: Response) => ApiRequest | undefined | Promise<ApiRequest | undefined>)
+		| undefined;
 }
 
 type OperationIdOf<Operations> = unknown extends Operations ? string : keyof Operations & string;

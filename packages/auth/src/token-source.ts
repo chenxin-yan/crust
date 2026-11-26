@@ -86,14 +86,18 @@ interface TokenSourceInternals {
 	/** `get()` from `document`, a snapshot of the file; a refresh still rereads it under the lock. */
 	get(
 		document: CredentialsDocument | undefined,
-		options: { signal?: AbortSignal; baseUrl?: string; onWarning?: OnWarning },
+		options: {
+			signal?: AbortSignal | undefined;
+			baseUrl?: string | undefined;
+			onWarning?: OnWarning | undefined;
+		},
 	): Promise<AccessToken>;
 	/** `forceRefresh()`, reporting a plaintext write to `onWarning`. */
 	forceRefresh(options: {
-		signal?: AbortSignal;
+		signal?: AbortSignal | undefined;
 		ifGeneration?: string;
-		baseUrl?: string;
-		onWarning?: OnWarning;
+		baseUrl?: string | undefined;
+		onWarning?: OnWarning | undefined;
 	}): Promise<AccessToken>;
 	/**
 	 * `beginLogin()`, whose commit reports a plaintext write to `onWarning`. With `observedIn`, an
@@ -101,9 +105,9 @@ interface TokenSourceInternals {
 	 * as it is now.
 	 */
 	beginLogin(options: {
-		signal?: AbortSignal;
-		onWarning?: OnWarning;
-		observedIn?: CredentialsDocument;
+		signal?: AbortSignal | undefined;
+		onWarning?: OnWarning | undefined;
+		observedIn?: CredentialsDocument | undefined;
 	}): Promise<LoginTicket>;
 }
 
@@ -476,10 +480,10 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			baseUrl,
 			onWarning,
 		}: {
-			signal?: AbortSignal;
+			signal?: AbortSignal | undefined;
 			ifGeneration?: string;
-			baseUrl?: string;
-			onWarning?: OnWarning;
+			baseUrl?: string | undefined;
+			onWarning?: OnWarning | undefined;
 		} = {}): Promise<AccessToken> {
 			const { document, record } = await readRecord(signal, baseUrl);
 			// A newer credential than the one that failed is used as is.
@@ -498,9 +502,9 @@ export function tokenSource(options: TokenSourceOptions, profiles: boolean): Tok
 			onWarning,
 			observedIn,
 		}: {
-			signal?: AbortSignal;
-			onWarning?: OnWarning;
-			observedIn?: CredentialsDocument;
+			signal?: AbortSignal | undefined;
+			onWarning?: OnWarning | undefined;
+			observedIn?: CredentialsDocument | undefined;
 		} = {}): Promise<LoginTicket> {
 			throwIfAborted(signal);
 			if (openLogins.has(id)) throw new LoginInProgressError();

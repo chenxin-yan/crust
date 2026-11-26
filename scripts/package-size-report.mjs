@@ -114,7 +114,7 @@ const publishable = (packages) => packages.filter(([, pkg]) => !pkg.private && !
  * @param {Record<string, string> | undefined} define
  * @param {string} label
  */
-async function gzippedBundle(entrypoint, external, define, label) {
+async function gzippedBundle(entrypoint, external, define = {}, label) {
 	const result = await Bun.build({
 		entrypoints: [entrypoint],
 		target: "bun",

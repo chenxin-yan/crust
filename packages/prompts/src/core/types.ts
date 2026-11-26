@@ -140,11 +140,11 @@ export type SchemaOrValidate<Output> =
 	| {
 			/** Standard Schema that owns validation, transformation, defaults, and optionality. */
 			readonly schema: StandardSchema<unknown, Output>;
-			readonly validate?: never;
+			readonly validate?: undefined;
 	  }
 	| {
-			readonly schema?: never;
+			readonly schema?: undefined;
 			/** Throw-on-failure validation function. */
 			readonly validate: ValidateFn<string>;
 	  }
-	| { readonly schema?: never; readonly validate?: never };
+	| { readonly schema?: undefined; readonly validate?: undefined };

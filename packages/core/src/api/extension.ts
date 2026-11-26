@@ -70,7 +70,8 @@ export type InvocationOutcome =
 export type RootMetaKey = keyof RootCommandMeta;
 
 type RootCommandSnapshot<K extends RootMetaKey> = CommandSnapshot & {
-	readonly meta: Readonly<Required<Pick<CommandMeta, K>>>;
+	// Not `Required<…>`: under `exactOptionalPropertyTypes` it keeps a declared `| undefined`.
+	readonly meta: { readonly [P in K]-?: Exclude<CommandMeta[P], undefined> };
 };
 
 /** One file a build hook produces; `path` is POSIX-relative to the build output directory. */
@@ -376,7 +377,7 @@ export interface ExtensionHooks<
 	 * `.extend()` order, so setups must not depend on each other; one cannot end the
 	 * invocation except by throwing. Undo it with `ctx.defer(cleanup)`.
 	 */
-	readonly setup?: (ctx: ExtensionSetupContext<F, Deps, MetaKeys>) => Awaitable<void>;
+	readonly setup?: ((ctx: ExtensionSetupContext<F, Deps, MetaKeys>) => Awaitable<void>) | undefined;
 	/**
 	 * Selects the invocation's {@link Renderer}, once, after every setup and before any flag
 	 * handler, so it sees what setups bound. Return (or resolve to) `undefined` to keep Core's
@@ -390,20 +391,22 @@ export interface ExtensionHooks<
 	 * failures, before any setup, always render by default.
 	 * At most one Extension in an application may set it.
 	 */
-	readonly renderer?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>;
+	readonly renderer?:
+		| ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<Renderer | undefined>)
+		| undefined;
 	/**
 	 * Runs in place of a missing Command Action, when no flag handler took the invocation,
 	 * once the command's input is validated, and ends it as `handled`. At most one Extension
 	 * in an application may set it.
 	 */
-	readonly noAction?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
+	readonly noAction?: ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>) | undefined;
 	/**
 	 * Runs only when the Command Action will: after setups, when no flag handler took the
 	 * invocation, before validation, in `.extend()` order. For checks and preparation that
 	 * must precede every action but never `--help` or `--version`, such as a login check or
 	 * a deprecation warning. Throw to fail the invocation; it cannot end it successfully.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>;
+	readonly preRun?: ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>) | undefined;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects. A `completed` outcome
@@ -411,10 +414,9 @@ export interface ExtensionHooks<
 	 * when declared, otherwise the Command Action's awaited return value. After an async
 	 * generator action, `completed` and `failed` also carry its yielded values as `events`.
 	 */
-	readonly postRun?: (
-		ctx: ExtensionContext<F, Deps, MetaKeys>,
-		outcome: InvocationOutcome,
-	) => Awaitable<void>;
+	readonly postRun?:
+		| ((ctx: ExtensionContext<F, Deps, MetaKeys>, outcome: InvocationOutcome) => Awaitable<void>)
+		| undefined;
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
 	 * chain; falsy values delegate to the next Extension and then the selected
@@ -425,12 +427,14 @@ export interface ExtensionHooks<
 	 * Every flag is optional here: routing or syntax-parse failures render with a fallback
 	 * context whose `flags` are empty.
 	 */
-	readonly onError?: (
-		error: CaughtError,
-		ctx: ExtensionContext<{}, Deps, MetaKeys> & {
-			readonly flags: Readonly<Partial<InferExtensionFlags<F>>>;
-		},
-	) => Awaitable<boolean | void>;
+	readonly onError?:
+		| ((
+				error: CaughtError,
+				ctx: ExtensionContext<{}, Deps, MetaKeys> & {
+					readonly flags: Readonly<Partial<InferExtensionFlags<F>>>;
+				},
+		  ) => Awaitable<boolean | void>)
+		| undefined;
 }
 
 /**
@@ -554,10 +558,12 @@ export interface ExtensionData<
 	readonly commands: Commands;
 	readonly use: readonly AnyContextFactory[];
 	readonly provide: Provide;
-	readonly sections?: (
-		snapshot: RootCommandSnapshot<MetaKeys>,
-	) => readonly ExtensionSectionContribution[];
-	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>;
+	readonly sections?:
+		| ((snapshot: RootCommandSnapshot<MetaKeys>) => readonly ExtensionSectionContribution[])
+		| undefined;
+	readonly build?:
+		| ((ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>)
+		| undefined;
 	readonly hooks: ExtensionHooks<any, Deps, MetaKeys>;
 	/** Flag handlers keyed by the owned flag they bind to. */
 	readonly handlers: Readonly<Record<string, ExtensionHandler<any, Deps, MetaKeys>>>;

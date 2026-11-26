@@ -78,7 +78,7 @@ export interface InvocationOptions<Event = unknown> {
 	/** Receives each stderr write live, as it was made. */
 	stderr?: (chunk: string | Uint8Array) => void;
 	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 	/**
 	 * Receives each value an async generator Command Action yields, as it is yielded,
 	 * after the selected Renderer's `event`. The action resumes once it returns, or once the
@@ -115,7 +115,7 @@ export interface InvocationOptions<Event = unknown> {
  */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
-	argv?: readonly string[];
+	argv?: readonly string[] | undefined;
 	/**
 	 * Streams that replace the process's, such as in in-process tests; each one omitted stays the
 	 * process's. `stdin` takes any async iterable of text or bytes, such as a Node.js readable
@@ -281,7 +281,7 @@ interface ArgDefBase extends ArgExtras {
 	 *
 	 * For variadic args without a default, the validated output is a nonempty tuple.
 	 */
-	required?: true;
+	required?: true | undefined;
 	/** Not supported with core value options — see {@link SchemaArgDef} */
 	schema?: never;
 	/**
@@ -304,14 +304,14 @@ interface ArgDefBase extends ArgExtras {
 	 * Required core variadics without defaults infer `[T, ...T[]]` after
 	 * required validation; other core variadics infer `T[]`.
 	 */
-	variadic?: VariadicMode;
+	variadic?: VariadicMode | undefined;
 }
 
 /** A positional argument whose value is a string */
 interface StringArgDef<ParseOutput = unknown> extends ArgDefBase, NoRange {
 	type: "string";
 	/** Default string value when the argument is not provided */
-	default?: string;
+	default?: string | undefined;
 	/**
 	 * Static enum of valid values for this argument.
 	 *
@@ -326,7 +326,7 @@ interface StringArgDef<ParseOutput = unknown> extends ArgDefBase, NoRange {
 	 * @example
 	 * { name: "target", type: "string", choices: ["browser", "bun", "node"] }
 	 */
-	choices?: readonly string[];
+	choices?: readonly string[] | undefined;
 	/**
 	 * Custom synchronous parser for the raw argv string. Runs after `choices`
 	 * validation and per element for variadic args. Its return type becomes the
@@ -335,7 +335,7 @@ interface StringArgDef<ParseOutput = unknown> extends ArgDefBase, NoRange {
 	 * @example
 	 * { name: "port", type: "string", parse: (s) => Number(s) }
 	 */
-	parse?: (raw: string) => ParseOutput;
+	parse?: ((raw: string) => ParseOutput) | undefined;
 }
 
 /** A positional argument whose value is a number */
@@ -465,7 +465,7 @@ interface FlagDefBase extends FlagExtras {
 	/** Additional aliases (e.g. `["out"]` → `--out`); one-character aliases also accept one dash. */
 	aliases?: readonly string[];
 	/** When `true`, the parser throws if the flag is not provided */
-	required?: true;
+	required?: true | undefined;
 	/**
 	 * The value's name in documentation, `--memory <bytes>` for `"bytes"`; the value type
 	 * by default. Only flags that take a value have one.
@@ -507,8 +507,8 @@ export type FlagEnv = string | readonly [string, ...string[]];
 interface SingleOccurrenceFields {
 	/** Environment fallback; argv wins over env, which wins over the default. */
 	env?: FlagEnv;
-	/** Must be omitted for single-value flags — set to `true` for multi-value */
-	multiple?: never;
+	/** Must be omitted or `undefined` for single-value flags — set to `true` for multi-value */
+	multiple?: undefined;
 	/** Only repeatable flags split values — see {@link RepeatableOccurrenceFields} */
 	delimiter?: never;
 }
@@ -539,7 +539,7 @@ interface MultiFlagBase extends FlagDefBase, RepeatableOccurrenceFields {}
 
 type StringFlagFields<Default, ParseOutput> = {
 	/** Default string value, or string array for a multi-value flag. */
-	default?: Default;
+	default?: Default | undefined;
 	/**
 	 * Static enum of valid values for this flag.
 	 *
@@ -554,7 +554,7 @@ type StringFlagFields<Default, ParseOutput> = {
 	 * flags it runs once per occurrence. The return type becomes the flag's
 	 * inferred runtime value type.
 	 */
-	parse?: (raw: string) => ParseOutput;
+	parse?: ((raw: string) => ParseOutput) | undefined;
 	negatable?: never;
 } & NoRange;
 
@@ -687,7 +687,7 @@ export type ExclusiveMemberDef = {
 export interface ExclusiveFlagDef extends NoRange, FlagExtras {
 	type: "exclusive";
 	/** When `true`, one member must be given */
-	required?: true;
+	required?: true | undefined;
 	/** The members, keyed by their canonical names */
 	flags: Readonly<Record<string, ExclusiveMemberDef>>;
 	description?: never;
@@ -787,7 +787,7 @@ export type InferArgValue<A extends ArgDef> = A extends {
 }
 	? InferOutput<S>
 	: A extends { variadic: VariadicMode }
-		? A extends { required: true; default?: never }
+		? A extends { required: true; default?: undefined }
 			? [ResolveBaseType<A>, ...ResolveBaseType<A>[]]
 			: ResolveBaseType<A>[]
 		: | ("variadic" extends keyof A
@@ -881,7 +881,7 @@ type InferFlagValue<F extends FlagDef> = F extends {
 		: F extends { type: "count" }
 			? number
 			: F extends { multiple: true }
-				? F extends { required: true; default?: never }
+				? F extends { required: true; default?: undefined }
 					? [ResolveBaseType<F>, ...ResolveBaseType<F>[]]
 					: // See InferArgValue: narrow on default presence. With `parse`,
 						// the raw default is `string[]` while ResolveBaseType<F> is the
@@ -982,7 +982,7 @@ type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extend
 type InputFlagValue<D, Value = InputBaseValue<D>> = [Value] extends [never]
 	? never
 	: D extends { multiple: true }
-		? D extends { required: true; default?: never }
+		? D extends { required: true; default?: undefined }
 			? readonly [Value, ...Value[]]
 			: readonly Value[]
 		: "multiple" extends keyof D
@@ -1124,11 +1124,11 @@ export interface CommandMeta extends CommandExtras {
 	/** The command name (used in help text and routing) */
 	name: string;
 	/** Human-readable description for help text */
-	description?: string;
+	description?: string | undefined;
 	/** Application version exposed to Extensions and tooling on the root command. */
-	version?: string;
+	version?: string | undefined;
 	/** Custom usage string (overrides auto-generated usage) */
-	usage?: string;
+	usage?: string | undefined;
 	/**
 	 * Example command lines, shown right after the usage in help and listed by the other
 	 * documentation surfaces (man pages, skills, the `--llms` index).
@@ -1136,9 +1136,9 @@ export interface CommandMeta extends CommandExtras {
 	 * @example
 	 * defineCommand("deploy", { examples: ["app deploy prod", "app deploy staging --dry-run"] }, recipe)
 	 */
-	examples?: readonly string[];
+	examples?: readonly string[] | undefined;
 	/** Plain-text sections rendered after built-in command documentation. */
-	sections?: readonly CommandSection[];
+	sections?: readonly CommandSection[] | undefined;
 	/**
 	 * Alternative names that resolve to the same command.
 	 *
@@ -1160,7 +1160,7 @@ export interface CommandMeta extends CommandExtras {
 	 * @example
 	 * defineCommand("issue", { aliases: ["issues", "i"] }, recipe)
 	 */
-	aliases?: readonly string[];
+	aliases?: readonly string[] | undefined;
 	/**
 	 * When `true`, omit this command from every tooling surface that
 	 * enumerates the command tree for users:
@@ -1191,7 +1191,7 @@ export interface CommandMeta extends CommandExtras {
 	 * @example
 	 * meta: { name: "__complete", hidden: true, description: "Internal" }
 	 */
-	hidden?: boolean;
+	hidden?: boolean | undefined;
 	/**
 	 * Why the command is deprecated, and what to use instead. Running it from the command line
 	 * prints one warning with it on stderr; help marks the command. Independent of `hidden`.
@@ -1199,7 +1199,7 @@ export interface CommandMeta extends CommandExtras {
 	 * @example
 	 * defineCommand("scan", { deprecated: "Use `scout`." }, recipe)
 	 */
-	deprecated?: string;
+	deprecated?: string | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

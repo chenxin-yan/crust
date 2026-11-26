@@ -251,7 +251,9 @@ function _fluentInference() {
 		void options;
 		return extension;
 	});
-	type _optionalArgs = Expect<Equal<Parameters<typeof optional>, [options?: { a?: 1 }]>>;
+	type _optionalArgs = Expect<
+		Equal<Parameters<typeof optional>, [options?: { a?: 1 } | undefined]>
+	>;
 	optional();
 	const flags = { label: { type: "string" } } as const;
 	const annotated: ExtensionFactory<[label: string], {}, [], typeof flags> = defineExtension(

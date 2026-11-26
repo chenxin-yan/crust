@@ -53,15 +53,15 @@ export interface DocumentationArg {
 	 */
 	readonly token: string;
 	/** Value type (`"string"`, `"number"`, …); `undefined` for schema-backed args. */
-	readonly type?: ArgSnapshot["type"];
+	readonly type?: ArgSnapshot["type"] | undefined;
 	/** Human-readable description from the arg definition. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 	/** `true` when parsing fails if the argument is missing. */
 	readonly required: boolean;
 	/** How the argument collects its values into an array (see `ArgDef`'s `variadic`); `false` for one value. */
 	readonly variadic: VariadicMode | false;
 	/** Accepted values, e.g. `["json", "text"]`: declared `choices`, or its schema's string `enum`. */
-	readonly choices?: readonly string[];
+	readonly choices?: readonly string[] | undefined;
 	/** Default value used when the argument is omitted, e.g. `3000`: declared, or its schema's. */
 	readonly default?: unknown;
 }
@@ -96,7 +96,7 @@ export interface DocumentationFlag {
 	 */
 	readonly spellings: readonly string[];
 	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
-	readonly short?: string;
+	readonly short?: string | undefined;
 	/** Additional long aliases without dashes, e.g. `["out"]` for `--out`. */
 	readonly aliases: readonly string[];
 	/** `true` for boolean flags that also accept `--no-<name>`: `default: true` or `negatable: true`. */
@@ -104,7 +104,7 @@ export interface DocumentationFlag {
 	/** Value type, e.g. `"boolean"`, `"string"`, `"count"`; never `"exclusive"`, whose members are listed instead. */
 	readonly type: Exclude<FlagSnapshot["type"], "exclusive">;
 	/** Human-readable description from the flag definition. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 	/** `true` when parsing fails if the flag is not provided. */
 	readonly required: boolean;
 	/** `true` when the flag can repeat and collects values into an array. */
@@ -113,21 +113,21 @@ export interface DocumentationFlag {
 	 * The value's name to document, `"bytes"` in `--memory <bytes>`: the flag's `valueName`,
 	 * else its type; absent for a flag that takes no value (`boolean`, `count`).
 	 */
-	readonly valueName?: string;
+	readonly valueName?: string | undefined;
 	/** Accepted values, e.g. `["debug", "info", "error"]`: declared `choices`, or its schema's string `enum`. */
-	readonly choices?: readonly string[];
+	readonly choices?: readonly string[] | undefined;
 	/** Default value used when the flag is omitted, e.g. `false`: declared, or its schema's. */
 	readonly default?: unknown;
 	/** Declared environment variable names; never their values. */
-	readonly env?: FlagSnapshot["env"];
+	readonly env?: FlagSnapshot["env"] | undefined;
 	/** Delimiter that splits a repeatable flag's string argv values and environment text into occurrences. */
-	readonly delimiter?: string;
+	readonly delimiter?: string | undefined;
 	/** Why the flag is deprecated, and what to use instead. */
-	readonly deprecated?: string;
+	readonly deprecated?: string | undefined;
 	/** The exclusive group (`type: "exclusive"`) this flag is a member of, by the group's name. */
-	readonly group?: string;
+	readonly group?: string | undefined;
 	/** The `.group()` title the flag is listed under; absent for an ungrouped flag. */
-	readonly heading?: string;
+	readonly heading?: string | undefined;
 	/** `true` for a Context-owned or Extension flag, which help lists under "Global options". */
 	readonly inherited: boolean;
 }
@@ -157,13 +157,13 @@ export interface CommandDocumentation {
 	/** Full invocation path from the root CLI, e.g. `["mycli", "remote", "add"]`. */
 	readonly path: readonly string[];
 	/** Human-readable description from `meta.description`. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 	/** Alternative names that route to this command, e.g. `["i"]` for `install`. */
 	readonly aliases: readonly string[];
 	/** Why the command is deprecated, and what to use instead. */
-	readonly deprecated?: string;
+	readonly deprecated?: string | undefined;
 	/** The parent's `.group()` title this command is listed under; absent when ungrouped. */
-	readonly heading?: string;
+	readonly heading?: string | undefined;
 	/** Example command lines from `meta.examples`. */
 	readonly examples: readonly string[];
 	/**

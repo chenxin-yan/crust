@@ -119,8 +119,8 @@ type RunNpm = (
 
 type PublishOptions = {
 	stageDir: string;
-	tag?: string;
-	registry?: string;
+	tag?: string | undefined;
+	registry?: string | undefined;
 	dryRun?: boolean;
 	/** Runs npm with `args` in `dir`; used for both `npm view` and `npm publish`. */
 	runNpm?: RunNpm;
@@ -382,7 +382,10 @@ export function validatePublishManifest(
 // (oven-sh/bun#15601). Staged package.json files carry no workspace: ranges,
 // so npm can publish the directories directly. npm reads publishConfig.access
 // from each staged package.json, copied from the project package.json.
-export function buildPublishCommand(args: { tag?: string; registry?: string }): string[] {
+export function buildPublishCommand(args: {
+	tag?: string | undefined;
+	registry?: string | undefined;
+}): string[] {
 	const command = ["npm", "publish"];
 
 	if (args.tag) {

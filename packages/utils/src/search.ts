@@ -142,19 +142,22 @@ export function createSearchIndex(items: readonly SearchItem[]): SearchIndex {
 export interface SearchableCommand {
 	readonly meta: {
 		readonly name: string;
-		readonly description?: string;
-		readonly aliases?: readonly string[];
+		readonly description?: string | undefined;
+		readonly aliases?: readonly string[] | undefined;
 	};
-	readonly args: readonly { readonly name: string; readonly description?: string }[];
+	readonly args: readonly {
+		readonly name: string;
+		readonly description?: string | undefined;
+	}[];
 	readonly flags: Readonly<Record<string, SearchableFlag>>;
 }
 
 interface SearchableFlag {
-	readonly description?: string;
+	readonly description?: string | undefined;
 	readonly extension?: unknown;
-	readonly hidden?: boolean;
+	readonly hidden?: boolean | undefined;
 	/** An exclusive group's members, indexed in its place. */
-	readonly flags?: Readonly<Record<string, SearchableFlag>>;
+	readonly flags?: Readonly<Record<string, SearchableFlag>> | undefined;
 }
 
 function flagDetails(flags: Readonly<Record<string, SearchableFlag>>): (string | undefined)[] {

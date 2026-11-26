@@ -20,7 +20,9 @@ function _typecheckKeepsHostCommandTreePrecise() {
 
 	type DeployInput = RunInput<CommandShapeAt<Shape, readonly ["deploy"]>>;
 	type _deployArgs = Expect<Equal<DeployInput["args"], { target: string }>>;
-	type _deployFlags = Expect<Equal<NonNullable<DeployInput["flags"]>, { "dry-run"?: boolean }>>;
+	type _deployFlags = Expect<
+		Equal<NonNullable<DeployInput["flags"]>, { "dry-run"?: boolean | undefined }>
+	>;
 	type _deployResult = Expect<
 		Equal<CommandShapeAt<Shape, readonly ["deploy"]>["result"], { target: string }>
 	>;
@@ -28,7 +30,10 @@ function _typecheckKeepsHostCommandTreePrecise() {
 	// The contributed commands are typed too.
 	type ConfigInput = RunInput<CommandShapeAt<Shape, readonly ["mcp", "config"]>>;
 	type _configFlags = Expect<
-		Equal<NonNullable<ConfigInput["flags"]>, { client?: "claude" | "cursor" | "vscode" }>
+		Equal<
+			NonNullable<ConfigInput["flags"]>,
+			{ client?: "claude" | "cursor" | "vscode" | undefined }
+		>
 	>;
 	type _mcpResult = Expect<Equal<CommandShapeAt<Shape, readonly ["mcp"]>["result"], void>>;
 

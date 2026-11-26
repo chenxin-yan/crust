@@ -105,8 +105,9 @@ function listedTool({
 	argNames: _argNames,
 	...tool
 }: McpTool): Tool {
-	// SAFETY: the schemas are JSON; Crust types their keywords `unknown`, the SDK `JSONValue`.
-	return tool as Tool;
+	// SAFETY: the schemas are JSON; Crust types their keywords `unknown`, the SDK `JSONValue`, and
+	// under `exactOptionalPropertyTypes` the two schema types no longer overlap enough for a direct cast.
+	return tool as unknown as Tool;
 }
 
 /** Run one command tool for `tools/call`, or `call_tool` in progressive discovery. */

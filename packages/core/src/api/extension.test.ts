@@ -30,7 +30,9 @@ describe("defineExtension", () => {
 		expect(Object.isFrozen(data.use)).toBe(true);
 		expect(data.flags.verbose?.default).toBe(false);
 		expect(definingOf(help({ verbose: true })).flags.verbose?.default).toBe(true);
-		type _args = Expect<Equal<Parameters<typeof help>, [options?: { readonly verbose?: boolean }]>>;
+		type _args = Expect<
+			Equal<Parameters<typeof help>, [options?: { readonly verbose?: boolean } | undefined]>
+		>;
 	});
 
 	it("accepts the factory and the handle as section consumers", async () => {

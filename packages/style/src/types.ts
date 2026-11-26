@@ -79,8 +79,11 @@ export type ColorDepth = "truecolor" | "256" | "16" | "none";
  * output stream, or to simulate terminal environments in tests.
  */
 export interface CapabilityOverrides {
-	/** Override `process.stdout.isTTY`, e.g. with the TTY state of the stream you write to. */
-	readonly isTTY?: boolean;
+	/**
+	 * Override `process.stdout.isTTY`, e.g. with the TTY state of the stream you write to.
+	 * `undefined`, as a Node.js stream that is no terminal reports it, means no terminal.
+	 */
+	readonly isTTY?: boolean | undefined;
 	/** Override `process.env.NO_COLOR`. Non-empty values disable color. */
 	readonly noColor?: string | undefined;
 	/**

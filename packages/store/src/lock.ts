@@ -40,14 +40,14 @@ export interface LockOptions {
 	 * Stops waiting for the lock: the call rejects with `signal.reason` and leaves every file
 	 * untouched. Not observed once the lock is held.
 	 */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignal | undefined;
 	/**
 	 * Milliseconds to wait for the lock before failing with `LOCK`. Expiry never takes the
 	 * lock over.
 	 *
 	 * @default 40000
 	 */
-	readonly timeout?: number;
+	readonly timeout?: number | undefined;
 }
 
 /**

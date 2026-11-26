@@ -24,7 +24,7 @@ export interface WriteJsonOptions {
 	 * on Windows. When omitted, a replaced file keeps its current mode, and a new
 	 * file gets the platform default.
 	 */
-	fileMode?: number;
+	fileMode?: number | undefined;
 
 	/**
 	 * Unix permission bits for the parent directory (e.g. `0o700`).
@@ -37,7 +37,7 @@ export interface WriteJsonOptions {
 	 * `umask` (`directoryMode & ~umask`) — relevant only when `directoryMode`
 	 * sets bits that a common umask would clear (e.g. `0o755` under `umask 0o027`).
 	 */
-	directoryMode?: number;
+	directoryMode?: number | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -449,9 +449,9 @@ export interface FileLockOptions {
 	/** `"write"` creates a missing parent directory to hold the lock; `"delete"` runs unlocked instead. */
 	readonly operation: "write" | "delete";
 	/** Applied when acquiring the lock creates the parent directory, as in {@link writeJson}. */
-	readonly directoryMode?: number;
+	readonly directoryMode?: number | undefined;
 	/** Stops waiting for the lock: rejects with `signal.reason`. Not observed once the lock is held. */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignal | undefined;
 }
 
 function isProcessAlive(pid: number): boolean {

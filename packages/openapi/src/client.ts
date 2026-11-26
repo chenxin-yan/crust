@@ -22,10 +22,12 @@ export interface AuthAttempt {
 	 * the attempt to replay the request with, which later requests and pages also use, or
 	 * `undefined` to keep the 401. Leave it out for a credential that can't be refreshed.
 	 */
-	readonly retry?: (
-		response: Response,
-		options: { readonly signal: AbortSignal },
-	) => Promise<AuthAttempt | undefined>;
+	readonly retry?:
+		| ((
+				response: Response,
+				options: { readonly signal: AbortSignal },
+		  ) => Promise<AuthAttempt | undefined>)
+		| undefined;
 }
 
 /**
