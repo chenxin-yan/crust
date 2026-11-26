@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -496,7 +496,7 @@ describe("renderBash · complete functions", () => {
 		const stub = join(tmpDir, "bin", "mycli");
 		await writeFile(
 			stub,
-			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$4-one" "$4-two" "at $3" '$(x)'\n`,
+			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$3|$4" > "$0.asked"\nprintf '%s\\n' "$4-one" "$4-two" "at $3" '$(x)'\n`,
 		);
 		await chmod(stub, 0o755);
 	});
@@ -526,6 +526,35 @@ describe("renderBash · complete functions", () => {
 
 	it("offers an argument's values", async () => {
 		expect(await complete(["mycli", "deploy", "api"])).toEqual(["api-one", "api-two"]);
+	});
+
+	it("matches and trims a value in the spelling it is inserted in", async () => {
+		// `%q` writes `a,b:va-one` as `a\,b:va-one`; the part Readline keeps is taken off that.
+		expect(await complete(["mycli", "deploy", "-r", "a,b", ":", "va"])).toEqual([
+			"va-one",
+			"va-two",
+		]);
+		// A word typed with its escape still matches the value: "at mycli…" is inserted as `at\\ mycli…`.
+		expect(await complete(["mycli", "deploy", "-r", "at\\ my"])).toContain(
+			"at\\ mycli\\ deploy\\ --region",
+		);
+	});
+
+	it("keeps a value that starts with `:` in one word", async () => {
+		expect(
+			await runBashCompletion(
+				scriptPath,
+				"_mycli",
+				["mycli", "deploy", "-r", ":", "ma"],
+				tmpDir,
+				join(tmpDir, "bin"),
+				"mycli deploy -r :ma",
+			),
+		).toEqual(["ma-one", "ma-two"]);
+		// The flag's function was asked, with the whole word.
+		expect(await readFile(join(tmpDir, "bin", "mycli.asked"), "utf8")).toBe(
+			"mycli deploy --region|:ma\n",
+		);
 	});
 
 	it("passes a value holding `=` whole, and offers what Readline replaces", async () => {

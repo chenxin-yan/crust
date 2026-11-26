@@ -469,7 +469,9 @@ export function renderBash(
 	lines.push("\t\telif (( joined && ! gap )); then");
 	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=0');
 	lines.push("\t\telse");
+	// A word that starts with `:` or `=` takes the next piece too.
 	lines.push('\t\t\twords[${#words[@]}]="$w"; joined=0');
+	lines.push('\t\t\tif [[ -n "$w" && "$w" != *[!=:]* ]]; then joined=1; fi');
 	lines.push("\t\tfi");
 	lines.push("\tdone");
 	lines.push("\tcword=$(( ${#words[@]} - 1 ))");
@@ -511,14 +513,16 @@ export function renderBash(
 	// Helper: append the values `<bin> __complete` prints for the address
 	// `$3` and the word `$2` that start with `$2`, each prefixed with `$1`
 	// and quoted with `%q` (a value is data, not shell code), and keep file
-	// names out. Its errors stay off the terminal.
+	// names out. The word is as typed, so a value also matches in its quoted
+	// spelling: `free\ t` finds `free tier`. Its errors stay off the terminal.
 	if (hasComplete(spec)) {
 		lines.push(`__${ident}_complete() {`);
-		lines.push("\tlocal c");
+		lines.push("\tlocal c q");
 		lines.push("\tcompopt +o default 2>/dev/null || :");
 		lines.push("\twhile IFS= read -r c; do");
+		lines.push('\t\tprintf -v q %q "$c"');
 		lines.push(
-			'\t\tif [[ -n "$c" && "$c" == "$2"* ]]; then printf -v c %q "$c"; COMPREPLY[${#COMPREPLY[@]}]="$1$c"; fi',
+			'\t\tif [[ -n "$c" ]] && [[ "$c" == "$2"* || "$q" == "$2"* ]]; then COMPREPLY[${#COMPREPLY[@]}]="$1$q"; fi',
 		);
 		lines.push(`\tdone <<< "$(${bashSingleQuote(binName)} __complete -- "$3" "$2" 2>/dev/null)"`);
 		lines.push("}");
@@ -537,13 +541,19 @@ export function renderBash(
 	lines.push(`\t\t${initFn} || return`);
 	lines.push("\tfi");
 	lines.push(`\t${walkFn}`);
-	lines.push('\tlocal _breaks="" _kept _n');
+	lines.push('\tlocal _breaks="" _kept _quoted _n');
 	lines.push('\tif [[ "$COMP_WORDBREAKS" == *=* ]]; then _breaks+="="; fi');
 	lines.push('\tif [[ "$COMP_WORDBREAKS" == *:* ]]; then _breaks+=":"; fi');
 	lines.push('\tif [[ -z "$_breaks" || "$cur" != *[$_breaks]* ]]; then return 0; fi');
 	lines.push('\t_kept="${cur%"${cur##*[$_breaks]}"}"');
+	// A live value is quoted with `%q`, which may write the kept part another way (`a\,b:`).
+	lines.push('\tprintf -v _quoted %q "$_kept"');
 	lines.push("\tfor (( _n = 0; _n < ${#COMPREPLY[@]}; _n++ )); do");
-	lines.push('\t\tCOMPREPLY[_n]="${COMPREPLY[_n]#"$_kept"}"');
+	lines.push('\t\tif [[ "${COMPREPLY[_n]}" == "$_kept"* ]]; then');
+	lines.push('\t\t\tCOMPREPLY[_n]="${COMPREPLY[_n]#"$_kept"}"');
+	lines.push("\t\telse");
+	lines.push('\t\t\tCOMPREPLY[_n]="${COMPREPLY[_n]#"$_quoted"}"');
+	lines.push("\t\tfi");
 	lines.push("\tdone");
 	lines.push("}");
 	lines.push("");
