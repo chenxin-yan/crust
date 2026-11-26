@@ -341,6 +341,12 @@ function _handleCallbacks() {
 	});
 	// @ts-expect-error Cleanup is registered with `defer`, not returned.
 	owned.setup(() => () => {});
+	// A `default` holding `undefined` is no default: hooks run before a missing flag is reported.
+	defineExtension(ID)
+		.flags({ quiet: { type: "boolean", required: true, default: undefined } })
+		.setup(({ flags }) => {
+			type _quiet = Expect<Equal<typeof flags.quiet, boolean | undefined>>;
+		});
 }
 
 function _postRunOutcome() {

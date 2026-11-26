@@ -458,11 +458,12 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 	? | (F extends { multiple: true } ? never : SchemaToken<F>)
 		| ("multiple" extends keyof F ? (true extends F["multiple"] ? SchemaToken<F>[] : never) : never)
 		| undefined
-	: F extends { required: true } | { default: unknown }
+	: F extends { required: true } | { default: {} }
 		? // Hooks run before validation enforces `required` and reports invalid values, which
 			// stay unset (not defaulted), so a required or defaulted value may still be absent.
+			// `{}`, not `unknown`: a `default` holding `undefined` is no default.
 			| InferFlags<{ value: F }>["value"]
-			| (F extends { default: unknown }
+			| (F extends { default: {} }
 					? MayHoldInvalidValue<F> extends true
 						? undefined
 						: never
