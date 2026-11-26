@@ -738,12 +738,14 @@ async function typecheckProject(
 		cwd,
 		stdio: "collect",
 	});
+	const output = processOutput(result);
 	if (result.exitCode !== 0) {
-		const output = processOutput(result);
 		throw new Error(
 			`Type check failed${output ? `:\n${output}` : ""}\n  Fix the errors, or ${skip}.`,
 		);
 	}
+	// Silent unless an argument after `--` asks tsc to print, such as `--listFiles`.
+	if (output) stdout(output);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

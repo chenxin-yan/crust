@@ -1101,9 +1101,12 @@ describe("build type check", () => {
 				"--",
 				"--strict",
 				"false",
+				"--listFiles",
 			]);
 			expect(loose.exitCode, loose.stderr).toBe(0);
-			expect(loose.stdout).toContain("(tsc --noEmit --strict false)");
+			expect(loose.stdout).toContain("(tsc --noEmit --strict false --listFiles)");
+			// What tsc prints on success, here the files it read, is shown too.
+			expect(loose.stdout).toMatch(/src[\\/]cli\.ts/);
 			// Nothing runs tsc, so there is nowhere to pass them.
 			const skipped = await captureExecute(app, [
 				"build",
