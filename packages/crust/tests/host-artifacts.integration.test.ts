@@ -316,7 +316,7 @@ describe("host artifact acceptance", () => {
 		const { project, stdout, manifest } = await buildProject(
 			"bun-binary",
 			{ runtime: "bun", artifact: "binary" },
-			["--target", "host"],
+			[],
 		);
 		expect(stdout).toContain("Runtime: bun");
 		expect(stdout).toContain("Artifact: binary");

@@ -10,7 +10,7 @@ async function release(): Promise<void> {
 	const result = await build({
 		cwd: process.cwd(), // default; package.json bin and crust are read from here
 		artifact: "binary", // overrides crust.artifact; "package" stages a runtime package instead
-		targets: ["bun-linux-x64", "bun-darwin-arm64"], // overrides crust.targets; omit for config, then every target
+		targets: ["bun-linux-x64", "bun-darwin-arm64"], // overrides crust.targets; omit for config, then this machine's target
 		envFiles: [".env.production"],
 		onLog: (line) => console.log(line), // silent without it
 	});

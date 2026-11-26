@@ -3,6 +3,7 @@ node_modules
 
 # output
 .crust
+.crust.lock
 out
 dist
 *.tgz

@@ -18,7 +18,7 @@ import { isWithin } from "@crustjs/utils/path";
  */
 export function collectIncludeDirs(
 	cwd: string,
-	stageDir: string,
+	outputDirs: readonly string[],
 	include: readonly string[],
 	artifactNames: readonly string[],
 ): string[] {
@@ -41,10 +41,13 @@ export function collectIncludeDirs(
 		// dereferences every symlink it meets, so the directory and everything
 		// reachable inside it must really live inside the project too.
 		assertResolvesInsideProject(cwd, entry, dir);
-		// The build wipes stageDir first, and copying a directory into itself fails midway.
-		if (isWithin(stageDir, dir) || isWithin(dir, stageDir)) {
+		// The build replaces its output, and copying a directory into itself fails midway.
+		const output = outputDirs.find(
+			(outputDir) => isWithin(outputDir, dir) || isWithin(dir, outputDir),
+		);
+		if (output !== undefined) {
 			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} overlaps the build output directory ${stageDir}, which crust build replaces.`,
+				`package.json crust.include entry ${JSON.stringify(entry)} overlaps the build output directory ${output}, which crust build replaces.`,
 			);
 		}
 		// Staged names are compared case-folded: on a case-insensitive destination

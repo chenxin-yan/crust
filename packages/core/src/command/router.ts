@@ -179,8 +179,8 @@ function subcommandKnowing(
  * Resolve a command from an argv array by walking the subcommand tree.
  *
  * Subcommand matching happens BEFORE flag parsing, so:
- * `crust build --target host` first resolves "build" as a subcommand,
- * then passes `["--target", "host"]` to the build command's parser.
+ * `crust build --target bun-linux-x64` first resolves "build" as a subcommand,
+ * then passes `["--target", "bun-linux-x64"]` to the build command's parser.
  *
  * Resolution rules:
  * 1. If `argv[0]` matches a subcommand key, recurse into that subcommand

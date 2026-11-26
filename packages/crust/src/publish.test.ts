@@ -167,7 +167,8 @@ describe("publish manifest validation", () => {
 		const writeProject = (pkg: object) =>
 			writeFileSync(join(projectDir, "package.json"), JSON.stringify(pkg));
 
-		writeProject({ name: "@scope/demo", version: "1.2.3", private: false });
+		const targets = ["bun-darwin-arm64", "bun-linux-x64"];
+		writeProject({ name: "@scope/demo", version: "1.2.3", private: false, crust: { targets } });
 		expect(() => assertStageMatchesProject(projectDir, manifest)).not.toThrow();
 
 		writeProject({ name: "@scope/demo", version: "1.2.4" });
@@ -182,6 +183,49 @@ describe("publish manifest validation", () => {
 		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
 			`Could not read ${join(projectDir, "package.json")} to check the staged packages against it`,
 		);
+	});
+
+	it("requires crust.targets for binaries and every listed target staged", () => {
+		const projectDir = join(tmpDir, "project");
+		mkdirSync(projectDir);
+		const writeProject = (crust?: object) =>
+			writeFileSync(
+				join(projectDir, "package.json"),
+				JSON.stringify({ name: "@scope/demo", version: "1.2.3", crust }),
+			);
+
+		writeProject({ targets: ["bun-linux-x64", "bun-windows-x64", "bun-darwin-arm64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"Stage is incomplete: .crust/ holds linux-x64, darwin-arm64, but package.json crust.targets also lists bun-windows-x64.\n  Run `crust build`, which stages every target in crust.targets.",
+		);
+		writeProject({ targets: ["bun-darwin-arm64", "bun-linux-x64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).not.toThrow();
+		// A target staged before it left crust.targets would still be published.
+		writeProject({ targets: ["bun-linux-x64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"Stage is stale: .crust/ holds darwin-arm64, which package.json crust.targets does not list.\n  Run `crust build`, which stages exactly the targets in crust.targets.",
+		);
+		writeProject();
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"A binary release ships the targets in package.json crust.targets, which is missing.\n  List your release targets in package.json crust.targets and run `crust build`. Valid Bun targets: bun-linux-x64, bun-linux-arm64, bun-linux-x64-musl, bun-linux-arm64-musl, bun-darwin-x64, bun-darwin-arm64, bun-windows-x64, bun-windows-arm64",
+		);
+		const nodeManifest: DistributionManifest = {
+			...manifest,
+			runtime: "node",
+			packages: manifest.packages.map((pkg) => ({ ...pkg, bins: {} })),
+		};
+		expect(() => assertStageMatchesProject(projectDir, nodeManifest)).toThrow(
+			"Valid Node targets: linux-x64, linux-arm64, darwin-x64, darwin-arm64, win-x64, win-arm64",
+		);
+		writeProject({ targets: ["linux-x64", "darwin-arm64"] });
+		expect(() => assertStageMatchesProject(projectDir, nodeManifest)).not.toThrow();
+		// A runtime package has no targets to check.
+		writeProject();
+		expect(() =>
+			assertStageMatchesProject(projectDir, { ...nodeManifest, packages: [] }),
+		).not.toThrow();
+		writeProject({ targets: ["all"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow('Unknown target "all"');
 	});
 
 	it("validates a root-only Node manifest and publishes just the root", async () => {

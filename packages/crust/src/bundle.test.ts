@@ -414,6 +414,61 @@ describe("execScriptBuild with crust.external", () => {
 				cjs: "cjs-marker",
 			});
 		});
+
+		it.skipIf(which("node") === null)(
+			`keeps an import()ed module's externals lazy in a node bundle built by ${path}`,
+			async () => {
+				const directory = await project();
+				await writeFile(
+					join(directory, "cli.ts"),
+					'if (process.argv[2] === "lazy") console.log((await import("./lazy.ts")).greeting);\nelse console.log("default");\n',
+				);
+				await writeFile(join(directory, "lazy.ts"), 'export { greeting } from "fake-esm";\n');
+				// Outside the project, so no node_modules resolves the external.
+				const installed = await mkdtemp(join(tmpdir(), "crust-external-installed-"));
+				tempDirs.push(installed);
+				const outfile = join(installed, "bin", "cli.js");
+				await execScriptBuild(
+					"node",
+					join(directory, "cli.ts"),
+					outfile,
+					settings(directory, { bunPlugins, external: ["fake-esm"] }),
+				);
+				const bin = await readdir(join(installed, "bin"));
+				expect(bin.sort()).toEqual([expect.stringMatching(/^_chunk-\w+\.js$/), "cli.js"]);
+				const run = (command?: string) =>
+					spawnSync(which("node")!, [outfile, ...(command ? [command] : [])], {
+						env: { PATH: process.env.PATH },
+						encoding: "utf8",
+						timeout: 10_000,
+					});
+				expect(run()).toMatchObject({ status: 0, stdout: "default\n", stderr: "" });
+				expect(run("lazy").stderr).toContain("ERR_MODULE_NOT_FOUND");
+				await symlink(join(directory, "node_modules"), join(installed, "node_modules"), "junction");
+				expect(run("lazy")).toMatchObject({ status: 0, stdout: "esm-marker\n" });
+			},
+		);
+
+		it(`refuses a file an import emits beside a split bundle built by ${path}`, async () => {
+			const directory = await project();
+			await writeFile(join(directory, "asset.bin"), "payload\n");
+			await writeFile(
+				join(directory, "cli.ts"),
+				'import asset from "./asset.bin" with { type: "file" };\nconsole.log(asset);\n',
+			);
+			const outfile = join(directory, "out", "cli.js");
+			await expect(
+				execScriptBuild(
+					"node",
+					join(directory, "cli.ts"),
+					outfile,
+					settings(directory, { bunPlugins, external: ["fake-esm"] }),
+				),
+			).rejects.toThrow(
+				/^Build failed for .*cli\.js: an import emits asset-\w+\.bin beside the bundle, which the installed CLI cannot locate\./,
+			);
+			expect(await readdir(join(directory, "out"))).toEqual([]);
+		});
 	}
 });
 

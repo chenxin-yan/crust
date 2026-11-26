@@ -260,7 +260,6 @@ const logged = [];
 const result = await build({
 	cwd,
 	artifact: "binary",
-	targets: ["host"],
 	...(withLog ? { onLog: (line, stream) => logged.push([line, stream]) } : {}),
 });
 writeFileSync(resultPath, JSON.stringify({ ...result, logged }));

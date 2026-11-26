@@ -196,14 +196,7 @@ if (require.main === module) {
 
 	process.env.PUBLIC_REGION = "environment";
 	try {
-		hostBuild = await crustBuild([
-			"--target",
-			"host",
-			"--env-file",
-			".env.build",
-			"--env-file",
-			".env.local",
-		]);
+		hostBuild = await crustBuild(["--env-file", ".env.build", "--env-file", ".env.local"]);
 	} finally {
 		delete process.env.PUBLIC_REGION;
 	}
@@ -305,8 +298,6 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			try {
 				result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
-					"--target",
-					"host",
 					"--no-validate",
 				]);
 			} finally {
@@ -336,8 +327,6 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 			try {
 				result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
-					"--target",
-					"host",
 					"--no-validate",
 				]);
 			} finally {

@@ -149,29 +149,25 @@ export const NODE_TARGETS = {
 	},
 } as const satisfies TargetTable<NodeTarget>;
 
-/** `--target` value that stands for this machine's canonical target. */
-export const HOST_TARGET = "host";
-
 /**
- * Canonical targets for `--target` inputs, deduplicated in input order. No
- * inputs means every target of the table; `host` means this machine's target.
+ * Canonical targets for target names, deduplicated in input order. No names
+ * means this machine's target.
  */
 export function resolveTargets<T extends string>(
 	table: TargetTable<T>,
-	targetFlags: readonly string[] | undefined,
+	names: readonly string[] | undefined,
 ): T[] {
-	if (!targetFlags?.length) return [...table.targets];
-
-	const targets = targetFlags.map((input) => {
-		if (input === HOST_TARGET) {
-			const host = hostTarget(table);
-			if (host === null) {
-				throw new Error(
-					`No ${table.runtime} target matches this machine (${hostPlatformKey()}).\n  Valid targets: ${table.targets.join(", ")}`,
-				);
-			}
-			return host;
+	if (!names?.length) {
+		const host = hostTarget(table);
+		if (host === null) {
+			throw new Error(
+				`No ${table.runtime} target matches this machine (${hostPlatformKey()}).\n  Valid targets: ${table.targets.join(", ")}`,
+			);
 		}
+		return [host];
+	}
+
+	const targets = names.map((input): T => {
 		const exact = table.targets.find((target) => target === input);
 		if (exact) return exact;
 

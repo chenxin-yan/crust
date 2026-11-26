@@ -20,6 +20,7 @@ import { Eta } from "eta/core";
 
 import corePkg from "../../core/package.json" with { type: "json" };
 import crustPkg from "../../crust/package.json" with { type: "json" };
+import { BUN_TARGETS, NODE_TARGETS } from "../../crust/src/targets.ts";
 import extensionsPkg from "../../extensions/package.json" with { type: "json" };
 import testingPkg from "../../testing/package.json" with { type: "json" };
 import pkg from "../package.json" with { type: "json" };
@@ -47,8 +48,8 @@ function json(value: unknown): string {
 
 /**
  * The files `templates/base` cannot hold as they are. The bundle inlines the sibling
- * package.json imports, so scaffolded projects pin the Crust versions from the build
- * that produced create-crust.
+ * package.json and target table imports, so scaffolded projects pin the Crust versions
+ * and release targets from the build that produced create-crust.
  */
 function projectFiles(
 	name: string,
@@ -64,12 +65,19 @@ function projectFiles(
 		private: true,
 		type: "module",
 		description: "A CLI built with Crust",
-		crust: { runtime, artifact },
+		crust: {
+			runtime,
+			artifact,
+			// A binary release ships exactly crust.targets; users trim the list to their platforms.
+			...(artifact === "binary"
+				? { targets: [...{ bun: BUN_TARGETS, node: NODE_TARGETS }[runtime].targets] }
+				: {}),
+		},
 		bin: { [name]: "src/cli.ts" },
 		scripts: {
 			dev: { bun: "bun run src/cli.ts", node: "node src/cli.ts" }[runtime],
 			build: "crust build",
-			release: "crust publish",
+			release: "crust build && crust publish",
 			// A binary's launcher is a Node script that runs the binary built for this machine.
 			start: `${artifact === "binary" ? "node" : runtime} .crust/root/bin/${name}.js`,
 			// Early Node 24 releases' default pattern skips .ts files.

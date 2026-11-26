@@ -29,11 +29,15 @@ Merge these fields into your `package.json`, keeping your dependencies:
   "private": true,
   "type": "module",
   "bin": { "my-cli": "src/cli.ts" },
-  "crust": { "runtime": "bun", "artifact": "binary" },
+  "crust": {
+    "runtime": "bun",
+    "artifact": "binary",
+    "targets": ["bun-linux-x64", "bun-linux-arm64", "bun-darwin-arm64", "bun-windows-x64"]
+  },
   "scripts": {
     "build": "crust build",
     "start": "node .crust/root/bin/my-cli.js",
-    "release": "crust publish"
+    "release": "crust build && crust publish"
   }
 }
 ```
@@ -42,6 +46,7 @@ Merge these fields into your `package.json`, keeping your dependencies:
 - **`private`:** keeps the source project from being published. Crust generates separate publishable packages in `.crust/`.
 - **`crust.runtime`:** the runtime your CLI runs on. [Without it](/docs/modules/crust#packagejson-configuration), Crust infers one.
 - **`crust.artifact`:** required; what the build distributes, independent of the runtime. `--artifact package` or `--artifact binary` overrides it for one build.
+- **`crust.targets`:** the platforms a binary release ships; see [choose release targets](#choose-release-targets). Runtime packages leave it out.
 
 | Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                    |
 | ------- | ----------------------------------------------- | --------------------------------------------------------- |
@@ -54,15 +59,13 @@ The commands below assume Node.js and Bun are installed. Node.js binaries also n
 
 ## Build
 
-For a quick local binary, build only for your machine:
-
 ```sh
-npm run build -- --target host
+npm run build
 ```
 
-Runtime packages have no targets: run `npm run build` without `--target`.
+Binaries are built for the platforms [`crust.targets`](#choose-release-targets) lists, or for your machine only without it. Runtime packages have no targets.
 
-Each build replaces `.crust/`; add it to `.gitignore`. On Linux x64 with Bun binaries:
+Each successful build replaces `.crust/`; a failed build keeps the previous one. Add `.crust/` and `.crust.lock/` to `.gitignore`. On Linux x64 with Bun binaries:
 
 ```text
 .crust/
@@ -79,15 +82,25 @@ Runtime packages have no platform directories; `root/bin/my-cli.js` is the bundl
 
 ### Choose release targets
 
-```sh
-# Build all supported targets, or the subset in crust.targets
-npm run build
+A binary release ships exactly the platforms you list in [`crust.targets`](/docs/modules/crust#packagejson-configuration), by their [target names](/docs/modules/crust#supported-targets), and `npm run build` stages them all:
 
-# Override the subset for this build (Bun example)
-npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
+```json title="package.json (partial)"
+{
+  "crust": {
+    "artifact": "binary",
+    "targets": ["bun-linux-x64", "bun-linux-arm64", "bun-darwin-arm64", "bun-windows-x64"]
+  }
+}
 ```
 
-Publish every platform you intend to support, not just `host`. Keep a release subset in [`crust.targets`](/docs/modules/crust#packagejson-configuration). See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
+```sh
+# Override the targets for one build (Bun example)
+npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
+# Only this machine, for a quick local build on Linux x64
+npm run build -- --target bun-linux-x64
+```
+
+[`crust publish`](#publish-with-crust-publish) of binaries requires `crust.targets` and refuses a stage that misses one of its targets. Without `crust.targets`, `crust build` stages only this machine's target. See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
 
 ### Binary runtime version
 
@@ -98,7 +111,7 @@ Every binary embeds the runtime version of the compiler that builds it:
 
 The build prints it as `Compiler:` and records it as `embeddedRuntimeVersion` in `.crust/manifest.json`, for cross-platform targets too.
 
-If `package.json` declares `engines.bun` or `engines.node`, that compiler must satisfy the range, or the build fails before replacing `.crust/`. It also fails if the compiler's `--version` hangs.
+If `package.json` declares `engines.bun` or `engines.node`, that compiler must satisfy the range, or the build fails before staging anything. It also fails if the compiler's `--version` hangs.
 
 <Callout>
   Crust never installs or upgrades a compiler, even for an exact `engines` version. Pin one with
@@ -140,7 +153,7 @@ Crust builds Node.js binaries with [tsdown's executable support](https://tsdown.
 - **Bun:** each command is first bundled by Bun, even with `--no-validate`.
 - **Unpacking tools:** for each target, tsdown downloads the official Node.js archive of the same version once, verifies its checksum, and caches it. Archives unpack with the host's `tar`, plus `xz` for Linux targets under GNU tar, or `unzip` for Windows targets on non-Windows hosts. On Windows, put the native `tar` before Git Bash's GNU tar on `PATH`. Cached targets need none of these tools.
 
-All of this is checked, and every archive downloaded, before `.crust/` is replaced, so a failure keeps the previous build.
+All of this is checked, and every archive downloaded, before anything is staged.
 
 **Your users:** running the executable needs no Node.js, so platform packages omit `engines.node`. The root package declares the launcher's own `>=24` instead, unless it also publishes library `exports`, which keep your range. Your `engines.node` can stay as wide as you like, such as `>=24`, as long as the build machine satisfies it.
 
@@ -177,10 +190,9 @@ node .crust/root/bin/my-cli.js --help
 
 ## Publish with `crust publish`
 
-Use a package name you own and a new version, then build your release targets:
+Use a package name you own and a new version. The `release` script builds your [release targets](#choose-release-targets), then publishes:
 
 ```sh
-npm run build
 npm run release -- --dry-run
 # Publish order: ... -> root
 
@@ -189,6 +201,7 @@ npm run release
 ```
 
 - `--dry-run` validates staged metadata and prints the plan **without contacting the registry**.
+- Binaries need [`crust.targets`](#choose-release-targets): without it, it fails and asks you to list your release targets. The stage must hold every listed target, or it fails with `Stage is incomplete`, names the missing ones, and suggests `crust build`. A staged target that `crust.targets` does not list fails with `Stage is stale`.
 - A real publish uses npm, uploads platform packages before the root, and stops on failure.
 - Rerun to resume: existing `name@version` pairs are skipped, never overwritten or re-tagged.
 
@@ -211,7 +224,7 @@ permissions:
   id-token: write
 ```
 
-After installing dependencies and building the release targets, run `npm run release`; do not run `npm login` in CI.
+After installing dependencies, run `npm run release`, which builds the release targets and publishes; do not run `npm login` in CI.
 
 npm runs inside each staged package, so it does not read the project's `.npmrc`. To use a credentials file, select it explicitly, and keep it out of version control:
 
@@ -270,7 +283,7 @@ Runtime packages can be archived too, but must keep the layout of `.crust/root/`
 }
 ```
 
-Create `templates/` in your project, then build. Read the shipped copy with [`artifactPath("templates")`](/docs/api/crust#artifactpathpath) from `@crustjs/core`, not a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable.
+Create `templates/` in your project, then build. Read it with [`artifactPath("templates")`](/docs/api/crust#artifactpathpath) from `@crustjs/core`, not a path relative to the working directory. It finds the shipped copy from the staged tree, an npm install, or a standalone executable, and `templates/` in your project when you run from source, so edits show up without a build.
 
 npm never publishes a `.gitignore`, `.npmignore`, or `.npmrc`, so `crust build` rejects them inside included directories. Store them as `_gitignore` and similar, then restore the name when your CLI copies the file; [`scaffold()`](/docs/modules/create#copied-files) does this for you.
 
@@ -303,10 +316,22 @@ Rules:
 - Each entry must be a `dependencies` key with a publishable range. `@crustjs/*` packages must stay bundled; see [`package.json` configuration](/docs/modules/crust#packagejson-configuration).
 - Validation runs each entry under Bun with your project's dependencies, so externals must be installed when you build. An entry that does not run a Crust app needs `--no-validate`.
 
+A module your CLI loads with `await import()` imports its externals itself: the bundle is split at each `import()`, with the pieces written next to it in `bin/` as `_chunk-*.js`. A command that never loads the module starts even when the external is missing. Files an import emits beside the bundle, such as `with { type: "file" }`, are rejected; ship them with [`crust.include`](#ship-extra-directories-with-crustinclude) instead.
+
 Limits:
 
 - A named ESM import of a CommonJS external, such as `import { open } from "some-cjs-package"`, may fail on Node.js. Use the default import (`import pkg from "some-cjs-package"`) or `require()`.
 - A third-party package that depends on `@crustjs/core` should stay bundled; as an external it would load its own copy of core.
+
+### Read `name` and `version` from `package.json`
+
+When your source runs on Bun, import the fields you use by name. The bundler then embeds only those values; a default import (`import pkg from "../package.json"`) embeds the whole file, including scripts, dependencies, and local paths.
+
+```ts title="src/cli.ts (partial)"
+import { name, version } from "../package.json" with { type: "json" };
+```
+
+Node.js gives a JSON module only a default export, so source run with `node` fails at this import with `does not provide an export named 'name'`. There, keep the default import, and the bundle embeds the whole `package.json`. TypeScript does not catch this: it rejects named JSON imports only under `"module": "NodeNext"` and the other `Node*` settings, and `create-crust` projects use `"Preserve"`.
 
 ### Environment variables
 

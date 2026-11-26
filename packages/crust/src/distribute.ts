@@ -2,7 +2,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, statSync, writeFileSync } 
 import { dirname, join, resolve } from "node:path";
 
 import type { BuildReport } from "@crustjs/core";
-import { bold, cyan, dim, green } from "@crustjs/style";
+import { bold, cyan, dim } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
@@ -10,7 +10,7 @@ import { collectArtifacts, collectIncludeDirs } from "./artifacts.ts";
 import { binaryFilename, generateLauncher, LAUNCHER_NODE_RANGE } from "./launcher.ts";
 import type { BuildRuntime, TargetInfo, TargetTable } from "./targets.ts";
 
-/** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
+/** Project-relative directory that `crust build` owns: replaced per build, read by `crust publish`. */
 export const CRUST_DIR = ".crust";
 
 /**
@@ -507,7 +507,7 @@ function writeDistributionManifest(
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
 	build: Record<string, BuildReport> | undefined,
-): string {
+): void {
 	const manifest: DistributionManifest = {
 		version: metadata.version,
 		...identity,
@@ -529,9 +529,7 @@ function writeDistributionManifest(
 		...(build ? { build } : {}),
 	};
 
-	const manifestPath = join(stageDir, "manifest.json");
-	writeJson(manifestPath, manifest);
-	return manifestPath;
+	writeJson(join(stageDir, "manifest.json"), manifest);
 }
 
 /** `pkg` without `engines.node`, dropping `engines` once nothing else is left. */
@@ -551,8 +549,8 @@ function stageDistributionPackages(
 	targets: readonly DistributionTarget[],
 	options: StagingOptions,
 ): void {
-	// No wipe here: the build command clears stageDir before Extension hooks fill
-	// stageDir/artifacts, which this function reads.
+	// No wipe here: the build command stages into a fresh directory, where Extension
+	// hooks already filled stageDir/artifacts, which this function reads.
 	const rootDir = join(stageDir, "root");
 	const rootBinDir = join(rootDir, "bin");
 	mkdirSync(rootBinDir, { recursive: true });
@@ -665,7 +663,13 @@ export async function runDistributeBuild<T extends string>(
 
 	const artifactOutDir = plan.validate ? plan.outDir : undefined;
 	const artifacts = collectArtifacts(artifactOutDir);
-	const includeDirs = collectIncludeDirs(plan.cwd, plan.stageDir, plan.include, artifacts.names);
+	// The build stages outside .crust/ and then replaces it, so both are output directories.
+	const includeDirs = collectIncludeDirs(
+		plan.cwd,
+		[plan.stageDir, resolve(plan.cwd, CRUST_DIR)],
+		plan.include,
+		artifacts.names,
+	);
 	stageDistributionPackages(
 		plan.cwd,
 		plan.stageDir,
@@ -757,7 +761,7 @@ export async function runDistributeBuild<T extends string>(
 
 	// Written last: `crust publish` treats manifest.json as proof of a complete
 	// build, so a failed compile must not leave one behind.
-	const manifestPath = writeDistributionManifest(
+	writeDistributionManifest(
 		plan.stageDir,
 		metadata,
 		table
@@ -771,13 +775,5 @@ export async function runDistributeBuild<T extends string>(
 		distributionTargets,
 		build,
 	);
-	io.stdout(
-		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,
-	);
-	io.stdout(`  ${rootDir}`);
-	for (const targetPackage of distributionTargets) {
-		io.stdout(`  ${targetPackage.packageDir}`);
-	}
-	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
 	return produced;
 }

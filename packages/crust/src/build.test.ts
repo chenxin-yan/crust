@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
+	type PathLike,
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
@@ -44,6 +45,26 @@ import { ARTIFACT_KINDS, type DistributionManifest } from "./distribute.ts";
 import { BUILD_RUNTIMES, BUN_TARGETS, hostTarget, NODE_TARGETS } from "./targets.ts";
 
 const host = hostTarget(BUN_TARGETS);
+
+// Sources whose renameSync fails, to exercise how build() swaps in the new .crust/.
+const failRenameFrom = vi.hoisted(() => new Set<string>());
+vi.mock("node:fs", async (importOriginal) => {
+	const fs = await importOriginal<typeof import("node:fs")>();
+	return {
+		...fs,
+		renameSync: (from: PathLike, to: PathLike) => {
+			if (failRenameFrom.has(String(from))) {
+				throw Object.assign(
+					new Error(`EXDEV: cross-device link not permitted, rename '${String(from)}'`),
+					{
+						code: "EXDEV",
+					},
+				);
+			}
+			fs.renameSync(from, to);
+		},
+	};
+});
 
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -134,7 +155,9 @@ describe("planBuild", () => {
 	});
 
 	it("plans node standalone binaries over Node's own target table", () => {
-		writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
+		writePackageJson({
+			crust: { runtime: "node", artifact: "binary", targets: [...NODE_TARGETS.targets] },
+		});
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "node",
 			artifact: "binary",
@@ -161,6 +184,18 @@ describe("planBuild", () => {
 		});
 	});
 
+	it.skipIf(host === null || hostTarget(NODE_TARGETS) === null)(
+		"stages only this machine's target without --target or crust.targets",
+		() => {
+			expect(planBuild(binary, tmpDir)).toMatchObject({ runtime: "bun", targets: [host] });
+			writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
+			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+				runtime: "node",
+				targets: [hostTarget(NODE_TARGETS)],
+			});
+		},
+	);
+
 	it("stages package.json crust.targets unless --target is passed", () => {
 		writePackageJson({ crust: { targets: ["bun-linux-x64", "bun-darwin-arm64"] } });
 		expect(planBuild(binary, tmpDir)).toMatchObject({
@@ -180,6 +215,10 @@ describe("planBuild", () => {
 				"package.json crust.targets is not supported for runtime packages (artifact package)",
 			);
 		}
+		// --artifact package overriding crust.artifact binary ignores the binaries' targets.
+		writePackageJson({ crust: { artifact: "binary", targets: ["bun-linux-x64"] } });
+		expect(planBuild(runtimePackage, tmpDir)).toMatchObject({ artifact: "package" });
+		expect(planBuild(runtimePackage, tmpDir)).not.toHaveProperty("targets");
 	});
 
 	it("infers the runtime from @types/node, never from lockfiles", () => {
@@ -324,14 +363,25 @@ describe("planBuild", () => {
 		flags?: BuildOptions;
 		error: string;
 	};
+	it("ignores crust.external for binaries chosen by the artifact option", () => {
+		const dependencies = { "fake-native": "^1.0.0" };
+		const crusts: JsonValue[] = [
+			{ runtime: "node", artifact: "package", external: ["fake-native"] },
+			{ runtime: "node", external: ["fake-native"] },
+		];
+		for (const crust of crusts) {
+			writePackageJson({ dependencies, crust });
+			expect(planBuild({ ...binary, targets: ["linux-x64"] }, tmpDir).external).toEqual([]);
+		}
+	});
+
 	const externalRejectedCases: ExternalRejectedCase[] = [
 		{
-			name: "--artifact binary overriding crust.artifact package",
+			name: "crust.artifact binary",
 			pkg: {
 				dependencies: { "fake-native": "^1.0.0" },
-				crust: { runtime: "node", artifact: "package", external: ["fake-native"] },
+				crust: { runtime: "node", artifact: "binary", external: ["fake-native"] },
 			},
-			flags: { artifact: "binary" },
 			error:
 				"package.json crust.external is not supported for standalone binaries (artifact binary)",
 		},
@@ -397,14 +447,14 @@ describe("planBuild", () => {
 		});
 	}
 
-	it.skipIf(host === null)("resolves --target host to this machine's target", () => {
-		expect(planBuild({ ...binary, targets: ["host"] }, tmpDir)).toMatchObject({
-			runtime: "bun",
-			targets: [host],
-		});
-		expect(
-			planBuild({ ...binary, targets: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
-		).toMatchObject({ targets: host === "bun-linux-x64" ? [host] : [host, "bun-linux-x64"] });
+	it("takes target names only, from --target or crust.targets", () => {
+		for (const name of ["all", "host"]) {
+			expect(() => planBuild({ ...binary, targets: [name] }, tmpDir)).toThrow(
+				`Unknown target "${name}"`,
+			);
+			writePackageJson({ crust: { targets: [name] } });
+			expect(() => planBuild(binary, tmpDir)).toThrow(`Unknown target "${name}"`);
+		}
 	});
 });
 
@@ -575,11 +625,16 @@ describe("readCrustConfig", () => {
 		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
 		expect(crust.properties.artifact.enum).toEqual([...ARTIFACT_KINDS]);
+		expect(crust.properties.targets.items.enum).toEqual([
+			...BUN_TARGETS.targets,
+			...NODE_TARGETS.targets,
+		]);
 	});
 });
 
 describe("build", () => {
-	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-"));
+	// `$&` in the project path checks that reported paths keep it literally.
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-$&-"));
 	const stageDir = join(tmpDir, ".crust");
 	const writeProject = (pkg: Record<string, JsonValue>, entry: string) => {
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -634,6 +689,15 @@ describe("build", () => {
 		);
 		expect(existsSync(lock)).toBe(true);
 		expect(readFileSync(join(stageDir, "kept.txt"), "utf8")).toBe("previous stage");
+
+		// Killed between the swap's two renames: the lock holds the only copy of the previous build.
+		rmSync(stageDir, { recursive: true });
+		mkdirSync(join(lock, "previous"));
+		const realLock = join(realpathSync(tmpDir), ".crust.lock");
+		await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
+			`It holds the previous build: move ${join(realLock, "previous")} back to ${join(realpathSync(tmpDir), ".crust")} first.`,
+		);
+		expect(existsSync(join(lock, "previous"))).toBe(true);
 	});
 
 	it("stages a node bundle without reports when validate is false and rejects bad options", async () => {
@@ -660,7 +724,7 @@ describe("build", () => {
 		expect(manifest).not.toHaveProperty("build");
 		expect(manifest).not.toHaveProperty("embeddedRuntimeVersion");
 
-		// Option validation fails before the stage is wiped, with the CLI's messages.
+		// Option validation fails before staging, with the CLI's messages.
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
 		await expect(
 			build({ cwd: tmpDir, targets: ["bun-linux-x64"], validate: false }),
@@ -684,6 +748,63 @@ describe("build", () => {
 			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
 		);
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+	}, 30_000);
+
+	it("keeps the previous stage when bundling fails and reports final paths on success", async () => {
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("first");\n',
+		);
+		const logged: string[] = [];
+		const result = await build({
+			cwd: tmpDir,
+			validate: false,
+			onLog: (line) => logged.push(line),
+		});
+		const bundlePath = join(stageDir, "root", "bin", "node-cli.js");
+		expect(result.artifacts.map(({ path }) => path)).toContain(bundlePath);
+		expect(logged.some((line) => line.includes(".crust.lock"))).toBe(false);
+		expect(logged).toContain(`  ${join(stageDir, "root")}`);
+
+		writeFileSync(join(tmpDir, "src", "cli.ts"), 'import "missing-package-for-crust-test";\n');
+		await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow("Build failed for");
+		expect(readFileSync(bundlePath, "utf8")).toContain("first");
+		expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
+		expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
+	}, 30_000);
+
+	it("restores the previous stage when the new one cannot replace it", async () => {
+		writeProject(
+			{ name: "node-cli", crust: { runtime: "node", artifact: "package" } },
+			'console.log("first");\n',
+		);
+		await build({ cwd: tmpDir, validate: false });
+		writeFileSync(join(tmpDir, "src", "cli.ts"), 'console.log("second");\n');
+		const lockDir = join(realpathSync(tmpDir), ".crust.lock");
+		const bundlePath = join(stageDir, "root", "bin", "node-cli.js");
+
+		failRenameFrom.add(join(lockDir, "stage"));
+		try {
+			const logged: string[] = [];
+			await expect(
+				build({ cwd: tmpDir, validate: false, onLog: (line) => logged.push(line) }),
+			).rejects.toThrow("EXDEV");
+			expect(logged.some((line) => line.includes("successfully"))).toBe(false);
+			expect(readFileSync(bundlePath, "utf8")).toContain("first");
+			expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
+			expect(existsSync(lockDir)).toBe(false);
+
+			// When the previous stage cannot be put back either, the lock keeps it.
+			failRenameFrom.add(join(lockDir, "previous"));
+			await expect(build({ cwd: tmpDir, validate: false })).rejects.toThrow(
+				`nor restore the previous build, which is kept in ${join(lockDir, "previous")}.`,
+			);
+			expect(
+				readFileSync(join(lockDir, "previous", "root", "bin", "node-cli.js"), "utf8"),
+			).toContain("first");
+		} finally {
+			failRenameFrom.clear();
+		}
 	}, 30_000);
 
 	it("warns when an entry's shebang names another runtime than crust.runtime", async () => {
@@ -736,7 +857,7 @@ describe("build", () => {
 		});
 	}, 30_000);
 
-	it("selects and validates the binary compiler before wiping the previous stage", async () => {
+	it("selects and validates the binary compiler before staging", async () => {
 		writeProject({ name: "engine-cli", engines: { bun: "0.0.1" } }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
@@ -752,7 +873,7 @@ describe("build", () => {
 		).rejects.toThrow('package.json engines.bun is not a valid semver range: "latest"');
 		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
 
-		// Under Node there is no embedded Bun to fall back to: a missing bun fails before the wipe too.
+		// Under Node there is no embedded Bun to fall back to: a missing bun fails before staging too.
 		writeProject({ name: "engine-cli" }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
 		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
@@ -773,7 +894,7 @@ describe("build", () => {
 
 	// The shim is a POSIX script; the real Node binary builds run in tests/node-exe.integration.test.ts.
 	it.skipIf(process.platform === "win32")(
-		"selects and validates the node binary compiler and tsdown's requirements before wiping the previous stage",
+		"selects and validates the node binary compiler and tsdown's requirements before staging",
 		async () => {
 			const nodePath = which("node")!;
 			const bunDir = dirname(which("bun")!);
@@ -865,7 +986,6 @@ describe("build", () => {
 				const result = await build({
 					cwd: tmpDir,
 					artifact: "binary",
-					targets: ["host"],
 					validate: false,
 					onLog: (line) => logged.push(line),
 				});
@@ -887,7 +1007,7 @@ describe("build", () => {
 });
 
 describe("buildCommand", () => {
-	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {
+	it("rejects invalid identity before staging, even with --no-validate", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-identity-guard-"));
 		mkdirSync(join(tmpDir, ".crust"));
 		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept");
@@ -949,8 +1069,6 @@ describe("buildCommand", () => {
 					"build",
 					"--artifact",
 					"binary",
-					"--target",
-					"host",
 				]);
 
 				expect(result.exitCode, result.stderr).toBe(0);
@@ -1000,8 +1118,6 @@ describe("buildCommand", () => {
 				"build",
 				"--artifact",
 				"binary",
-				"--target",
-				"host",
 				...argv,
 			]);
 
@@ -1046,10 +1162,10 @@ describe("buildCommand", () => {
 			const result = await build([]);
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain('both bin "greet" and "admin"');
-			expect(readFileSync(join(tmpDir, ".crust/artifacts/shared/Config.json"), "utf8")).toBe(
-				"first",
-			);
-			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+			// The failed build keeps the previous stage, from the --no-validate build above.
+			expect(existsSync(join(tmpDir, ".crust", "artifacts"))).toBe(false);
+			expect(readManifest(join(tmpDir, ".crust", "manifest.json"))).not.toHaveProperty("build");
+			expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
 		});
 	});
 });

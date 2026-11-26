@@ -393,12 +393,13 @@ Returns the absolute path of a file or directory shipped with the running CLI: a
 
 Artifact paths do not depend on npm or its launcher. For [direct binary distribution](/docs/guide/build-and-distribution#custom-distribution), keep these directories next to the executable when archiving or installing it; copying only the executable leaves its data behind. Runtime packages use the different layout below.
 
-| Running as                                                                         | Result                                                                                                                |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Compiled executable (`bun build --compile`, Node.js single executable application) | `<name>` next to the executable                                                                                       |
-| Crust-built runtime package bundle (Bun or Node)                                   | `<name>` beside the bundle's `bin/` directory: `.crust/root/<name>` in place, `<installed root>/<name>` after install |
-| Snapshot preparation inside `crust build`                                          | `<name>` under the entry's build output directory, containing what earlier build hooks wrote                          |
-| Source (`bun run`, `node`, source-linked command)                                  | `.crust/root/<name>` under the nearest `package.json` above the real entrypoint: the output of the last `crust build` |
+| Running as                                                                                                       | Result                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Compiled executable (`bun build --compile`, Node.js single executable application)                               | `<name>` next to the executable                                                                                                  |
+| Crust-built runtime package bundle (Bun or Node)                                                                 | `<name>` beside the bundle's `bin/` directory: `.crust/root/<name>` in place, `<installed root>/<name>` after install            |
+| Source (`bun run`, `node`, source-linked command) or snapshot preparation, a path under a `crust.include` folder | `<name>` in the project: the nearest `package.json` above the real entrypoint lists the folder, so edits show up without a build |
+| Snapshot preparation inside `crust build`, any other path                                                        | `<name>` under the entry's build output directory, containing what earlier build hooks wrote                                     |
+| Source, any other path                                                                                           | `.crust/root/<name>` under the nearest `package.json` above the real entrypoint: the output of the last `crust build`            |
 
 <Callout type="warn">
   `crust build` defines `process.env.CRUST_INTERNAL_BUILD` as `"1"` in the Bun and Node bundles it
