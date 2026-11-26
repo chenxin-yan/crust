@@ -518,6 +518,9 @@ importers:
       '@crustjs/style':
         specifier: workspace:^
         version: link:../style
+      typescript:
+        specifier: '>=5.9.0'
+        version: 7.0.2
     devDependencies:
       '@arethetypeswrong/core':
         specifier: ^0.18.5

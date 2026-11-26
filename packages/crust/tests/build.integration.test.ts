@@ -90,6 +90,7 @@ console.log("hello from crust build test");
 		const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
 			"--no-validate",
+			"--no-typecheck",
 			"--target",
 			"bun-darwin-arm64",
 		]);
@@ -133,7 +134,7 @@ await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running $
 
 			const { exitCode, stderr, stdout } = await captureExecute(
 				new Crust("test").add(buildCommand),
-				["build"],
+				["build", "--no-typecheck"],
 			);
 			expect(exitCode, stderr).toBe(0);
 			expect(stdout).toContain("Preparing Command Snapshot for greet...");
@@ -213,6 +214,7 @@ await new Crust("collision-cli")
 
 			const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
 				"build",
+				"--no-typecheck",
 			]);
 
 			expect(exitCode).not.toBe(0);
@@ -252,7 +254,7 @@ await app.execute();
 			writePackageJson(tmpDir, { ...basePackageJson, bin: { "env-cli": "src/env-cli.ts" } });
 
 			await new Crust("test").add(buildCommand).execute({
-				argv: ["build", "--env-file", ".env.build"],
+				argv: ["build", "--no-typecheck", "--env-file", ".env.build"],
 			});
 
 			const outPath = stagedBunBinary(tmpDir, "env-cli", host);
@@ -334,6 +336,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 		writePackageJson(tmpDir, packageJson);
 		const { exitCode, stderr, stdout } = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
+			"--no-typecheck",
 			"--env-file",
 			".env.build",
 		]);
@@ -420,6 +423,7 @@ describe.skipIf(hostTarget() === null)(
 			const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
 				"build",
 				"--no-validate",
+				"--no-typecheck",
 			]);
 			process.cwd = originalCwd;
 			if (exitCode !== 0) throw new Error(stderr);
@@ -453,10 +457,14 @@ await new Crust("preload-cli").action(() => {}).execute();
 				crust: { artifact: "binary" },
 			});
 
-			const { exitCode, stderr } = await runBoundedProcess(crustBinary, ["build"], {
-				cwd: projectDir,
-				timeout: 4_000,
-			});
+			const { exitCode, stderr } = await runBoundedProcess(
+				crustBinary,
+				["build", "--no-typecheck"],
+				{
+					cwd: projectDir,
+					timeout: 4_000,
+				},
+			);
 			expect(stderr).toBe("");
 			expect(exitCode).toBe(0);
 			expect(existsSync(stagedBunBinary(projectDir, "preload-cli", hostTarget()!))).toBe(true);

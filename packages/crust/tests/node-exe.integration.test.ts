@@ -81,7 +81,7 @@ async function crustBuild(argv: string[]) {
 	process.cwd = () => project;
 	try {
 		return await withPathPrefix(seaNodeDir!, () =>
-			captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]),
+			captureExecute(new Crust("test").add(buildCommand), ["build", "--no-typecheck", ...argv]),
 		);
 	} finally {
 		process.cwd = originalCwd;
@@ -299,6 +299,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
 					"--no-validate",
+					"--no-typecheck",
 				]);
 			} finally {
 				process.cwd = originalCwd;
@@ -328,6 +329,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
 					"--no-validate",
+					"--no-typecheck",
 				]);
 			} finally {
 				process.cwd = originalCwd;

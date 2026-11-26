@@ -14,6 +14,7 @@ import { ARTIFACT_KINDS } from "../distribute.ts";
  * crust build --artifact binary                # Stage binaries for crust.targets, or this machine
  * crust build --target bun-linux-x64           # Stage only Linux x64 (crust.artifact: binary)
  * crust build --no-minify                      # Disable minification
+ * crust build --no-typecheck                   # Skip the project's tsc --noEmit
  * crust build --env-file .env.production       # Inline PUBLIC_* constants from a file
  * ```
  */
@@ -47,6 +48,11 @@ export const buildCommand = defineCommand(
 						"Materialize command definitions before compiling; --no-validate also skips Extension build hooks",
 					default: true,
 				},
+				typecheck: {
+					type: "boolean",
+					description: "Type-check the project with its own tsc --noEmit before building",
+					default: true,
+				},
 				minify: {
 					type: "boolean",
 					description: "Minify the output",
@@ -70,6 +76,7 @@ export const buildCommand = defineCommand(
 					minify: flags.minify,
 					bytecode: flags.bytecode,
 					validate: flags.validate,
+					typecheck: flags.typecheck,
 					onLog: (line, stream) => (stream === "stderr" ? stderr : stdout)(line),
 				});
 			}),

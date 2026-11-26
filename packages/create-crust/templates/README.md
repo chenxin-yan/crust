@@ -32,7 +32,7 @@ Install dependencies if you skipped installation or just cloned the project:
 
 ## Build and distribution
 
-`<%~ it.run %> build` stages the selected output and npm metadata in `.crust/`:
+`<%~ it.run %> build` type-checks the project with `tsc --noEmit`, then stages the selected output and npm metadata in `.crust/`:
 
 - `package`: a JavaScript bundle in `.crust/root/` that requires the selected runtime installed.
 - `binary`: a standalone executable per platform, with its runtime embedded. `crust.targets` in `package.json` lists the platforms a release ships: `<%~ it.run %> build` builds every one, and `<%~ it.run %> release` builds and publishes them. Remove the platforms you do not ship. Pass `--target <name>` to `crust build` to build one target, such as this machine's.

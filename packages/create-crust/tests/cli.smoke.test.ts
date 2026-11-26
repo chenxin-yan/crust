@@ -325,6 +325,7 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 			: {}),
 	});
 	assertSuccess("generated project build", buildCommand, sampleDir, build);
+	expect(build.stdout).toContain("Type check: typescript");
 
 	const crustDir = join(sampleDir, ".crust");
 	for (const command of commands) {

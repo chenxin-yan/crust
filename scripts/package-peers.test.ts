@@ -6,10 +6,11 @@ import { expect, it } from "vite-plus/test";
 // The optional TypeScript peer states which compilers Crust's types support. npm
 // rejects an install whose TypeScript misses any package's range (ERESOLVE), so
 // one package with a narrower range breaks every project on the excluded versions.
+// @crustjs/crust requires it, with the same range: `crust build` runs the project's tsc.
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-it("every package declares the same optional TypeScript peer", () => {
+it("every package declares the same TypeScript peer, optional except in @crustjs/crust", () => {
 	const peers = globSync("packages/*/package.json", { cwd: repoRoot }).flatMap((path) => {
 		const manifest = JSON.parse(readFileSync(join(repoRoot, path), "utf8")) as {
 			name: string;
@@ -24,5 +25,11 @@ it("every package declares the same optional TypeScript peer", () => {
 	});
 	expect(peers.length).toBeGreaterThan(0);
 	const range = peers[0]!.range;
-	expect(peers).toEqual(peers.map(({ name }) => ({ name, range, optional: true })));
+	expect(peers).toEqual(
+		peers.map(({ name }) => ({
+			name,
+			range,
+			optional: name === "@crustjs/crust" ? undefined : true,
+		})),
+	);
 });

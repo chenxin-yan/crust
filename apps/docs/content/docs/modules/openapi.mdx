@@ -534,7 +534,7 @@ The Contexts `fn` reads are the client's dependencies. Here a `profile` Context 
    }
    ```
 
-4. Pass `--runExternalCode` to every `tsc` run, such as `tsc --noEmit --runExternalCode`. The flag cannot be set in `tsconfig.json`: a mapper is a program the compiler runs.
+4. Pass `--runExternalCode` to every `tsc` run, such as `tsc --noEmit --runExternalCode`. The flag cannot be set in `tsconfig.json`: a mapper is a program the compiler runs. [`crust build`](/docs/guide/build-and-distribution#build) type-checks with plain `tsc --noEmit`, which then fails with `TS18068`, so run your own check before it and skip the build's: `"build": "tsc --noEmit --runExternalCode && crust build --no-typecheck"`.
 
 inspex then adds each `<name>.openapi.jsonc` in the program to `Specs` under `<name>`, and `call()` checks the `operationId`, each parameter and body field, and the fields read from the result:
 

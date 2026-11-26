@@ -63,6 +63,8 @@ The commands below assume Node.js and Bun are installed. Node.js binaries also n
 npm run build
 ```
 
+The build first type-checks the project: it runs the project's own TypeScript, `tsc --noEmit`, on the `tsconfig.json` in the project root, and a type error fails the build before anything is staged. A project without `typescript` installed or without a root `tsconfig.json` fails with a message naming the missing piece; scaffolded projects have both. `--no-typecheck` skips the check, for example when you run `tsc` yourself with other flags. Running from source with `bun` or `node` does not type-check.
+
 Binaries are built for the platforms [`crust.targets`](#choose-release-targets) lists, or for your machine only without it. Runtime packages have no targets.
 
 Each successful build replaces `.crust/`; a failed build keeps the previous one. Add `.crust/` and `.crust.lock/` to `.gitignore`. On Linux x64 with Bun binaries:

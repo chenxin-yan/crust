@@ -93,6 +93,7 @@ console.log(JSON.stringify({ tsdown: compiler.backend.packageJsonPath, node: com
 					"--target",
 					bunHost,
 					"--no-validate",
+					"--no-typecheck",
 				]);
 				expect(built.exitCode, built.stderr).toBe(0);
 			} finally {

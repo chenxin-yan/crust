@@ -17,6 +17,7 @@ These are requirements of the build machine, not of users running your binaries:
 - [Node.js binaries](/docs/guide/build-and-distribution#nodejs-binaries) need the optional dependencies `tsdown` and `@tsdown/exe`, plus `node` on `PATH`. Other builds never load them, so an install that skipped them still builds everything else.
 - The [`build()`](#programmatic-api) library needs `bun` on `PATH` unless the script runs under Bun.
 - `@crustjs/core` is a peer dependency, so `BuildReport` is the same type your Extensions see.
+- `typescript` (5.9 or later) is a peer dependency: `crust build` type-checks the project with the project's own `tsc --noEmit` and fails without it, or without a `tsconfig.json` in the project root, unless you pass `--no-typecheck`.
 
 ### npm installation caveat
 
@@ -33,25 +34,27 @@ These are requirements of the build machine, not of users running your binaries:
 crust build --artifact binary --target bun-linux-x64
 # Runtime: bun (default)
 # Artifact: binary
+# Type check: typescript 7.0.2 (tsc --noEmit)
 # Compiler: bun 1.4.2 (/usr/local/bin/bun)
 # Staging 1 distribution target(s) in .../.crust...
 #   → linux-x64: .../.crust/linux-x64/bin/my-cli-bun-linux-x64
 # ✓ Staged 2 npm package(s) successfully: (excerpt)
 ```
 
-- [`crust build`](/docs/guide/build-and-distribution#build) validates your CLI and stages runtime packages or standalone binaries, with npm packaging metadata, in `.crust/`.
+- [`crust build`](/docs/guide/build-and-distribution#build) type-checks and validates your CLI and stages runtime packages or standalone binaries, with npm packaging metadata, in `.crust/`.
 - [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes the staged npm packages. Release downloads, Homebrew, and other [custom channels](/docs/guide/build-and-distribution#custom-distribution) use the built binaries directly.
 
 ### `crust build` options
 
-| Option                        | Type                | Default             | Description                                                                                                                                                                                                   |
-| ----------------------------- | ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--artifact`                  | `package`, `binary` | none                | Artifact kind: a runtime package or standalone binaries. Overrides `crust.artifact`, ignoring `crust.targets` for a package and `crust.external` for binaries; one of them is required                        |
-| `-t, --target`                | string, repeatable  | none                | Canonical compiler target(s) for binaries. Omit to stage `crust.targets`, or this machine's target. Rejected for runtime packages                                                                             |
-| `--env-file`                  | path, repeatable    | none                | Env file(s) whose [`PUBLIC_*` values](/docs/guide/build-and-distribution#environment-variables) are inlined; relative to the working directory                                                                |
-| `--validate`, `--no-validate` | boolean             | `true`              | Materialize command definitions and run the [definition checks](/docs/api/crust#definition-checks) before compiling; built artifacts leave those checks out. `--no-validate` also skips Extension build hooks |
-| `--minify`, `--no-minify`     | boolean             | `true`              | Minify the output                                                                                                                                                                                             |
-| `--bytecode`, `--no-bytecode` | boolean             | on for Bun binaries | Precompile Bun binaries to [bytecode](/docs/guide/build-and-distribution#bun-binary-startup) for faster startup. `--bytecode` is rejected for runtime packages and Node.js binaries                           |
+| Option                          | Type                | Default             | Description                                                                                                                                                                                                   |
+| ------------------------------- | ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--artifact`                    | `package`, `binary` | none                | Artifact kind: a runtime package or standalone binaries. Overrides `crust.artifact`, ignoring `crust.targets` for a package and `crust.external` for binaries; one of them is required                        |
+| `-t, --target`                  | string, repeatable  | none                | Canonical compiler target(s) for binaries. Omit to stage `crust.targets`, or this machine's target. Rejected for runtime packages                                                                             |
+| `--env-file`                    | path, repeatable    | none                | Env file(s) whose [`PUBLIC_*` values](/docs/guide/build-and-distribution#environment-variables) are inlined; relative to the working directory                                                                |
+| `--validate`, `--no-validate`   | boolean             | `true`              | Materialize command definitions and run the [definition checks](/docs/api/crust#definition-checks) before compiling; built artifacts leave those checks out. `--no-validate` also skips Extension build hooks |
+| `--typecheck`, `--no-typecheck` | boolean             | `true`              | Run the project's own `tsc --noEmit` on its root `tsconfig.json` before anything else is built; type errors, a missing `typescript`, or a missing root `tsconfig.json` fail the build                         |
+| `--minify`, `--no-minify`       | boolean             | `true`              | Minify the output                                                                                                                                                                                             |
+| `--bytecode`, `--no-bytecode`   | boolean             | on for Bun binaries | Precompile Bun binaries to [bytecode](/docs/guide/build-and-distribution#bun-binary-startup) for faster startup. `--bytecode` is rejected for runtime packages and Node.js binaries                           |
 
 Command names, entry files, runtime, default targets, Bun bundler plugins, extra directories, and external dependencies are not flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
@@ -103,8 +106,9 @@ crust publish --dry-run
 `build()` runs in this order:
 
 1. Validates `bin`, the `crust` block, and its options, with the same errors the CLI prints.
-2. Selects the compiler and checks it against `engines` (binaries) and tsdown's requirements (Node.js binaries). Node.js binary targets are downloaded and unpacked here.
-3. Stages every package in a temporary folder, writing `manifest.json` last, and replaces `.crust/` with it only when everything succeeded. A failed build keeps the previous `.crust/`.
+2. Type-checks the project with its own `tsc --noEmit`, unless `typecheck` is `false`. The error carries `tsc`'s output.
+3. Selects the compiler and checks it against `engines` (binaries) and tsdown's requirements (Node.js binaries). Node.js binary targets are downloaded and unpacked here.
+4. Stages every package in a temporary folder, writing `manifest.json` last, and replaces `.crust/` with it only when everything succeeded. A failed build keeps the previous `.crust/`.
 
 - It prints nothing and throws on failure; `onLog` receives each progress line with its stream. A throw from `onLog` on the closing summary, printed once the output is in place, still rejects `build()` although `.crust/` holds the new build.
 - `BuildReport` is `@crustjs/core`'s type, re-exported.
