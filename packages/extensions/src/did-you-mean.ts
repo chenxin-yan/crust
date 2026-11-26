@@ -7,6 +7,7 @@ import {
 } from "@crustjs/core";
 
 import { renderHelp } from "./help.ts";
+import { withTypedColorFlag } from "./no-color.ts";
 
 const DID_YOU_MEAN: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:did-you-mean");
 
@@ -30,6 +31,8 @@ export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> =
 			if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;
 			// The suggestion search and help renderer load only on this error path.
 			const { reportUnknownCommand } = await import("./did-you-mean-report.ts");
-			return reportUnknownCommand(error, context, mode, renderHelp);
+			return reportUnknownCommand(error, context, mode, (...args) =>
+				withTypedColorFlag(context, () => renderHelp(...args)),
+			);
 		});
 	});

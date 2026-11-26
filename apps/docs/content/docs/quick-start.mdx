@@ -63,8 +63,10 @@ Arguments:
 
 Options:
   -g, --greet <string>         Greeting to use [default: "Hello"]
-  -h, --help                   Show help
   -v, --version                Show version number
+
+Global options:
+  -h, --help                   Show help
 ```
 
 `src/app.test.ts` runs the CLI in-process with [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) and checks its output:

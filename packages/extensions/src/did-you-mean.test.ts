@@ -3,6 +3,7 @@ import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
 import { didYouMean } from "./did-you-mean.ts";
+import { noColor } from "./no-color.ts";
 
 describe("didYouMean", () => {
 	it("reports the unknown command even when a sibling recipe throws", async () => {
@@ -100,6 +101,22 @@ describe("didYouMean", () => {
 		expect(stdout).not.toContain('Did you mean "issues"');
 		expect(stdout).toContain("Usage:");
 		expect(stderr).toBe("");
+		expect(exitCode).toBe(2);
+	});
+
+	it("renders help without color for a typed --no-color in help mode", async () => {
+		const app = new Crust("app")
+			.extend(noColor())
+			.extend(didYouMean({ mode: "help" }))
+			.add(defineCommand("issue", (cmd) => cmd.action(() => {})));
+
+		const { stdout, exitCode } = await captureExecute(app, ["issuee", "--no-color"], {
+			env: { FORCE_COLOR: "1" },
+			raw: true,
+		});
+
+		expect(stdout).toContain("Usage:");
+		expect(stdout).not.toContain("\x1b[");
 		expect(exitCode).toBe(2);
 	});
 

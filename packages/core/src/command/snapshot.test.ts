@@ -71,6 +71,7 @@ describe("snapshotCommand", () => {
 
 		expect(snapshot.args[0]).toEqual({
 			name: "level",
+			required: true,
 			inputSchema: {
 				$schema: "https://json-schema.org/draft/2020-12/schema",
 				type: "string",
@@ -79,8 +80,71 @@ describe("snapshotCommand", () => {
 		});
 		expect(snapshot.flags.port?.inputSchema).toMatchObject({ type: "number" });
 		expect(snapshot.flags.mode).not.toHaveProperty("inputSchema");
+		// A schema that rejects a missing value makes it required; one that accepts it does not.
+		expect(snapshot.flags.port?.required).toBe(true);
+		expect(snapshot.flags.mode).not.toHaveProperty("required");
 		expect(snapshot.flags.plain).not.toHaveProperty("inputSchema");
 		expect(JSON.parse(JSON.stringify(snapshot)).args).toEqual(snapshot.args);
+	});
+
+	it("shows a schema that validates asynchronously or throws on a missing value as optional", async () => {
+		const standard = { version: 1 as const, vendor: "test" };
+		const snapshot = await new Crust("cli")
+			.flags({
+				later: {
+					type: "string",
+					schema: {
+						"~standard": {
+							...standard,
+							validate: async () => ({ issues: [{ message: "missing" }] }),
+						},
+					},
+				},
+				broken: {
+					type: "string",
+					schema: {
+						"~standard": {
+							...standard,
+							validate: () => {
+								throw new Error("boom");
+							},
+						},
+					},
+				},
+			})
+			.action(() => {})
+			.snapshot();
+
+		expect(snapshot.flags.later).not.toHaveProperty("required");
+		expect(snapshot.flags.broken).not.toHaveProperty("required");
+	});
+
+	it("calls no schema with a missing value when an action reads only command metadata", async () => {
+		const seen: unknown[] = [];
+		const app = new Crust("cli")
+			.flags({
+				tag: {
+					type: "string",
+					schema: {
+						"~standard": {
+							version: 1 as const,
+							vendor: "test",
+							validate: (value: unknown) => {
+								seen.push(value);
+								return typeof value === "string" ? { value } : { issues: [{ message: "missing" }] };
+							},
+						},
+					},
+				},
+				endpoint: { type: "url", default: new URL("https://a.example") },
+			})
+			.action(({ command }) => {
+				void command.meta.name;
+			});
+
+		await app.run([], { flags: { tag: "real" } });
+
+		expect(seen).toEqual(["real"]);
 	});
 
 	it("is serializable: no functions, URL defaults become strings", () => {

@@ -43,8 +43,8 @@ Standard Schema–backed arguments and flags are described by their schema's inp
 
 Prints a compact Markdown index of every visible command. Each command gets:
 
-- a `## ` heading with its usage line, then its description;
-- its arguments and flags with their types, descriptions, defaults, choices, and environment variables;
+- a `## ` heading with its usage line, then its description and its `examples`;
+- its arguments and flags with their types, descriptions, defaults, choices, and environment variables, including those a schema defines. A flag with a `valueName` shows it, such as `` `--memory <bytes>` ``. Flags are listed under "Flags", then each [`.group()`](/docs/api/crust#grouptitle-block) title, then "Global flags" for those the command does not declare itself (a root-only Extension flag such as `--llms` is listed under the root's "Flags");
 - its [documentation sections](/docs/guide/extensions#section-consumers) as `### ` headings, except those with `except: [schema]` or an `only` list without `schema`.
 
 Hidden commands are left out. `--llms` takes over the invocation like `--help`. It is root-only, so `my-cli deploy --llms` is an unknown flag.

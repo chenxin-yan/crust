@@ -13,6 +13,7 @@ import {
 } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 import type { CommandDefinition, CrustCommandContext } from "./crust.ts";
+import type { CommandGroup } from "./snapshot.ts";
 
 export const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
@@ -54,6 +55,8 @@ export interface CommandNode {
 	effectiveFlags: FlagsDef;
 	/** Prepared nodes only: the Extension declaring each Extension flag in {@link effectiveFlags}. */
 	extensionFlags?: ReadonlyMap<string, ExtensionId>;
+	/** Prepared root only: its `recursive: false` Extension flags, which documentation lists as its own. */
+	rootOnlyFlags?: ReadonlySet<string>;
 	/** Prepared nodes only: the Extension that contributed this command or its top-level ancestor. */
 	extension?: ExtensionId;
 	/** Cached canonical/short/alias table for the effective flags. */
@@ -91,6 +94,8 @@ export interface CommandNode {
 	run?: CommandAction;
 	/** Schema from `.output()` that validates and transforms the action result */
 	outputSchema?: StandardSchema;
+	/** Documentation headings from `.group()`, in code order */
+	groups?: readonly CommandGroup[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

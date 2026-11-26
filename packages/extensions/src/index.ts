@@ -14,6 +14,7 @@ export { ConfirmationRequiredError, confirm } from "./confirm.ts";
 export { didYouMean } from "./did-you-mean.ts";
 export type { DidYouMeanOptions } from "./did-you-mean.ts";
 export { help, renderHelp } from "./help.ts";
+export type { RenderHelpOptions } from "./help.ts";
 export { input } from "./input.ts";
 export { json } from "./json.ts";
 export { nextSteps } from "./next-steps.ts";

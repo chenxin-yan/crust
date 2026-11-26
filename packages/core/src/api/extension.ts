@@ -795,8 +795,8 @@ export interface ExtensionBuilder<
 	 * module augmentation of `ArgExtras`, `FlagExtras`, or `CommandExtras`. Only this Extension
 	 * reads them, from the snapshots. A definition that sets a key no installed Extension owns is a
 	 * `DEFINITION` error (`unowned-key`), from source and in `crust build`. Owning `toJSON`, or
-	 * `inputSchema` or `extension`, which a snapshot sets itself, is a `DEFINITION` error
-	 * (`reserved-name`).
+	 * `inputSchema`, `extension` or `inherited`, which a snapshot sets itself, is a `DEFINITION`
+	 * error (`reserved-name`).
 	 */
 	owns(
 		...keys: readonly Extract<keyof (ArgExtras & FlagExtras & CommandExtras), string>[]
@@ -872,7 +872,7 @@ type ErasedExtensionBuilder = ExtensionBuilder<any, any, any, any, any>;
 
 // Fields a snapshot sets itself, which would replace an owned key of that name, and `toJSON`,
 // which JSON.stringify would call in place of writing the definition.
-const SNAPSHOT_KEYS = new Set(["inputSchema", "extension", "toJSON"]);
+const SNAPSHOT_KEYS = new Set(["inputSchema", "extension", "inherited", "toJSON"]);
 
 function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 	const flags = Object.freeze(toFlagsRecord(state.flags));

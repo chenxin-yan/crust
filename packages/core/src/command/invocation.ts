@@ -731,6 +731,9 @@ export function buildExtensionTree(
 			demands: [...source.demands],
 			extensions: [...source.extensions],
 			extensionFlags: isRoot ? rootFlagOwners : childFlagOwners,
+			rootOnlyFlags: isRoot
+				? new Set(extensionFlags.filter(({ recursive }) => !recursive).map(({ name }) => name))
+				: undefined,
 			extension: contributor,
 		};
 		for (const { name, def, recursive } of extensionFlags) {

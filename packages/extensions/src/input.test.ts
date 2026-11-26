@@ -258,8 +258,9 @@ describe("input", () => {
 
 		expect(valid.exitCode).toBe(0);
 		expect(valid.stdout).toContain("--input");
-		expect(unreadable).toMatchObject({ stdout: "", exitCode: 2 });
-		expect(unreadable.stderr).toContain("--input: cannot read");
+		// --input fails first; help then wins over the failure, keeping its usage-error exit code.
+		expect(unreadable).toMatchObject({ stderr: "", exitCode: 2 });
+		expect(unreadable.stdout).toContain("Usage:");
 	});
 
 	it("binds before every preRun, including one registered before input()", async () => {

@@ -1,4 +1,5 @@
 import {
+	type ExtensionContext,
 	type ExtensionFactory,
 	type ExtensionId,
 	CrustError,
@@ -24,6 +25,64 @@ const colorFlags = {
 		description: "Enable colored output (--no-color to disable it)",
 	},
 } as const;
+
+/** Set the color variables for `--color` (`true`) or `--no-color` (`false`); returns their restore. */
+function applyColorFlag(flagValue: boolean): () => void {
+	if (activeRuns > 0 && activeFlag !== flagValue) {
+		throw new CrustError(
+			"DEFINITION",
+			"noColor: cannot start a --color run while a --no-color run is in flight (or vice versa); opposing overlapping runs share process.env",
+			{ subject: "extension", name: NO_COLOR, reason: "opposing-overlap" },
+		);
+	}
+	activeFlag = flagValue;
+
+	if (activeRuns === 0) {
+		baseForceColor = process.env.FORCE_COLOR;
+		baseNoColor = process.env.NO_COLOR;
+	}
+	activeRuns++;
+
+	if (flagValue) {
+		delete process.env.NO_COLOR;
+		process.env.FORCE_COLOR = "3";
+	} else {
+		delete process.env.FORCE_COLOR;
+		process.env.NO_COLOR = "1";
+	}
+	return () => {
+		activeRuns--;
+		if (activeRuns > 0) return;
+		activeFlag = undefined;
+		if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
+		else process.env.FORCE_COLOR = baseForceColor;
+		if (baseNoColor === undefined) delete process.env.NO_COLOR;
+		else process.env.NO_COLOR = baseNoColor;
+	};
+}
+
+/**
+ * Run `render` under the `--color` or `--no-color` typed before `--`, for output printed after a
+ * failure that ended the run before `noColor()`'s setup applied the flag. The last one typed wins.
+ */
+export async function withTypedColorFlag<T>(
+	context: ExtensionContext,
+	render: () => Promise<T>,
+): Promise<T> {
+	if (context.command.flags.color?.extension !== NO_COLOR) return render();
+	const end = context.argv.indexOf("--");
+	// shortcut: a `--color` or `--no-color` meant for a passthrough argument counts too, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
+	const words = end === -1 ? context.argv : context.argv.slice(0, end);
+	const on = words.lastIndexOf("--color");
+	const off = words.lastIndexOf("--no-color");
+	if (on === off) return render();
+	const restore = applyColorFlag(on > off);
+	try {
+		return await render();
+	} finally {
+		restore();
+	}
+}
 
 /**
  * Adds a recursive `--color` / `--no-color` flag pair that scopes the
@@ -52,38 +111,6 @@ export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> =
 			// A setup, so the variables apply before any handler renders (`--help --no-color`).
 			.setup((context) => {
 				const flagValue = context.flags.color;
-				if (flagValue !== true && flagValue !== false) return;
-
-				if (activeRuns > 0 && activeFlag !== flagValue) {
-					throw new CrustError(
-						"DEFINITION",
-						"noColor: cannot start a --color run while a --no-color run is in flight (or vice versa); opposing overlapping runs share process.env",
-						{ subject: "extension", name: NO_COLOR, reason: "opposing-overlap" },
-					);
-				}
-				activeFlag = flagValue;
-
-				if (activeRuns === 0) {
-					baseForceColor = process.env.FORCE_COLOR;
-					baseNoColor = process.env.NO_COLOR;
-				}
-				activeRuns++;
-
-				if (flagValue) {
-					delete process.env.NO_COLOR;
-					process.env.FORCE_COLOR = "3";
-				} else {
-					delete process.env.FORCE_COLOR;
-					process.env.NO_COLOR = "1";
-				}
-				context.defer(() => {
-					activeRuns--;
-					if (activeRuns > 0) return;
-					activeFlag = undefined;
-					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
-					else process.env.FORCE_COLOR = baseForceColor;
-					if (baseNoColor === undefined) delete process.env.NO_COLOR;
-					else process.env.NO_COLOR = baseNoColor;
-				});
+				if (flagValue === true || flagValue === false) context.defer(applyColorFlag(flagValue));
 			}),
 	);

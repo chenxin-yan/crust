@@ -703,5 +703,24 @@ describe("renderSkill", () => {
 			expect(serve).toContain("| `--verbose` | count | No | Can be specified multiple times |");
 			expect(serve).toContain("| `--watch`, `--no-watch` | boolean | No | `[default: true]` |");
 		});
+
+		it("lists examples after the usage and a declared value name with the flag", async () => {
+			const cmd = makeCommand({
+				meta: { name: "serve", examples: ["test-cli serve -m 1G"] },
+				flags: {
+					memory: { type: "string", short: "m", valueName: "bytes" },
+					out: { type: "string", valueName: "file|directory" },
+				},
+				run() {},
+			});
+
+			const serve = expectTextContent(findFile(await render(cmd), "commands/serve.md"));
+
+			expect(serve).toContain(
+				"```\nserve [options]\n```\n\n## Examples\n\n```\ntest-cli serve -m 1G\n```",
+			);
+			expect(serve).toContain("| `-m`, `--memory <bytes>` | string | No | - |");
+			expect(serve).toContain("| `--out <file\\|directory>` | string | No | - |");
+		});
 	});
 });

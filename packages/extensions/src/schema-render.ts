@@ -1,46 +1,23 @@
-import { type CommandSnapshot, CrustError, type ExtensionId } from "@crustjs/core";
+import type { CommandSnapshot, ExtensionId } from "@crustjs/core";
 import {
 	type CommandDocumentation,
 	buildCommandDocumentation,
 	commandInputSchema,
 	formatDescription,
-	isListed,
 	sectionsFor,
 } from "@crustjs/core/tooling";
 
+import { resolveCommand } from "./resolve-command.ts";
 import type { CommandSchema } from "./schema.ts";
 
 /**
- * Resolve `path` (canonical names or aliases, like routing) under `root` and
- * describe that command. Hidden commands resolve too.
+ * Describe the command at `path` (canonical names or aliases, like routing) under `root`.
+ * Hidden commands resolve too.
  *
  * @throws {CrustError} `COMMAND_NOT_FOUND` naming the path up to the unknown segment
  */
 export function commandSchema(root: CommandSnapshot, path: readonly string[]): CommandSchema {
-	let command = root;
-	const canonical: string[] = [];
-	for (const segment of path) {
-		const match = Object.hasOwn(command.subCommands, segment)
-			? ([segment, command.subCommands[segment]!] as const)
-			: Object.entries(command.subCommands).find(([, child]) =>
-					child.meta.aliases?.includes(segment),
-				);
-		if (!match) {
-			const subCommands = command.subCommands;
-			throw new CrustError(
-				"COMMAND_NOT_FOUND",
-				`Unknown command "${[...canonical, segment].join(" ")}".`,
-				{
-					input: segment,
-					available: Object.keys(subCommands).filter((name) => isListed(subCommands[name]!)),
-					commandPath: [root.meta.name, ...canonical],
-					parentCommand: command,
-				},
-			);
-		}
-		canonical.push(match[0]);
-		command = match[1];
-	}
+	const { command, path: canonical } = resolveCommand(root, path);
 	return {
 		input: commandInputSchema(command, canonical),
 		...(command.outputSchema ? { output: command.outputSchema } : {}),
@@ -77,6 +54,7 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 			doc.deprecated,
 		);
 		if (description) lines.push("", description);
+		if (doc.examples.length > 0) lines.push("", "Examples:", "", "```", ...doc.examples, "```");
 		if (doc.args.length > 0) {
 			lines.push("", "Arguments:", "");
 			for (const arg of doc.args) {
@@ -89,24 +67,31 @@ export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId)
 				);
 			}
 		}
-		if (doc.flags.length > 0) {
-			lines.push("", "Flags:", "");
-			for (const flag of doc.flags) {
-				lines.push(
-					item(
-						flag.spellings.map((spelling) => `\`${spelling}\``).join(", "),
-						valueLabel(flag.type, flag.multiple, flag.required),
-						formatDescription(
-							flag.description,
-							flag.default,
-							flag.choices,
-							undefined,
-							flag.env,
-							flag.deprecated,
-						),
+		let heading: string | undefined;
+		for (const flag of doc.flags) {
+			const next = flag.inherited ? "Global flags" : (flag.heading ?? "Flags");
+			if (next !== heading) lines.push("", `${(heading = next)}:`, "");
+			// A declared value name says more than the type the label already gives.
+			const value =
+				flag.valueName === undefined || flag.valueName === flag.type ? "" : ` <${flag.valueName}>`;
+			lines.push(
+				item(
+					flag.spellings
+						.map(
+							(spelling, index, all) => `\`${spelling}${index === all.length - 1 ? value : ""}\``,
+						)
+						.join(", "),
+					valueLabel(flag.type, flag.multiple, flag.required),
+					formatDescription(
+						flag.description,
+						flag.default,
+						flag.choices,
+						undefined,
+						flag.env,
+						flag.deprecated,
 					),
-				);
-			}
+				),
+			);
 		}
 		for (const section of sectionsFor(doc.sections, consumer)) {
 			lines.push("", `### ${section.title}`, "", section.body);

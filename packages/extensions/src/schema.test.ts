@@ -35,21 +35,24 @@ function buildCli() {
 	return new Crust("mycli", { description: "Test CLI" })
 		.extend(schema(), help())
 		.add(
-			defineCommand("deploy", { description: "Deploy the app" }, (cmd) =>
-				cmd
-					.args({
-						name: "target",
-						type: "string",
-						required: true,
-						description: "Where to deploy",
-						choices: ["staging", "production"],
-					})
-					.flags({
-						force: { type: "boolean", short: "f", description: "Skip checks", default: false },
-						tag: { type: "string", multiple: true, env: "DEPLOY_TAG" },
-					})
-					.output(outputSchema(deployResult))
-					.action(() => ({ id: "dep_1" })),
+			defineCommand(
+				"deploy",
+				{ description: "Deploy the app", examples: ["mycli deploy staging -f"] },
+				(cmd) =>
+					cmd
+						.args({
+							name: "target",
+							type: "string",
+							required: true,
+							description: "Where to deploy",
+							choices: ["staging", "production"],
+						})
+						.flags({
+							force: { type: "boolean", short: "f", description: "Skip checks", default: false },
+							tag: { type: "string", multiple: true, env: "DEPLOY_TAG", valueName: "name" },
+						})
+						.output(outputSchema(deployResult))
+						.action(() => ({ id: "dep_1" })),
 			),
 			defineCommand("remote", { description: "Manage remotes" }, (cmd) =>
 				cmd.add(
@@ -174,12 +177,21 @@ describe("schema", () => {
 				"",
 				"Flags:",
 				"",
-				"- `-h`, `--help` (boolean): Show help",
 				"- `--llms` (boolean): Print a Markdown index of all commands for LLMs",
+				"",
+				"Global flags:",
+				"",
+				"- `-h`, `--help` (boolean): Show help",
 				"",
 				"## `mycli deploy <target> [options]`",
 				"",
 				"Deploy the app",
+				"",
+				"Examples:",
+				"",
+				"```",
+				"mycli deploy staging -f",
+				"```",
 				"",
 				"Arguments:",
 				"",
@@ -188,14 +200,17 @@ describe("schema", () => {
 				"Flags:",
 				"",
 				"- `-f`, `--force` (boolean): Skip checks [default: false]",
-				"- `--tag` (string, multiple): [env: DEPLOY_TAG]",
+				"- `--tag <name>` (string, multiple): [env: DEPLOY_TAG]",
+				"",
+				"Global flags:",
+				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
 				"## `mycli remote <command> [options]`",
 				"",
 				"Manage remotes",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
@@ -205,7 +220,7 @@ describe("schema", () => {
 				"",
 				"- `<url>` (url)",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
@@ -217,7 +232,7 @@ describe("schema", () => {
 				"",
 				"- `[path...]` (string): Command path, e.g. `remote add`; omit for the root command",
 				"",
-				"Flags:",
+				"Global flags:",
 				"",
 				"- `-h`, `--help` (boolean): Show help",
 				"",
@@ -252,7 +267,7 @@ describe("schema", () => {
 		const [root, deploy] = stdout.split("\n## ").slice(1);
 
 		expect(root).toMatch(
-			/- `--llms` [^\n]*\n\n### Auth\n\nSet MYCLI_TOKEN\.\n\n### JSON output\n\n--json [^\n]*\n\n### JSON input\n\n--input [^\n]*\n$/,
+			/- `--json` [^\n]*\n\n### Auth\n\nSet MYCLI_TOKEN\.\n\n### JSON output\n\n--json [^\n]*\n\n### JSON input\n\n--input [^\n]*\n$/,
 		);
 		expect(deploy).toMatch(/\n\n### Safety\n\nRun preview first\.\n$/);
 		expect(stdout).not.toContain("Not for schema");

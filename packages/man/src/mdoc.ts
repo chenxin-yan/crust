@@ -38,15 +38,25 @@ function ndArgument(text: string): string {
 function flagMacro(spelling: string): string {
 	return spelling.startsWith("--") ? `Fl Fl ${spelling.slice(2)}` : `Fl ${spelling.slice(1)}`;
 }
-function takesNoValue(flag: DocumentationFlag): boolean {
-	return flag.type === "boolean" || flag.type === "count";
+function repeats(flag: DocumentationFlag): string {
+	return flag.multiple || flag.type === "count" ? " ..." : "";
 }
 function flagMacros(flag: DocumentationFlag): string {
-	const value = takesNoValue(flag) ? "" : ` Ar ${flag.type}`;
-	return flag.spellings.map(flagMacro).join(" , ") + value;
+	const value = flag.valueName === undefined ? "" : ` Ar ${macroArgument(flag.valueName)}`;
+	return flag.spellings.map(flagMacro).join(" , ") + value + repeats(flag);
 }
 function flagLabel(flag: DocumentationFlag): string {
-	return flag.spellings.join(", ") + (takesNoValue(flag) ? "" : ` ${flag.type}`);
+	const value = flag.valueName === undefined ? "" : ` ${flag.valueName}`;
+	return flag.spellings.join(", ") + value + repeats(flag);
+}
+/** Entries by `.group()` heading, in first-seen order; ungrouped ones under `undefined`. */
+function byHeading<T extends { readonly heading?: string }>(
+	entries: readonly T[],
+): Map<string | undefined, T[]> {
+	const groups = new Map<string | undefined, T[]>();
+	for (const entry of entries)
+		groups.set(entry.heading, [...(groups.get(entry.heading) ?? []), entry]);
+	return groups;
 }
 function commandLabel(command: CommandDocumentation): string {
 	return command.aliases.length === 0
@@ -102,42 +112,51 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	// A man page intentionally summarizes only the root's immediate children;
 	// the shared model still resolves the complete visible tree for other adapters.
 	if (model.children.length > 0) {
-		lines.push(
-			".Sh SUBCOMMANDS",
-			`.Bl -tag -width ${Math.max(8, ...model.children.map((child) => commandLabel(child).length))}n`,
-		);
-		for (const child of [...model.children].sort(byName)) {
-			lines.push(`.It Nm ${commandLabel(child)}`);
-			const body = formatDescription(
-				child.description?.trim(),
-				undefined,
-				undefined,
-				undefined,
-				undefined,
-				child.deprecated,
+		lines.push(".Sh SUBCOMMANDS");
+		const groups = byHeading(model.children);
+		for (const [heading, children] of groups) {
+			if (heading !== undefined || groups.size > 1)
+				lines.push(`.Ss ${macroArgument(heading ?? "Additional commands")}`);
+			lines.push(
+				`.Bl -tag -width ${Math.max(8, ...children.map((child) => commandLabel(child).length))}n`,
 			);
-			if (body) lines.push(...bodyLines(body));
+			for (const child of children.sort(byName)) {
+				lines.push(`.It Nm ${commandLabel(child)}`);
+				const body = formatDescription(
+					child.description?.trim(),
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					child.deprecated,
+				);
+				if (body) lines.push(...bodyLines(body));
+			}
+			lines.push(".El");
 		}
-		lines.push(".El");
 	}
 	if (model.flags.length > 0) {
-		lines.push(
-			".Sh OPTIONS",
-			`.Bl -tag -width ${Math.max(8, ...model.flags.map((flag) => flagLabel(flag).length))}n`,
-		);
-		for (const flag of [...model.flags].sort(byName)) {
-			lines.push(`.It ${flagMacros(flag)}`);
-			const body = formatDescription(
-				flag.description,
-				flag.default,
-				flag.choices,
-				undefined,
-				flag.env,
-				flag.deprecated,
-			);
-			if (body) lines.push(...bodyLines(body));
+		lines.push(".Sh OPTIONS");
+		// Ungrouped flags, own and inherited, open the section without a heading.
+		const flagGroups = new Map([[undefined, []], ...byHeading(model.flags)]);
+		for (const [heading, flags] of flagGroups) {
+			if (flags.length === 0) continue;
+			if (heading !== undefined) lines.push(`.Ss ${macroArgument(heading)}`);
+			lines.push(`.Bl -tag -width ${Math.max(8, ...flags.map((flag) => flagLabel(flag).length))}n`);
+			for (const flag of flags.sort(byName)) {
+				lines.push(`.It ${flagMacros(flag)}`);
+				const body = formatDescription(
+					flag.description,
+					flag.default,
+					flag.choices,
+					undefined,
+					flag.env,
+					flag.deprecated,
+				);
+				if (body) lines.push(...bodyLines(body));
+			}
+			lines.push(".El");
 		}
-		lines.push(".El");
 	}
 	if (model.args.length > 0) {
 		lines.push(".Sh ARGUMENTS", ".Bl -tag -width 12n");
@@ -148,6 +167,14 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			if (body) lines.push(...bodyLines(body));
 		}
 		lines.push(".El");
+	}
+	if (model.examples.length > 0) {
+		lines.push(
+			".Sh EXAMPLES",
+			".Bd -literal -offset indent",
+			...model.examples.flatMap(bodyLines),
+			".Ed",
+		);
 	}
 	for (const metadataSection of sectionsFor(model.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);

@@ -104,6 +104,54 @@ Hello, Ada!
 </Step>
 </Steps>
 
+## Group commands and flags in help
+
+Lead a command's help with `examples`, and list commands or flags under headings with `.group(title, block)`. Whatever the block registers belongs to the group: `g.add()` and `g.command()` make a command group, `g.flags()` a flag group. The first call decides, and calling the other kind is a compile error; blocks do not nest.
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/commands-groups.ts
+</include>
+
+```sh
+$ my-cli --help
+my-cli
+
+Usage:
+  my-cli <command> [options]
+
+Core commands:
+  deploy     Deploy a release
+
+Additional commands:
+  doctor     Check the setup
+
+Global options:
+  -h, --help                   Show help
+
+$ my-cli deploy --help
+my-cli deploy - Deploy a release
+
+Usage:
+  my-cli deploy [options]
+
+Examples:
+  my-cli deploy --memory 512M
+
+Options:
+  --force                      Skip checks
+
+Resources:
+  --memory <bytes>             Memory limit
+
+Global options:
+  -h, --help                   Show help
+```
+
+- A group changes documentation only: help and [man pages](/docs/modules/man) list both kinds, and the [`--llms` index](/docs/modules/extensions/schema) lists flag groups. Routing, parsing, and types are the same as with `.add()`, `.command()`, and `.flags()`.
+- The parent decides the group, so one definition can sit in different groups under different parents.
+- Command groups come in code order, then "Additional commands": the ungrouped ones and those Extensions add. Flags: the command's own ungrouped ones, the flag groups in code order, then "Global options", the flags it does not declare itself (a Context's, or a recursive Extension's), which cannot be grouped. A root-only Extension flag, such as `--version`, is listed with the root's own.
+- `examples` are listed right after the usage line in help, and in man pages, skills, and the `--llms` index. The root takes them in `new Crust()` metadata.
+
 ## Documentation sections
 
 Document what help can't infer, such as exit codes or environment variables, with `sections`: in a command's `defineCommand()` config, or in `new Crust()` metadata for the root.
@@ -119,7 +167,7 @@ my-cli deploy - Deploy a release
 Usage:
   my-cli deploy [options]
 
-Options:
+Global options:
   -h, --help                   Show help
 
 Exit codes:

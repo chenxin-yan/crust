@@ -61,7 +61,7 @@ command.flags({
 // my-cli build --target <Tab> offers browser, bun, and node
 ```
 
-String `choices` become static candidates. `path` and unconstrained `string` values use file completion where supported, while `url` and `json` values do not.
+String `choices` become static candidates, and so does the string `enum` of a flag's schema. A candidate must start with a letter or digit and hold only letters, digits, and `_ . + : @ / -`; any other value stops `completion <shell>` and `crust build` with an error that names it. `path` and unconstrained `string` values use file completion where supported, while `url` and `json` values do not.
 
 Boolean flags do not consume a value. Hidden commands and their descendants are omitted.
 

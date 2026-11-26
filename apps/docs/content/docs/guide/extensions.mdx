@@ -138,7 +138,7 @@ deploying to the default region
 - The app changes no `tsconfig`. Once any file in the project imports the package, the key is typed on every definition, in every file, inline `.command()` children and `defineCommand()` files included. Without the package, the key is an unknown-key compile error.
 - Core never reads the key. Snapshots pass it through unchanged, so the Extension reads `flag.hint` typed, without a cast.
 - The value must be JSON data or a function. `crust build` leaves a function out of the snapshot file it writes, and fails on anything else JSON refuses, such as a BigInt or a cyclic object.
-- The key cannot be named `toJSON` or after a field a snapshot sets itself (`inputSchema`, `extension`): `.owns()` refuses it with a `DEFINITION` error (`reserved-name`).
+- The key cannot be named `toJSON` or after a field a snapshot sets itself (`inputSchema`, `extension`, `inherited`): `.owns()` refuses it with a `DEFINITION` error (`reserved-name`).
 - A definition that sets a key no installed Extension owns is a `DEFINITION` error (`unowned-key`) from source and in `crust build`: the type exists whenever the package is in the project, even if the app never calls `.extend()` with its Extension.
 
 Two rules keep an owned key safe for every app that uses it:
@@ -169,7 +169,12 @@ setup → handle → preRun → validation → action → postRun
 | `onError`   | `execute()` failures, in `.extend()` order                                                                          | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
 
 - **`setup`:** every setup runs, so setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup. It runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
-- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully.
+- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully. It also runs for commands an Extension contributes, such as `help deploy`: a gate that should let one through compares `command.extension`, the id of the Extension that contributed it, with that Extension's `id`:
+
+<include lang="ts" meta='title="require-login.ts"'>
+  ../../../examples/guide/extensions-gate.ts
+</include>
+
 - **`postRun`:** a `completed` outcome carries `outcome.result`: the [`.output()`](/docs/api/crust#outputschema) schema's output if the command declares one, otherwise the action's awaited return value. After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` outcomes also carry its yielded values as `outcome.events`.
 - **Early failures:** routing, argv-parse, and typed `run()` input failures happen before the other hooks. Under `execute()`, `onError` still sees routing and argv-parse failures; `run()` never calls `onError` and returns a `failed` outcome.
 - **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares, from source or in `crust build`.

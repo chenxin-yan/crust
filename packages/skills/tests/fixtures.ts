@@ -49,6 +49,7 @@ export interface CommandFixture {
 		name: string;
 		description?: string;
 		usage?: string;
+		examples?: readonly string[];
 		hidden?: boolean;
 		sections?: readonly CommandSection[];
 	};
