@@ -262,6 +262,25 @@ describe("json", () => {
 		);
 	});
 
+	it("leaves out undefined object properties, as JSON.stringify does", async () => {
+		const app = appReturning(() => ({ prompt: "enabled", editor: undefined }));
+
+		expect(await captureExecute(app, ["--json"])).toMatchObject({
+			stdout: '{"prompt":"enabled"}\n',
+			exitCode: 0,
+		});
+	});
+
+	it("names where a value that is not JSON data sits", async () => {
+		const app = appReturning(() => ({ items: [{}, { createdAt: new Date(0) }] }));
+
+		const { stderr } = await captureExecute(app, ["--json"]);
+
+		expect(JSON.parse(stderr.split("\n")[1]!).message).toBe(
+			"--json: the command result is not JSON data (items[1].createdAt: Not a plain object).",
+		);
+	});
+
 	// The serialization error fails the action, so postRun hooks see a failed outcome and a
 	// throwing one cannot replace it.
 	it.each(["json first", "other first"])(
@@ -356,16 +375,51 @@ describe("json", () => {
 		expect(exitCode).toBe(2);
 	});
 
-	it.each([
-		["routing", ["nope", "--json"]],
-		["argv syntax", ["deploy", "--json", "--unknown"]],
-	])("falls back to the default renderer when %s fails before flags are bound", async (_, argv) => {
+	it("falls back to the default renderer when routing fails before flags are bound", async () => {
 		const app = new Crust("app").extend(json()).command("deploy", (cmd) => cmd.action(() => {}));
 
-		const { stderr, exitCode } = await captureExecute(app, argv);
+		const { stderr, exitCode } = await captureExecute(app, ["nope", "--json"]);
 
 		expect(stderr).toMatch(/^Error: /);
 		expect(exitCode).toBe(2);
+	});
+
+	it.each([
+		[["deploy", "--json", "--unknown"], { flag: "unknown", reason: "unknown-flag" }],
+		[["deploy", "--json", "--region"], { flag: "region", reason: "missing-value" }],
+	])("renders an argv syntax error in %j as JSON", async (argv, details) => {
+		const app = new Crust("app")
+			.extend(json())
+			.command("deploy", (cmd) => cmd.flags({ region: { type: "string" } }).action(() => {}));
+
+		const { stdout, stderr, exitCode } = await captureExecute(app, argv);
+
+		expect(stdout).toBe("");
+		expect(JSON.parse(stderr)).toEqual({ code: "PARSE", message: expect.any(String), details });
+		expect(exitCode).toBe(2);
+	});
+
+	it.each([
+		["without --json", ["deploy", "--unknown"]],
+		["with --json after --", ["deploy", "--unknown", "--", "--json"]],
+	])("leaves an argv syntax error as text %s", async (_label, argv) => {
+		const app = new Crust("app").extend(json()).command("deploy", (cmd) => cmd.action(() => {}));
+
+		expect((await captureExecute(app, argv)).stderr).toBe('Error: Unknown flag "--unknown"\n');
+	});
+
+	it("leaves an action's PARSE error as text when --json was a passthrough argument", async () => {
+		const app = new Crust("app").extend(json()).command("exec", (cmd) =>
+			cmd.args({ name: "words", type: "string", variadic: "passthrough" }).action(() => {
+				throw new CrustError("PARSE", "bad input");
+			}),
+		);
+
+		expect(await captureExecute(app, ["exec", "boom", "--json"])).toEqual({
+			stdout: "",
+			stderr: "Error: bad input\n",
+			exitCode: 2,
+		});
 	});
 
 	describe("commands with .output()", () => {

@@ -10,12 +10,12 @@ import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help } from "./help.ts";
-import { input } from "./input.ts";
+import { jsonInput } from "./json-input.ts";
 import { json } from "./json.ts";
 
 function deployApp() {
 	return new Crust("app")
-		.extend(input())
+		.extend(jsonInput())
 		.args({ name: "target", type: "string", required: true })
 		.flags({
 			region: { type: "string", default: "us" },
@@ -33,7 +33,7 @@ function deployApp() {
 }
 
 const packageDir = join(import.meta.dirname, "..");
-const inputModule = JSON.stringify(pathToFileURL(join(import.meta.dirname, "input.ts")).href);
+const inputModule = JSON.stringify(pathToFileURL(join(import.meta.dirname, "json-input.ts")).href);
 
 /** Runs `script` as a module on `command` with `stdin` piped in. */
 function runScript(command: string, options: readonly string[], script: string, stdin: string) {
@@ -54,7 +54,7 @@ async function failure(payload: string) {
 	return outcome.error;
 }
 
-describe("input", () => {
+describe("jsonInput", () => {
 	const tempDirs: string[] = [];
 
 	afterEach(() => {
@@ -84,7 +84,7 @@ describe("input", () => {
 
 	it("documents --input in a root help section that subcommands do not repeat", async () => {
 		const app = new Crust("app")
-			.extend(input(), help())
+			.extend(jsonInput(), help())
 			.command("deploy", (cmd) => cmd.action(() => {}));
 
 		expect((await captureExecute(app, ["--help"])).stdout).toContain("JSON input:");
@@ -131,7 +131,7 @@ describe("input", () => {
 			},
 		};
 		const app = new Crust("app")
-			.extend(input())
+			.extend(jsonInput())
 			.flags({ body: { type: "json", schema: named } })
 			.action(({ flags, stdout }) => stdout(JSON.stringify(flags.body)));
 
@@ -228,7 +228,7 @@ describe("input", () => {
 
 	it("rejects commands whose input is not one flat object only when --input is given", async () => {
 		const shared = new Crust("app")
-			.extend(input())
+			.extend(jsonInput())
 			.args({ name: "target", type: "string", default: "arg-default" })
 			.flags({ target: { type: "string", default: "flag-default" } })
 			.action(({ args, flags }) => `${args.target} ${flags.target}`);
@@ -247,7 +247,7 @@ describe("input", () => {
 	});
 
 	it("reads --input before a flag handler such as --help takes over", async () => {
-		const app = new Crust("app").extend(input(), help()).action(() => "ran");
+		const app = new Crust("app").extend(jsonInput(), help()).action(() => "ran");
 
 		const valid = await captureExecute(app, ["--input", "{}", "--help"]);
 		const unreadable = await captureExecute(app, [
@@ -263,13 +263,13 @@ describe("input", () => {
 		expect(unreadable.stdout).toContain("Usage:");
 	});
 
-	it("binds before every preRun, including one registered before input()", async () => {
+	it("binds before every preRun, including one registered before jsonInput()", async () => {
 		const seen: unknown[] = [];
 		const check = defineExtension(defineExtensionId("check")).preRun(
 			({ flags }) => void seen.push((flags as Record<string, unknown>).region),
 		);
 		const app = new Crust("app")
-			.extend(check, input())
+			.extend(check, jsonInput())
 			.flags({ region: { type: "string", default: "us" } })
 			.action(() => {});
 
@@ -281,7 +281,7 @@ describe("input", () => {
 
 	// Extension flags configure the invocation, so command input leaves them out.
 	it.each(["json", "help"])("rejects the Extension flag %s as JSON input", async (flag) => {
-		const app = new Crust("app").extend(input(), json(), help()).action(() => ({ ok: true }));
+		const app = new Crust("app").extend(jsonInput(), json(), help()).action(() => ({ ok: true }));
 
 		expect(await captureExecute(app, ["--input", JSON.stringify({ [flag]: true })])).toEqual({
 			stdout: "",
@@ -292,7 +292,7 @@ describe("input", () => {
 
 	it("binds an argument that shares the --input flag's name", async () => {
 		const app = new Crust("app")
-			.extend(input())
+			.extend(jsonInput())
 			.args({ name: "input", type: "string", required: true })
 			.action(({ args, stdout }) => stdout(args.input));
 
@@ -304,8 +304,8 @@ describe("input", () => {
 
 	// A setup failure comes after flags are bound, so json() still renders it.
 	it.each([
-		["input first", () => [input(), json()] as const],
-		["json first", () => [json(), input()] as const],
+		["input first", () => [jsonInput(), json()] as const],
+		["json first", () => [json(), jsonInput()] as const],
 	])("renders an --input error as one JSON line under --json (%s)", async (_order, extensions) => {
 		const app = new Crust("app").extend(...extensions()).action(() => ({ ok: true }));
 
@@ -335,9 +335,9 @@ describe("input", () => {
 		const script = `
 			${prelude}
 			import { Crust } from "@crustjs/core";
-			import { input } from ${inputModule};
+			import { jsonInput } from ${inputModule};
 			const app = new Crust("app")
-				.extend(input())
+				.extend(jsonInput())
 				.flags({ region: { type: "string", default: "us" } })
 				.action(({ flags, stdout }) => stdout(flags.region));
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
@@ -352,9 +352,9 @@ describe("input", () => {
 	it("refuses - while another reader consumes stdin", () => {
 		const script = `
 			import { Crust } from "@crustjs/core";
-			import { input } from ${inputModule};
+			import { jsonInput } from ${inputModule};
 			process.stdin.on("data", () => {});
-			const app = new Crust("app").extend(input()).action(() => {});
+			const app = new Crust("app").extend(jsonInput()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 			process.stdin.destroy();
 		`;
@@ -373,9 +373,9 @@ describe("input", () => {
 	])("reads stdin that already ended as empty input on %s", (_runtime, command, options) => {
 		const script = `
 			import { Crust } from "@crustjs/core";
-			import { input } from ${inputModule};
+			import { jsonInput } from ${inputModule};
 			for await (const _ of process.stdin);
-			const app = new Crust("app").extend(input()).action(() => {});
+			const app = new Crust("app").extend(jsonInput()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
 		const run = runScript(command, options, script, '{"region":"eu"}');
@@ -392,9 +392,9 @@ describe("input", () => {
 		async (_runtime, command, options) => {
 			const script = `
 			import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
-			import { input } from ${inputModule};
+			import { jsonInput } from ${inputModule};
 			const ready = defineExtension(defineExtensionId("ready")).setup(({ stderr }) => stderr("ready"));
-			const app = new Crust("app").extend(ready, input()).action(() => {});
+			const app = new Crust("app").extend(ready, jsonInput()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;
 			// stdin stays open, so only cancellation can end the read.

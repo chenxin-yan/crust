@@ -1,0 +1,64 @@
+---
+title: Confirmation
+description: Ask before a destructive change, or take --yes.
+---
+
+## Usage
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/confirmation.ts
+</include>
+
+```sh
+$ my-cli drop -y
+Dropped
+
+$ my-cli drop < /dev/null
+Error: Confirmation required: Drop the database? Pass --yes to confirm.
+```
+
+`confirmation()` takes no options and provides the `confirm` Context:
+
+1. Declare it with [`.use(confirmation)`](/docs/guide/extensions#use-an-extensions-contexts-from-a-command).
+2. `await ctx.confirm` to get the `ask` function.
+3. `await ask(message)` before changing anything. It resolves once confirmed and throws otherwise, so the code after it runs only when confirmed.
+
+Without `.extend(confirmation())` on the app, `.use(confirmation)` is a type error, and preparing the app throws a `DEFINITION` error.
+
+## Behavior
+
+The Context owns a boolean `--yes` flag, `-y` for short. It always means "skip the question". Commands that `.use(confirmation)` accept it, as do the root and its inline `.command()` children; other commands reject it as an unknown flag. When the command calls `ask(message)`:
+
+- with `--yes` or `-y`, it resolves without asking;
+- when [`canPrompt()`](/docs/modules/prompts#non-interactive-environments) is true, that is when stdin and stderr are both terminals and `CI` is unset (an empty string, `0`, or `false` in any letter case counts as unset), or a [`withTerminalIO`](/docs/modules/prompts#injecting-io) scope supplies TTY streams (such as [`runInteractive()`](/docs/modules/testing#runinteractiveapp-argv)'s fake terminal, whatever `CI` is), it shows a yes/no prompt with `message` on stderr, defaulting to No. Yes resolves; No throws `Not confirmed: <message> Nothing was changed.` (exit code 1). Ctrl-C or Ctrl-D cancels the command (exit code 130);
+- otherwise it throws the exported `ConfirmationRequiredError`, `Confirmation required: <message> Pass --yes to confirm.` (exit code 1), so a script, an agent, or a CI job with a pseudo-terminal never waits on a prompt and never succeeds unconfirmed.
+
+`--yes` is a normal flag:
+
+- [`jsonInput()`](/docs/modules/extensions/json-input) can supply it where it is accepted: `--input '{"yes":true}'`.
+- Only commands that accept it list it in `--help`, [`schema`](/docs/modules/extensions/schema), and [MCP](/docs/modules/mcp) tool inputs.
+
+The prompt from [`@crustjs/prompts`](/docs/modules/prompts) loads only when a command asks.
+
+## Limitations
+
+`--yes` is a Context-owned flag, so a command that accepts it cannot declare its own `yes` flag, or another flag with the short `-y`, while `confirmation()` is registered.
+
+## Recipes
+
+`--force` is a different idea from `--yes`, so it stays a command's own flag. A command that wants `--force` to skip the question too checks it first:
+
+```ts
+if (!flags.force) await ask("Overwrite the existing files?");
+```
+
+There is no built-in "type the name to confirm" mode. Ask with an [`input()`](/docs/modules/prompts) prompt unless `--yes` was given:
+
+```ts
+if (!flags.yes) {
+  const typed = await input({ message: `Type ${args.name} to delete it` });
+  if (typed !== args.name) throw new Error("Not confirmed. Nothing was changed.");
+}
+```
+
+The command reads `flags.yes`, the Context's flag, because it uses the Context. Without a terminal, `input()` rejects, so pass `--yes` in scripts.

@@ -80,6 +80,31 @@ describe("nextSteps", () => {
 		});
 	});
 
+	it("prints text steps as written, beside command steps", async () => {
+		const create = defineCommand("create", (cmd) =>
+			cmd
+				.use(nextSteps)
+				.args({ name: "dir", type: "string", required: true })
+				.action(async ({ args, ctx }) => {
+					const next = await ctx.nextSteps;
+					next.add(`cd ${args.dir}`);
+					next.add("pnpm install", "Install dependencies");
+					next.add(logs);
+				}),
+		);
+		const onError = () => [{ command: "rm -rf 'my app'", description: "Start over" }];
+		const app = new Crust("app").extend(nextSteps({ onError })).add(create, logs);
+
+		expect(await captureExecute(app, ["create", "my-app"])).toEqual({
+			stdout: "",
+			stderr: "Next steps:\n  cd my-app\n  Install dependencies:\n    pnpm install\n  app logs\n",
+			exitCode: 0,
+		});
+		expect((await captureExecute(app, ["create"])).stderr).toContain(
+			"Next steps:\n  Start over:\n    rm -rf 'my app'\n",
+		);
+	});
+
 	it("prints nothing when no step was added", async () => {
 		expect(await captureExecute(appWith(), ["login"])).toEqual({
 			stdout: "logged in\n",
@@ -619,8 +644,8 @@ describe("nextSteps", () => {
 		const { stderr } = await captureExecute(app, ["suggest"]);
 		const lines = stderr.split("\n").slice(0, -1);
 		expect(lines).toEqual([
-			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (Not JSON data)',
-			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (Not JSON data)',
+			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (limit: Not JSON data)',
+			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling ([0]: Not JSON data)',
 			'nextSteps(): skipped "app show": "--meta" value has no JSON spelling (-0 does not survive JSON)',
 			"Next steps:",
 			`  app show --meta '{"limit":5,"tags":["a"]}'`,

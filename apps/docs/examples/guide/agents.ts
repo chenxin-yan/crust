@@ -1,11 +1,11 @@
 //#region deploy
 import { defineCommand } from "@crustjs/core";
-import { confirm, nextSteps } from "@crustjs/extensions";
+import { confirmation, nextSteps } from "@crustjs/extensions";
 import { z } from "zod";
 
 const deploy = defineCommand("deploy", { description: "Deploy a release" }, (cmd) =>
 	cmd
-		.use(confirm, nextSteps)
+		.use(confirmation, nextSteps)
 		.args({ name: "target", type: "string", required: true, choices: ["staging", "prod"] })
 		.flags({
 			release: { type: "string", default: "latest", description: "Release to deploy" },
@@ -68,11 +68,11 @@ const init = defineCommand("init", { description: "Create a project" }, (cmd) =>
 
 //#region app
 import { Crust } from "@crustjs/core";
-// `confirm` and `nextSteps` are imported with `deploy` above.
-import { help, input, json, schema } from "@crustjs/extensions";
+// `confirmation` and `nextSteps` are imported with `deploy` above.
+import { help, json, jsonInput, schema } from "@crustjs/extensions";
 
 export const app = new Crust("my-cli", { description: "Deploy releases" })
-	.extend(help(), input(), json(), schema(), confirm(), nextSteps())
+	.extend(help(), jsonInput(), json(), schema(), confirmation(), nextSteps())
 	.add(deploy, status, init);
 //#endregion
 

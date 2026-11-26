@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { help, input, version } from "@crustjs/extensions";
+import { help, jsonInput, version } from "@crustjs/extensions";
 import { captureExecute, type ExecutableApp, withEnv } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -84,7 +84,7 @@ function acme() {
 	});
 	const app = shows(
 		config,
-		new Crust("acme", { version: "1.0.0" }).extend(help(), version(), input()) as never,
+		new Crust("acme", { version: "1.0.0" }).extend(help(), version(), jsonInput()) as never,
 	).command("ping", (command) =>
 		command.action(({ stdout }) => {
 			stdout("pong");

@@ -79,6 +79,8 @@ my-cli.fish
 
 With `--output-dir`, the required `<shell>` still selects a valid invocation, but the command writes all three files. The directory is a [`path`](/docs/guide/values-and-validation) value: relative to the working directory, with `~` expanded. It preserves unrelated files in that directory.
 
+Without `--output-dir`, the command also returns the script it prints, so [`--json`](/docs/modules/extensions/json) prints it as one JSON string instead of an empty stdout; with `--output-dir` it returns nothing.
+
 ### Build artifacts
 
 ```text

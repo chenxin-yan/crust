@@ -73,7 +73,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 
 The preview flag above is available on every command, so no command may declare its own `--preview`. The action of each command added after `.extend()` sees it in its `flags` type, inline `.command()` children at any depth included. Set `recursive: false` on a flag definition to make it root-only; then only the root's flags must avoid its spellings, and a subcommand that reuses one must take a value only if the root's flag does.
 
-Extension flags configure the invocation, not the command, so [`--input`](/docs/modules/extensions/input) JSON, `schema`, and [MCP](/docs/modules/mcp#tools) tool inputs leave them out. For a flag agents should set, own it through a [provided Context](#dependency-injection) instead.
+Extension flags configure the invocation, not the command, so [`--input`](/docs/modules/extensions/json-input) JSON, `schema`, and [MCP](/docs/modules/mcp#tools) tool inputs leave them out. For a flag agents should set, own it through a [provided Context](#dependency-injection) instead.
 
 An Extension can also install top-level commands:
 
@@ -209,7 +209,7 @@ Two methods bind values into the invocation from `setup` or `preRun`. Later hook
 | `ctx.bindInput({ args, flags })` | Typed values: a number, a `URL`, parsed JSON                       | Typed `run()` input                                                                                      |
 | `ctx.bindText({ args, flags })`  | Text, such as a prompt's answer: one string, or one per occurrence | The same words on the command line: `type`, `choices`, a custom `parse`, a repeatable flag's `delimiter` |
 
-Use `bindInput` for structured input, such as the JSON [`input()`](/docs/modules/extensions/input) reads from `--input`. Use `bindText` for what a person typed: `bindInput({ flags: { port: "8080" } })` fails, because `"8080"` is not a number, and converting the text yourself first would run a custom `parse` twice. A value `bindText` rejects throws the `PARSE` error the same word gets on the command line, so a prompt can show it and ask again:
+Use `bindInput` for structured input, such as the JSON [`jsonInput()`](/docs/modules/extensions/json-input) reads from `--input`. Use `bindText` for what a person typed: `bindInput({ flags: { port: "8080" } })` fails, because `"8080"` is not a number, and converting the text yourself first would run a custom `parse` twice. A value `bindText` rejects throws the `PARSE` error the same word gets on the command line, so a prompt can show it and ask again:
 
 ```ts
 defineExtension(defineExtensionId("acme:port")).preRun((ctx) => {

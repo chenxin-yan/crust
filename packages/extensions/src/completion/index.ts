@@ -10,6 +10,8 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 
+import { optionalTextOutput } from "../text-output.ts";
+
 // Renderers, templates and file writing load on first use (see render.ts), so
 // registering completion() costs nothing until a script is generated.
 const loadRenderer = () => import("./render.ts");
@@ -71,7 +73,7 @@ export type CompletionCommandDefinition<Name extends string = "completion"> = Co
 			};
 		},
 		{},
-		void,
+		string | undefined,
 		{}
 	>
 >;
@@ -158,14 +160,18 @@ const completionFactory: ExtensionFactory<
 						description: OUTPUT_DIR_DESCRIPTION,
 					},
 				})
+				.output(optionalTextOutput)
 				.action(async (context) => {
 					const renderer = await loadRenderer();
 					const outputDir = context.flags["output-dir"];
 					if (outputDir === undefined) {
-						context.stdout(
-							renderer.renderCompletionScript(context.args.shell, context.rootCommand, options),
+						const script = renderer.renderCompletionScript(
+							context.args.shell,
+							context.rootCommand,
+							options,
 						);
-						return;
+						context.stdout(script);
+						return script;
 					}
 
 					// File path: write **all** supported shells. This matches

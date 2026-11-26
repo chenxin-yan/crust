@@ -35,7 +35,14 @@ The command declares an [`.output()`](/docs/api/crust#outputschema) schema and r
 
 <include lang="ts">../../../../examples/modules/extensions/search.ts#run</include>
 
-`search()` also contributes a "Find a command" section, `my-cli search "<task>"`, to the root command's [documentation](/docs/guide/extensions#section-consumers). [`help()`](/docs/modules/extensions/help) and [`schema()`](/docs/modules/extensions/schema), when installed, render it in `--help` and `--llms`, so those point agents at it. An application that defines its own `search` command cannot also extend `search()`: the names collide.
+`search()` also contributes a "Find a command" section, `my-cli search "<task>"`, to the root command's [documentation](/docs/guide/extensions#section-consumers). [`help()`](/docs/modules/extensions/help) and [`schema()`](/docs/modules/extensions/schema), when installed, render it in `--help` and `--llms`, so those point agents at it. An application that defines its own `search` command renames this one with `command`; the section names it too:
+
+```ts
+new Crust("my-cli").extend(search({ command: "find" }));
+// $ my-cli find "rotate an api key"
+```
+
+A literal name keeps the command tree typed, so `app.run(["find"], …)` type-checks; a name typed `string` leaves it open.
 
 ## Ranking
 

@@ -44,8 +44,10 @@ const flushHeld = /* @__PURE__ */ new WeakMap<ExtensionContext, () => void>();
  * closed stdout), or a failure another Extension's `onError` hook claims, ends
  * the stream without that final line, so consumers should check the exit status. Cleanup that fails after a failure
  * was rendered, or while a cancellation unwinds, is written to stderr as one
- * `{"type":"cleanup","error":…}` line. Exit codes are unchanged. Adds a
- * "JSON output" section to the root command's documentation saying so.
+ * `{"type":"cleanup","error":…}` line. A `PARSE` error that stops the invocation
+ * before the flag is read is written to stderr as JSON too when `--json` was typed
+ * before any `--`. Exit codes are unchanged. Adds a "JSON output" section to the root
+ * command's documentation saying so.
  *
  * @see https://crustjs.com/docs/modules/extensions/json
  */
@@ -62,7 +64,11 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			},
 		])
 		.renderer(async (ctx) => {
-			if (ctx.flags.json !== true) return undefined;
+			if (ctx.flags.json !== true) {
+				// Flags were bound, so `onError` must not go back to raw argv.
+				flushHeld.set(ctx, () => {});
+				return undefined;
+			}
 			// Loaded only under --json, keeping it out of every CLI's startup.
 			const { parseJsonValue, jsonErrorDetails } = await import("@crustjs/utils/json");
 			/** JSON text for `value`, or a clear failure naming `what` when JSON cannot represent it exactly. */
@@ -143,5 +149,15 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 					),
 			};
 		})
-		.postRun((ctx) => flushHeld.get(ctx)?.()),
+		.postRun((ctx) => flushHeld.get(ctx)?.())
+		// Argv that fails to parse never selects the renderer, but the person still asked for JSON.
+		.onError((error, ctx) => {
+			if (flushHeld.has(ctx) || !(error instanceof CrustError) || !error.is("PARSE")) return;
+			// shortcut: on a `PARSE` failure before binding, a `--json` meant for a passthrough argument also selects JSON here, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
+			const end = ctx.argv.indexOf("--");
+			const words = end === -1 ? ctx.argv : ctx.argv.slice(0, end);
+			if (!words.includes("--json")) return;
+			ctx.stderr(JSON.stringify(error.toJSON()));
+			return true;
+		}),
 );

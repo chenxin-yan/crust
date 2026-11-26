@@ -11,6 +11,7 @@ import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { help, renderHelp } from "./help.ts";
+import { json } from "./json.ts";
 import { noColor } from "./no-color.ts";
 
 const stripAnsi = stripVTControlCharacters;
@@ -618,6 +619,10 @@ describe("help", () => {
 
 		const typed = await app.run(["help"], { args: { command: ["db"] } });
 		expect(stripAnsi(typed.stdout)).toContain("app db");
+		expect(typed.status === "completed" && stripAnsi(typed.result ?? "")).toContain("app db");
+		const asJson = await captureExecute(app.extend(json()), ["help", "db", "--json"]);
+		expect(asJson.stderr).toBe("");
+		expect(stripAnsi(JSON.parse(asJson.stdout))).toContain("migrate (m)  Run migrations");
 		const withoutCommand = await captureExecute(
 			new Crust("app")
 				.extend(help())

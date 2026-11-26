@@ -434,7 +434,7 @@ Returns where a [command definition](/docs/api/crust#definecommandname-config-re
 Parses `argv` for the command at `path` as an invocation of that command would, and resolves to a `ParsedCommandArgv`: the command's canonical `path` and the `args` and `flags` its Command Action would receive. `path` has the form of `commandPath`, starting with the root's name; an alias routes as it does on the command line.
 
 - Values come from argv, then environment fallbacks and defaults; required values and Standard Schemas are checked, and schemas transform values, as before an action.
-- Only the commands on the path are built. No Extension hook, Context setup, or Command Action runs, so values other Extensions bind in their hooks, such as [`input()`](/docs/modules/extensions/input)'s `--input`, are not applied.
+- Only the commands on the path are built. No Extension hook, Context setup, or Command Action runs, so values other Extensions bind in their hooks, such as [`jsonInput()`](/docs/modules/extensions/json-input)'s `--input`, are not applied.
 - It rejects with `COMMAND_NOT_FOUND` for a name the path does not have, `PARSE` for a path that does not start at the root, and the `PARSE` or `VALIDATION` error the command's own invocation would fail with.
 
 #### `bindInput({ args, flags })`

@@ -27,7 +27,7 @@ Skills and MCP each add one `.extend()`. Every path reads the same command snaps
 
 ## Structured input
 
-[`input()`](/docs/modules/extensions/input) adds `--input`: every argument and flag as one JSON object, inline, from a file (`@path`), or from stdin (`-`). No quoting or ordering of argv tokens:
+[`jsonInput()`](/docs/modules/extensions/json-input) adds `--input`: every argument and flag as one JSON object, inline, from a file (`@path`), or from stdin (`-`). No quoting or ordering of argv tokens:
 
 ```sh
 $ my-cli deploy --input '{"target":"staging","release":"v2"}'
@@ -58,7 +58,7 @@ Next steps:                                              # stderr, see below
 ```
 
 - Failures become one line of JSON on stderr: [`CrustError`](/docs/api/errors)'s `toJSON()`, or `{ "message" }` for any other error.
-- Failures before flags are bound, such as an unknown flag, still print Core's plain `Error:` line; see [`json()` limitations](/docs/modules/extensions/json#limitations).
+- An unknown command under a parent without a Command Action fails during routing and still prints Core's plain `Error:` line; see [`json()` limitations](/docs/modules/extensions/json#limitations).
 - Exit codes don't change, so an agent still checks them first. Make messages actionable; see [error handling](/docs/guide/error-handling).
 
 ## Output schemas and end-to-end types
@@ -116,7 +116,7 @@ $ my-cli schema deploy
 {"input":{"type":"object","properties":{"target":{"type":"string","enum":["staging","prod"]},…},"required":["target"]},"output":{…}}
 ```
 
-`json()`, `input()`, and `search()` add "JSON output", "JSON input", and "Find a command" sections to root help. Document your own conventions, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
+`json()`, `jsonInput()`, and `search()` add "JSON output", "JSON input", and "Find a command" sections to root help. Document your own conventions, such as exit codes and environment variables, with [documentation sections](/docs/guide/commands#documentation-sections).
 
 ## Dry run
 
@@ -129,7 +129,7 @@ Would deploy latest to prod
 
 ## Confirmation
 
-Ask before a change that is hard to undo, without stalling an agent. With [`confirm()`](/docs/modules/extensions/confirm), a command calls `.use(confirm)`, awaits `ctx.confirm` for the function, and awaits that with a message before the change, as `deploy` does for `prod`.
+Ask before a change that is hard to undo, without stalling an agent. With [`confirmation()`](/docs/modules/extensions/confirmation), a command calls `.use(confirmation)`, awaits `ctx.confirm` for the function, and awaits that with a message before the change, as `deploy` does for `prod`.
 
 | Caller                                 | Result                                 |
 | -------------------------------------- | -------------------------------------- |
@@ -137,7 +137,7 @@ Ask before a change that is hard to undo, without stalling an agent. With [`conf
 | A person on a terminal                 | Yes/no prompt; "no" fails              |
 | No TTY, or `CI` set                    | Fails with `ConfirmationRequiredError` |
 
-On reusable commands, only those that `.use(confirm)` accept `--yes`; see [where `--yes` is accepted](/docs/modules/extensions/confirm#behavior). `CI` counts as set unless it is empty, `0`, or `false` in any letter case, because a CI job can run on a pseudo-terminal nobody answers. A terminal injected with [`withTerminalIO`](/docs/modules/prompts#injecting-io), such as [`runInteractive()`](/docs/modules/testing#runinteractiveapp-argv)'s, still prompts under `CI`, because the test that injected it answers it.
+On reusable commands, only those that `.use(confirmation)` accept `--yes`; see [where `--yes` is accepted](/docs/modules/extensions/confirmation#behavior). `CI` counts as set unless it is empty, `0`, or `false` in any letter case, because a CI job can run on a pseudo-terminal nobody answers. A terminal injected with [`withTerminalIO`](/docs/modules/prompts#injecting-io), such as [`runInteractive()`](/docs/modules/testing#runinteractiveapp-argv)'s, still prompts under `CI`, because the test that injected it answers it.
 
 ```sh
 $ my-cli deploy prod < /dev/null
@@ -149,7 +149,7 @@ Next steps:
     my-cli status prod
 ```
 
-`.use(confirm)` and `.use(nextSteps)` take the Extension itself, which [uses the Contexts it provides](/docs/guide/extensions#use-an-extensions-contexts-from-a-command); the app must `.extend()` it.
+`.use(confirmation)` and `.use(nextSteps)` take the Extension itself, which [uses the Contexts it provides](/docs/guide/extensions#use-an-extensions-contexts-from-a-command); the app must `.extend()` it.
 
 ## Next steps
 
@@ -185,7 +185,7 @@ $ my-cli init --name demo < /dev/null
 Created demo in us-east-1
 ```
 
-Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule. That rule, [`canPrompt()`](/docs/modules/prompts#non-interactive-environments), also refuses the process terminal under `CI`, for every prompt and [`confirm()`](/docs/modules/extensions/confirm), as [above](#confirmation).
+Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule. That rule, [`canPrompt()`](/docs/modules/prompts#non-interactive-environments), also refuses the process terminal under `CI`, for every prompt and [`confirmation()`](/docs/modules/extensions/confirmation), as [above](#confirmation).
 
 ## MCP
 
@@ -215,11 +215,11 @@ Agents and CI jobs can't complete a browser login. With [`@crustjs/auth`](/docs/
 - Every command, argument, and flag has a `description`.
 - Results are returned, not only printed.
 - Every command that returns data declares `.output()`: typed, validated, discoverable, and no duplicate text under `--json`.
-- [`json()`](/docs/modules/extensions/json), [`input()`](/docs/modules/extensions/input), and [`schema()`](/docs/modules/extensions/schema) are registered; a CLI with many commands adds [`search()`](/docs/modules/extensions/search).
+- [`json()`](/docs/modules/extensions/json), [`jsonInput()`](/docs/modules/extensions/json-input), and [`schema()`](/docs/modules/extensions/schema) are registered; a CLI with many commands adds [`search()`](/docs/modules/extensions/search).
 - Long-running commands yield events.
 - Long-running work passes `signal` to what it awaits: CI cancellation, agent harnesses, and `timeout` stop a command with `SIGTERM`, which aborts the `signal` and runs cleanup; the process then ends by `SIGTERM` (shells report 143). Work that ignores it runs until it finishes or a second `SIGTERM` arrives, and still ends by `SIGTERM`.
 - Commands that can preview declare a `dry-run` flag; generated API commands are previewed with `api preview`.
-- Commands that change things call [`confirm()`](/docs/modules/extensions/confirm)'s `ctx.confirm` first, after any dry-run preview.
+- Commands that change things call [`confirmation()`](/docs/modules/extensions/confirmation)'s `ctx.confirm` first, after any dry-run preview.
 - Error messages say what to do next; known failures have recovery steps from [`nextSteps()`](/docs/modules/extensions/next-steps).
 - Every prompt has a flag for `initial` or a `default`.
 - Optionally: an MCP server, a packaged skill, and an `api` command. `exclude` commands from the MCP server that an agent should not run unattended (generated API commands that write and delete are tools too; a [rule](/docs/modules/openapi#which-to-use) can leave them out), and set secrets through `env` bindings rather than tool arguments.

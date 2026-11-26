@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
@@ -10,6 +12,7 @@ import {
 	createStoreCacheAdapter,
 	fetchLatestVersion,
 	isNewerVersion,
+	lookUpLatestVersion,
 } from "./update-notifier-check.ts";
 import {
 	type UpdateNotifierCacheAdapter,
@@ -152,6 +155,85 @@ describe("fetchLatestVersion", () => {
 	});
 });
 
+describe("lookUpLatestVersion", () => {
+	it("returns the version the lookup resolves to", async () => {
+		expect(await lookUpLatestVersion(async () => "2.0.0", 5000)).toBe("2.0.0");
+		expect(await lookUpLatestVersion(() => "2.0.0", 5000)).toBe("2.0.0");
+	});
+
+	it.each([
+		["nothing", async () => undefined],
+		["an empty version", async () => ""],
+		["a throw", async () => Promise.reject(new Error("offline"))],
+		[
+			"a sync throw",
+			() => {
+				throw new Error("offline");
+			},
+		],
+	])("returns null when the lookup gives %s", async (_label, lookup) => {
+		expect(await lookUpLatestVersion(lookup, 5000)).toBeNull();
+	});
+
+	it("stops waiting at the timeout even when the lookup ignores its signal", async () => {
+		const seen: AbortSignal[] = [];
+		const result = await lookUpLatestVersion((signal) => {
+			seen.push(signal);
+			return new Promise<string>(() => {});
+		}, 20);
+
+		expect(result).toBeNull();
+		expect(seen[0]?.aborted).toBe(true);
+	});
+
+	it("keeps Node running until the timeout when the lookup never settles", () => {
+		// Vitest holds the event loop open itself, so only a separate process can see it end early.
+		const check = JSON.stringify(
+			pathToFileURL(join(import.meta.dirname, "update-notifier-check.ts")).href,
+		);
+		const script = `
+			import { lookUpLatestVersion } from ${check};
+			console.log(await lookUpLatestVersion(() => new Promise(() => {}), 20));
+		`;
+		const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+
+		expect(run.stdout).toBe("null\n");
+		expect(run.status).toBe(0);
+	});
+
+	it("leaves no pending rejection after a sync throw", async () => {
+		const lookup = () => {
+			throw new Error("offline");
+		};
+		expect(await lookUpLatestVersion(lookup, 10)).toBeNull();
+		// The timeout fires after the call returned; an unhandled rejection fails the run.
+		await new Promise((resolve) => setTimeout(resolve, 30));
+	});
+
+	it("does not call the lookup when the invocation signal has already aborted", async () => {
+		const lookup = vi.fn(() => "2.0.0");
+
+		expect(await lookUpLatestVersion(lookup, 5000, AbortSignal.abort())).toBeNull();
+		expect(lookup).not.toHaveBeenCalled();
+	});
+
+	it("stops waiting as soon as the invocation signal aborts", async () => {
+		const controller = new AbortController();
+		const result = lookUpLatestVersion(
+			() => new Promise<string>(() => {}),
+			60_000,
+			controller.signal,
+		);
+		controller.abort();
+
+		expect(await result).toBeNull();
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // updateNotifier — post-run integration tests
 // ────────────────────────────────────────────────────────────────────────────
@@ -250,6 +332,18 @@ describe("updateNotifier post-run hook", () => {
 				"https://registry.example.com",
 			);
 			expect(await privateRegistry.read()).toBeNull();
+		});
+
+		it("keeps a custom lookup's state apart from the registry's", async () => {
+			const fetchFn = mockRegistryResponse("2.0.0");
+			const lookup = vi.fn(async () => "3.0.0");
+
+			await runNotifier({ cache: undefined });
+			await runNotifier({ cache: undefined, latestVersion: lookup });
+			await runNotifier({ cache: undefined });
+
+			expect(lookup).toHaveBeenCalledTimes(1);
+			expect(fetchFn).toHaveBeenCalledTimes(2);
 		});
 	});
 
@@ -630,6 +724,16 @@ describe("updateNotifier post-run hook", () => {
 				expect.stringMatching(/^https:\/\/custom-registry\.example\.com\//),
 				expect.anything(),
 			);
+		});
+
+		it("asks latestVersion instead of the npm registry", async () => {
+			const fetchFn = mockRegistryResponse("9.0.0");
+
+			await runNotifier({ latestVersion: async () => "2.0.0" });
+
+			expect(fetchFn).not.toHaveBeenCalled();
+			expect(getOutput()).toContain("2.0.0");
+			expect(cachedState?.latestVersion).toBe("2.0.0");
 		});
 
 		it("uses custom updateCommand in the notice", async () => {

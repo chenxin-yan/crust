@@ -1,5 +1,5 @@
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
-import { input } from "@crustjs/extensions";
+import { jsonInput } from "@crustjs/extensions";
 
 import { mcpExtension } from "../../src/index.ts";
 
@@ -30,6 +30,6 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 			command.action(async ({ stdin }) => ({ text: await stdin.text() })),
 		),
 	)
-	.extend(input(), mcpExtension({ app: (): AnyCrust => app }));
+	.extend(jsonInput(), mcpExtension({ app: (): AnyCrust => app }));
 
 process.exitCode = await app.execute();

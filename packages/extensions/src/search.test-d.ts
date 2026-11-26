@@ -14,6 +14,15 @@ async function _searchRunIsTyped() {
 	void app.run(["search"], { args: { task: "rotate key" } });
 }
 
+async function _searchCommandNameIsTyped(dynamic: string) {
+	const renamed = new Crust("app").extend(search({ command: "find" }));
+	await renamed.run(["find"], { args: { task: ["x"] } });
+	// @ts-expect-error The command is renamed.
+	await renamed.run(["search"], { args: { task: ["x"] } });
+	// A dynamic name cannot be keyed statically, so the command tree stays open.
+	await new Crust("app").extend(search({ command: dynamic })).run(["anything"]);
+}
+
 // The ranking and the renderer load inside the action; neither is part of the package API.
 // @ts-expect-error -- not exported from @crustjs/extensions
 export type NoCreateSearchIndex = typeof extensions.createSearchIndex;

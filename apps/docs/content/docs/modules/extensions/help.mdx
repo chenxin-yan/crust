@@ -50,7 +50,7 @@ Global options:
 | --------- | --------- | ------- | ---------------------------------------------------------------------------------------------------------- |
 | `command` | `boolean` | `false` | Add a `help [command...]` command: `my-cli help db migrate` prints what `my-cli db migrate --help` prints. |
 
-The `help` command is off by default: in an app without subcommands it would take the root command's first argument. An unknown command after `help` is the usual `Unknown command` error. Unlike `--help`, the `help` command runs [`preRun` hooks](/docs/guide/extensions#hooks).
+The `help` command is off by default: in an app without subcommands it would take the root command's first argument. An unknown command after `help` is the usual `Unknown command` error. The command also returns the text it prints, so [`run()`](/docs/api/crust#runpath-input-options) gets it as the outcome's `result` and [`--json`](/docs/modules/extensions/json) prints it as one JSON string. Unlike `--help`, the `help` command runs [`preRun` hooks](/docs/guide/extensions#hooks).
 
 ## Behavior
 

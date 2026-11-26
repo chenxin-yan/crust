@@ -69,7 +69,9 @@ Write progress and instructions that must appear while the command runs (for exa
 A terminal shows both streams, so a person running `my-cli users --json` sees everything. Pipes, `>`, and agents read only stdout: `my-cli users --json | jq '.[0].name'` and `my-cli users --json > users.json` get just the JSON, while stderr still goes to the terminal. That's why data goes to stdout and messages for people go to stderr.
 </Callout>
 
-The result must be JSON data: finite numbers, strings, booleans, `null`, and plain arrays and objects of them. A result JSON cannot represent exactly, such as a `BigInt`, a cycle, a function, `-0`, or a class instance like `Date` or `Map`, fails the command with exit code 1 and an error naming the problem. Convert such values before returning them, for example `date.toISOString()`.
+The result must be JSON data: finite numbers, strings, booleans, `null`, and plain arrays and objects of them. An object property holding `undefined` is left out, as `JSON.stringify` leaves it out, so an optional field such as `z.string().optional()` may be `undefined`. A result JSON cannot represent exactly, such as a `BigInt`, a cycle, a function, `-0`, an `undefined` array element, or a class instance like `Date` or `Map`, fails the command with exit code 1 and an error naming where it sits and the problem, such as `--json: the command result is not JSON data (items[3].createdAt: Not a plain object).` Convert such values before returning them, for example `date.toISOString()`.
+
+Official commands whose product is text they print, such as [`help({ command: true })`](/docs/modules/extensions/help)'s `help`, [`completion`](/docs/modules/extensions/completion), and [`mcp config`](/docs/modules/mcp), declare `.output()` and return that text, so `--json` prints it once, as one JSON string: `my-cli completion bash --json > script.json` writes the script as a JSON string, and nothing reaches stderr.
 
 ## Generator actions
 
@@ -101,6 +103,7 @@ Pass `{ flags: { json: true } }` to [`run()`](/docs/api/crust#runpath-input-opti
 ## Limitations
 
 - `json()` sets the invocation's [renderer](/docs/guide/extensions#renderers). An application can have only one, so `json()` can't be combined with another Extension that sets `.renderer()`.
-- Failures before flags are bound print as plain text, because `--json` is not yet known: unknown commands under a parent without a Command Action, and argv syntax errors such as an unknown flag or a flag missing its value. `execute()` prints Core's default `Error:` line for them. A failure in an Extension's `setup`, such as an invalid [`--input`](/docs/modules/extensions/input), comes after binding and is JSON.
-- If another Extension's `onError` hook claims a failure, it keeps that Extension's format, and a generator action's stream ends without a final line.
+- An argv syntax error, such as an unknown flag or a flag missing its value, stops the invocation before flags are bound. `json()` still writes it as JSON on stderr when `--json` is its own word before any `--`, so `my-cli deploy --json --regoin eu` prints `{"code":"PARSE","message":"Unknown flag \"--regoin\"","details":{"flag":"regoin","reason":"unknown-flag"}}`. `details` holds what Core's [`PARSE` error](/docs/api/errors) carries, such as the flag's name.
+- Unknown commands under a parent without a Command Action fail during routing and print as plain text, Core's default `Error:` line. A failure in an Extension's `setup`, such as an invalid [`--input`](/docs/modules/extensions/json-input), comes after binding and is JSON.
+- If another Extension's `onError` hook claims a failure, it keeps that Extension's format, and a generator action's stream ends without a final line. For an argv syntax error, the first of them in `.extend()` order wins: with `help()` extended before `json()`, `--json --help --regoin` prints help.
 - A cancelled invocation (exit code 130, 143 after `SIGTERM`, or 141 after a closed stdout) is not rendered, so its stream also ends without a final line.

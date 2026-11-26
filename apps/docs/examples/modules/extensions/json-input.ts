@@ -1,7 +1,7 @@
 import { Crust } from "@crustjs/core";
-import { input } from "@crustjs/extensions";
+import { jsonInput } from "@crustjs/extensions";
 
-const app = new Crust("my-cli").extend(input()).command("deploy", (cmd) =>
+const app = new Crust("my-cli").extend(jsonInput()).command("deploy", (cmd) =>
 	cmd
 		.args({ name: "target", type: "string", required: true })
 		.flags({ region: { type: "string", default: "us" } })

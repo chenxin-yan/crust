@@ -3,6 +3,8 @@ import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
 import { didYouMean } from "./did-you-mean.ts";
+import { jsonInput } from "./json-input.ts";
+import { json } from "./json.ts";
 import { noColor } from "./no-color.ts";
 
 describe("didYouMean", () => {
@@ -151,5 +153,87 @@ describe("didYouMean", () => {
 		expect(stderr).toContain("Available commands: build, test");
 		expect(stderr).not.toContain("__complete");
 		expect(stderr).not.toContain("Did you mean");
+	});
+
+	it("suggests only names within two edits", async () => {
+		const app = new Crust("app")
+			.extend(didYouMean())
+			.add(defineCommand("add", (cmd) => cmd.action(() => {})))
+			.add(defineCommand("install", (cmd) => cmd.action(() => {})));
+
+		expect((await captureExecute(app, ["instal"])).stderr).toContain('Did you mean "install"?');
+		expect((await captureExecute(app, ["ins"])).stderr).toContain('Did you mean "install"?');
+		expect((await captureExecute(app, ["adz"])).stderr).toContain('Did you mean "add"?');
+		// Three edits from "add".
+		expect((await captureExecute(app, ["zzz"])).stderr).not.toContain("Did you mean");
+	});
+
+	it("never suggests a command for an empty word", async () => {
+		const app = new Crust("app")
+			.extend(didYouMean())
+			.add(defineCommand("add", (cmd) => cmd.action(() => {})))
+			.args({ name: "script", type: "string", required: true })
+			.action(({ args, command }) => {
+				throw unknownCommand(command, args.script);
+			});
+
+		const { stderr } = await captureExecute(app, [""]);
+
+		expect(stderr).toContain('Unknown command "".');
+		expect(stderr).not.toContain("Did you mean");
+	});
+
+	it("suggests a flag of the command the unknown flag was given to", async () => {
+		const app = new Crust("app").extend(didYouMean()).add(
+			defineCommand("create", (cmd) =>
+				cmd
+					.flags({
+						template: { type: "string", aliases: ["tpl"] },
+						color: { type: "boolean", default: true, aliases: ["ansi"] },
+						ok: { type: "boolean" },
+						secret: { type: "string", hidden: true },
+					})
+					.action(() => {}),
+			),
+		);
+		const stderrOf = async (...argv: string[]) => (await captureExecute(app, argv)).stderr;
+
+		expect(await captureExecute(app, ["create", "--tempalte", "vue"])).toEqual({
+			stdout: "",
+			stderr: 'Error: Unknown flag "--tempalte". Did you mean "--template"?\n',
+			exitCode: 2,
+		});
+		expect(await stderrOf("create", "--tpll")).toContain('Did you mean "--template"?');
+		expect(await stderrOf("create", "--no-colr")).toContain('Did you mean "--no-color"?');
+		expect(await stderrOf("create", "--no-ansii")).toContain('Did you mean "--no-color"?');
+		expect(await stderrOf("create", "--secrt")).toBe('Error: Unknown flag "--secrt"\n');
+		expect(await stderrOf("create", "--zzz")).toBe('Error: Unknown flag "--zzz"\n');
+		expect(await stderrOf("create", "-t")).toBe('Error: Unknown flag "-t"\n');
+		expect(await stderrOf("create", "-🟦")).toBe('Error: Unknown flag "-🟦"\n');
+	});
+
+	it("never suggests the flag the error already names", async () => {
+		const app = new Crust("app").extend(didYouMean(), jsonInput(), json()).action(() => {});
+
+		const { stderr } = await captureExecute(app, ["--input", '{"json":true}']);
+
+		expect(stderr).toContain('Flag "--json" is not command input');
+		expect(stderr).not.toContain("Did you mean");
+	});
+
+	it("keeps a flag suggestion in the JSON error under --json", async () => {
+		const app = new Crust("app")
+			.extend(didYouMean(), json())
+			.flags({ template: { type: "string" } })
+			.action(() => {});
+
+		const { stderr, exitCode } = await captureExecute(app, ["--json", "--tempalte", "vue"]);
+
+		expect(JSON.parse(stderr)).toEqual({
+			code: "PARSE",
+			message: 'Unknown flag "--tempalte". Did you mean "--template"?',
+			details: { flag: "tempalte", reason: "unknown-flag" },
+		});
+		expect(exitCode).toBe(2);
 	});
 });

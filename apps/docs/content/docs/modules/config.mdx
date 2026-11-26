@@ -34,7 +34,7 @@ The settings are plain [Contexts](/docs/guide/contexts). `config.extension` has 
 
 Each setting is the first of:
 
-1. its flag on the command line (`--org`), or its key in [`--input`](/docs/modules/extensions/input) or in typed [`run()`](/docs/api/crust#runpath-input-options) input;
+1. its flag on the command line (`--org`), or its key in [`--input`](/docs/modules/extensions/json-input) or in typed [`run()`](/docs/api/crust#runpath-input-options) input;
 2. its environment variable (`$ACME_ORG`);
 3. the project file, `acme.config.json`, the nearest one from the working directory up;
 4. the global file, `config.json` in the [configuration directory](/docs/modules/store#storage-paths) of the app (`~/.config/acme` on Linux and macOS, `%APPDATA%\acme` on Windows);

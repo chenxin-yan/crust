@@ -1,3 +1,7 @@
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
 	type AnyCrust,
 	Crust,
@@ -8,7 +12,7 @@ import {
 	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
-import { json, nextSteps } from "@crustjs/extensions";
+import { completion, json, nextSteps } from "@crustjs/extensions";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -466,6 +470,21 @@ describe("createMcpServer", () => {
 		});
 	});
 
+	it("reports completion --output-dir as a success, though it returns no script", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "crust-mcp-completion-"));
+		cleanups.push(() => rm(dir, { recursive: true, force: true }));
+		const app = new Crust("cli", { version: "1.0.0" }).extend(completion());
+		const client = await connect(app, { include: [["completion"]] });
+
+		const result = await client.callTool({
+			name: "completion",
+			arguments: { shell: "bash", "output-dir": dir },
+		});
+
+		expect(result.isError).toBeUndefined();
+		expect((await readdir(dir)).length).toBeGreaterThan(0);
+	});
+
 	it("sends progress notifications for yielded events when the request has a progress token", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("sync", (c) =>
@@ -803,6 +822,8 @@ describe("toolResultFromOutcome", () => {
 		["shared reference in arrays", [shared, [shared]], { result: [shared, [shared]] }],
 		["null-prototype object", Object.assign(Object.create(null), { a: 1 }), { a: 1 }],
 		["own __proto__ key", JSON.parse('{"__proto__":{"a":1}}'), JSON.parse('{"__proto__":{"a":1}}')],
+		// Left out, as JSON.stringify leaves it out.
+		["object holding undefined", { a: undefined, b: 1 }, { b: 1 }],
 	])("structures faithful JSON: %s", (_label, result, structured) => {
 		expect(toolResultFromOutcome(completed(result))).toEqual({
 			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -826,7 +847,6 @@ describe("toolResultFromOutcome", () => {
 		["Date", new Date(0)],
 		["Map", new Map()],
 		["URL", new URL("https://example.com")],
-		["object holding undefined", { a: undefined }],
 		["object with symbol key", { [Symbol("s")]: 1 }],
 		[
 			"cycle",

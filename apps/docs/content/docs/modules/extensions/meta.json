@@ -8,10 +8,10 @@
     "no-color",
     "update-notifier",
     "json",
-    "input",
+    "json-input",
     "schema",
     "search",
-    "confirm",
+    "confirmation",
     "next-steps",
     "telemetry"
   ]

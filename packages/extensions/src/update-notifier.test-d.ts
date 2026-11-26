@@ -21,3 +21,15 @@ function _updateNotifierRequiresGuaranteedRootMeta(meta: RootCommandMeta) {
 	// @ts-expect-error Optional root metadata does not guarantee a version.
 	new Crust("app", meta).extend(updateNotifier({ packageName: "app" }));
 }
+
+function _updateNotifierVersionSource() {
+	updateNotifier({ packageName: "app", currentVersion: "1", latestVersion: async () => "2" });
+	updateNotifier({ packageName: "app", currentVersion: "1", registryUrl: "https://r.test" });
+	// @ts-expect-error latestVersion replaces the registry, so a registryUrl would be ignored.
+	updateNotifier({
+		packageName: "app",
+		currentVersion: "1",
+		registryUrl: "https://r.test",
+		latestVersion: async () => "2",
+	});
+}

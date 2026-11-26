@@ -1,5 +1,5 @@
 import { type ContextMap, Crust, defineCommand, defineContext } from "@crustjs/core";
-import { confirm, help } from "@crustjs/extensions";
+import { confirmation, help } from "@crustjs/extensions";
 
 import { type ApiClient, bearerAuth, defineApi } from "./index.ts";
 import type { SpecOperationsOf } from "./typed-client.ts";
@@ -273,7 +273,7 @@ const purge = defineCommand("purge", (command) =>
 
 function _typecheckChainContexts() {
 	const acme = defineApi({ spec, baseUrl })
-		.use(confirm, account)
+		.use(confirmation, account)
 		.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
 		.each((op) => ({
 			bind: { id: async (ctx) => (await ctx.account).id },
@@ -282,21 +282,21 @@ function _typecheckChainContexts() {
 		.add("users", purge);
 	// Every Context the generated and the added commands use is provided.
 	new Crust("acme")
-		.extend(help(), confirm(), acme.extension)
+		.extend(help(), confirmation(), acme.extension)
 		.provide(account(), region())
 		.add(...acme.commands);
 	new Crust("acme")
-		.extend(help(), confirm(), acme.extension)
+		.extend(help(), confirmation(), acme.extension)
 		.provide(account())
 		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `region`, which the added `purge` uses
 		.add(...acme.commands);
 	new Crust("acme")
-		.extend(help(), confirm(), acme.extension)
+		.extend(help(), confirmation(), acme.extension)
 		.provide(region())
 		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `account`, which `.use()` declared
 		.add(...acme.commands);
 	new Crust("acme")
-		.extend(help(), confirm())
+		.extend(help(), confirmation())
 		.provide(account(), region())
 		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `api`, which acme.extension provides
 		.add(...acme.commands);
@@ -306,7 +306,7 @@ function _typecheckChainContexts() {
 		// @ts-expect-error -- `confirm` was not `.use()`d before
 		.onConfirm(async (ctx, message) => (await ctx.confirm)(message));
 	defineApi({ spec, baseUrl })
-		.use(confirm)
+		.use(confirmation)
 		// @ts-expect-error -- a binding resolves to a string
 		.each(() => ({ bind: { id: async (ctx) => (await ctx.confirm)("x") } }));
 	// An added command's Contexts are not the generated commands': `.use()` them for a callback.
@@ -377,18 +377,18 @@ function _typecheckAuthChain() {
 	);
 	// Contexts `.use()`d after `.auth()` are the callbacks', not the client's.
 	const acme = api
-		.use(confirm, region)
+		.use(confirmation, region)
 		.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
 		.each(() => ({ bind: { id: async (ctx) => `${await ctx.profile}-${await ctx.region}` } }))
 		.add("users", whoami);
 	new Crust("acme")
 		.provide(profile(), account(), region())
-		.extend(confirm(), acme.extension)
+		.extend(confirmation(), acme.extension)
 		.add(...acme.commands);
 	new Crust("acme")
 		.provide(account(), region())
 		// @ts-expect-error -- FIX_MISSING_DEPENDENCY: `profile`, which `auth` reads
-		.extend(confirm(), acme.extension);
+		.extend(confirmation(), acme.extension);
 	// An app command uses the client of the handle the app extends, or of one before it after the same `.auth()`.
 	new Crust("acme")
 		.provide(profile(), account())
@@ -415,7 +415,7 @@ function _typecheckAuthChain() {
 	// Commands of one handle with the Extension of another, as before.
 	new Crust("acme")
 		.provide(profile(), account(), region())
-		.extend(confirm(), plain.extension)
+		.extend(confirmation(), plain.extension)
 		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`
 		.add(...acme.commands);
 	// An app command added to the group of a handle after another `.auth()`.
@@ -430,7 +430,7 @@ function _typecheckAuthChain() {
 	);
 	new Crust("acme")
 		.provide(profile(), account(), region())
-		.extend(confirm(), acme.extension)
+		.extend(confirmation(), acme.extension)
 		// @ts-expect-error -- FIX_DEPENDENCY_TYPE: `api`, a client whose `auth` reads no Contexts
 		.add(before);
 	// The same command `.add()`ed to the handle before its `.auth()`.
@@ -495,7 +495,7 @@ function _typecheckAuthChain() {
 		.auth(async ({ ctx }) => ({ authorization: `${await ctx.profile}-${await ctx.region}` }));
 	// Only Context factories: an Extension's Contexts are not readable in `auth`.
 	defineApi({ spec, baseUrl })
-		.use(confirm)
+		.use(confirmation)
 		// @ts-expect-error -- `confirm` comes from an Extension
 		.auth(async ({ ctx }) => void (await ctx.confirm));
 	// Each `.auth()` reads the `.use()`s before it, not those after it.

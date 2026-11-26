@@ -6,7 +6,7 @@ import {
 	defineContext,
 } from "@crustjs/core";
 import { commandInputSchema } from "@crustjs/core/tooling";
-import { confirm, input, json } from "@crustjs/extensions";
+import { confirmation, json, jsonInput } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -433,7 +433,7 @@ describe("generated commands", () => {
 		const calls = stubFetch(() => new Response(null, { status: 204 }));
 		const asked: string[] = [];
 		const acme = buildApi()
-			.use(confirm)
+			.use(confirmation)
 			.onConfirm(async (ctx, message) => {
 				asked.push(message);
 				await (
@@ -441,7 +441,7 @@ describe("generated commands", () => {
 				)(message);
 			})
 			.override({ deleteUser: { confirm: "Delete the user?" } });
-		const app = new Crust("acme").extend(confirm(), acme.extension).add(...acme.commands);
+		const app = new Crust("acme").extend(confirmation(), acme.extension).add(...acme.commands);
 
 		const refused = await captureExecute(app, ["users", "delete-user", "42"]);
 		const confirmed = await captureExecute(app, ["users", "delete-user", "42", "--yes"]);
@@ -848,9 +848,9 @@ describe("api preview", () => {
 		);
 	});
 
-	it("runs no set-up, so a value input()'s --input would bind is not applied", async () => {
+	it("runs no set-up, so a value jsonInput()'s --input would bind is not applied", async () => {
 		const acme = buildApi();
-		const app = new Crust("acme").extend(input(), acme.extension).add(...acme.commands);
+		const app = new Crust("acme").extend(jsonInput(), acme.extension).add(...acme.commands);
 
 		const { stderr } = await captureExecute(app, [
 			"api",

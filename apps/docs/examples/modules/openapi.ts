@@ -2,7 +2,7 @@ import { setTimeout } from "node:timers/promises";
 
 import { createAuth } from "@crustjs/auth";
 import { type ContextMap, Crust, defineCommand, defineContext } from "@crustjs/core";
-import { confirm } from "@crustjs/extensions";
+import { confirmation } from "@crustjs/extensions";
 import { type ApiClient, type Specs, bearerAuth, defineApi } from "@crustjs/openapi";
 
 //#region cli
@@ -27,8 +27,8 @@ const whoami = defineCommand("whoami", { description: "Print the signed-in user"
 );
 
 const acme = api
-	// Every generated command uses `confirm`, which types `ctx` below.
-	.use(confirm)
+	// Every generated command uses `confirmation`, which types `ctx` below.
+	.use(confirmation)
 	.onConfirm(async (ctx, message) => (await ctx.confirm)(message))
 	// A command per operation, in its first tag's group: `acme users get-user <id>`.
 	.each((op) => ({ name: op.id === "getUser" ? "get" : undefined }))
@@ -43,7 +43,7 @@ const acme = api
 	.add("users", whoami);
 
 await new Crust("acme")
-	.extend(confirm(), acme.extension)
+	.extend(confirmation(), acme.extension)
 	.add(...acme.commands)
 	.execute();
 //#endregion

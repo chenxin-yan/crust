@@ -20,18 +20,24 @@ export interface VersionOptions {
 	 * @default `${rootName} v${version}`
 	 */
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
+	/**
+	 * Short spelling of `--version`: `"V"` where the application uses `-v` for
+	 * something else, such as `--verbose`, or `false` for none.
+	 *
+	 * @default "v"
+	 */
+	readonly short?: "v" | "V" | false;
 }
 
-const versionFlags = {
-	version: {
-		type: "boolean",
-		short: "v",
-		description: "Show version number",
-		recursive: false,
-	},
+const versionFlag = {
+	type: "boolean",
+	description: "Show version number",
+	recursive: false,
 } as const;
 
-type VersionRegistration<K extends RootMetaKey> = Extension<{}, [], typeof versionFlags, [], K>;
+type VersionFlags = { readonly version: typeof versionFlag & { readonly short?: "v" | "V" } };
+
+type VersionRegistration<K extends RootMetaKey> = Extension<{}, [], VersionFlags, [], K>;
 
 /** Explicit values supply their own version; omitted values require root metadata. */
 export interface VersionExtension {
@@ -44,8 +50,9 @@ export interface VersionExtension {
 // `VersionExtension` annotation narrows omitted values to require root `version`.
 export const version: VersionExtension = /* @__PURE__ */ defineExtension(VERSION).factory(
 	(extension, value?: VersionValue, options: VersionOptions = {}) => {
-		const { format } = options;
-		return extension.flags(versionFlags).handle(
+		const { format, short = "v" } = options;
+		const flags: VersionFlags = { version: short ? { ...versionFlag, short } : versionFlag };
+		return extension.flags(flags).handle(
 			"version",
 			(context) => {
 				// SAFETY: the `VersionExtension` overloads require root `version` metadata when `value` is omitted.

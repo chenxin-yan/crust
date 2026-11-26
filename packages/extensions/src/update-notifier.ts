@@ -60,17 +60,7 @@ export interface UpdateNotifierCacheConfig {
 // Options
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Configuration options for the update notifier extension.
- *
- * @example
- * ```ts
- * import { updateNotifier } from "@crustjs/extensions";
- *
- * updateNotifier({ packageName: "my-cli" });
- * ```
- */
-export interface UpdateNotifierOptions {
+interface UpdateNotifierBaseOptions {
 	/**
 	 * Override the current version of the CLI package.
 	 *
@@ -84,7 +74,7 @@ export interface UpdateNotifierOptions {
 	packageName: string;
 
 	/**
-	 * Network request timeout in milliseconds for the registry check.
+	 * Timeout in milliseconds for the version lookup: the registry request or `latestVersion`.
 	 *
 	 * If the check does not complete within this duration, it is silently
 	 * aborted and treated as a soft failure. This timeout does not bound cache
@@ -100,6 +90,14 @@ export interface UpdateNotifierOptions {
 	 * @default "https://registry.npmjs.org"
 	 */
 	registryUrl?: string;
+
+	/**
+	 * Looks up the latest version instead of the npm registry, for a registry the user
+	 * configured or a source that is not npm. Called only when a check runs; `signal`
+	 * aborts after `timeoutMs` or when the invocation is cancelled, and the check stops
+	 * waiting then. A missing or empty version, or a throw, is a failed check.
+	 */
+	latestVersion?: (signal: AbortSignal) => string | undefined | Promise<string | undefined>;
 
 	/**
 	 * Upgrade command shown in the notice.
@@ -132,6 +130,26 @@ export interface UpdateNotifierOptions {
 	 */
 	cache?: false | UpdateNotifierCacheConfig;
 }
+
+/**
+ * Configuration options for the update notifier extension. `registryUrl` or
+ * `latestVersion` picks where the latest version comes from, never both.
+ *
+ * @example
+ * ```ts
+ * import { updateNotifier } from "@crustjs/extensions";
+ *
+ * updateNotifier({ packageName: "my-cli" });
+ * ```
+ */
+export type UpdateNotifierOptions = UpdateNotifierBaseOptions &
+	(
+		| { latestVersion?: undefined }
+		| {
+				latestVersion: NonNullable<UpdateNotifierBaseOptions["latestVersion"]>;
+				registryUrl?: undefined;
+		  }
+	);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Defaults
@@ -173,8 +191,9 @@ export interface UpdateNotifierExtension {
 // The builder requires no metadata so one factory serves both overloads; the
 // `UpdateNotifierExtension` annotation narrows omitted versions to require root `version`.
 /**
- * Creates an update notifier extension that checks the npm registry after a
- * successful command action and displays a notice when a newer version is available.
+ * Creates an update notifier extension that checks the npm registry, or the
+ * `latestVersion` lookup, after a successful command action and displays a notice
+ * when a newer version is available.
  *
  * **Behavior:**
  * - By default, checks are cached for 24 hours in the package's state directory.
@@ -183,7 +202,7 @@ export interface UpdateNotifierExtension {
  * - The notice is command-less unless `updateCommand` is configured.
  * - The postRun hook awaits the network check and cache reads and writes,
  *   delaying invocation completion after the action.
- * - `timeoutMs` bounds only the network request, defaulting to 5 seconds.
+ * - `timeoutMs` bounds only the version lookup, defaulting to 5 seconds.
  * - Network, cache, and parsing errors are silently swallowed.
  * - The check is skipped, with no cache or network access, when `CI` is set
  *   (other than `"0"` or `"false"` in any letter case), when `NO_UPDATE_NOTIFIER` is non-empty, or
@@ -216,6 +235,7 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 		packageName,
 		timeoutMs = DEFAULT_TIMEOUT_MS,
 		registryUrl = DEFAULT_REGISTRY_URL,
+		latestVersion,
 		updateCommand,
 		updateDocsUrl,
 		cache,
@@ -237,6 +257,7 @@ export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExt
 				packageName,
 				timeoutMs,
 				registryUrl,
+				latestVersion,
 				intervalMs,
 				updateCommand,
 				updateDocsUrl,

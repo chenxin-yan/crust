@@ -15,6 +15,7 @@ import {
 	renderFishCompletion,
 	renderZshCompletion,
 } from "../index.ts";
+import { json } from "../json.ts";
 
 function buildCli(options?: CompletionOptions) {
 	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
@@ -63,6 +64,17 @@ describe("completion", () => {
 		// bare in the `compgen -W` wordlist.
 		expect(out).toContain("browser bun node"); // build --target
 		expect(out).toContain("dev staging prod"); // deploy prod --env
+	});
+
+	it("returns the script, so --json prints it as one JSON string", async () => {
+		const app = buildCli().extend(json());
+		const { stdout: script } = await captureExecute(app, ["completion", "bash"]);
+
+		expect(await captureExecute(app, ["completion", "bash", "--json"])).toEqual({
+			stdout: `${JSON.stringify(script.slice(0, -1))}\n`,
+			stderr: "",
+			exitCode: 0,
+		});
 	});
 
 	describe("--output-dir", () => {

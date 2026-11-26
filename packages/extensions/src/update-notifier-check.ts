@@ -19,6 +19,7 @@ export interface UpdateCheck {
 	readonly packageName: string;
 	readonly timeoutMs: number;
 	readonly registryUrl: string;
+	readonly latestVersion: UpdateNotifierOptions["latestVersion"];
 	readonly intervalMs: number;
 	readonly updateCommand: UpdateNotifierOptions["updateCommand"];
 	readonly updateDocsUrl: string | undefined;
@@ -112,6 +113,40 @@ export async function fetchLatestVersion(
 	} catch {
 		// Network error, abort, JSON parse failure — all soft failures
 		return null;
+	}
+}
+
+/**
+ * The application's own lookup, bounded like the registry request: it stops waiting
+ * when `timeoutMs` passes or `signal` aborts, even if the lookup ignores its signal.
+ * Returns `null` on any failure.
+ *
+ * @internal
+ */
+export async function lookUpLatestVersion(
+	lookup: NonNullable<UpdateNotifierOptions["latestVersion"]>,
+	timeoutMs: number,
+	signal?: AbortSignal,
+): Promise<string | null> {
+	const timeout = new AbortController();
+	// A referenced timer: AbortSignal.timeout() does not hold Node's event loop, so a lookup that never settles would end the process with exit 13.
+	const timer = setTimeout(
+		() => timeout.abort(new DOMException("timed out", "TimeoutError")),
+		timeoutMs,
+	);
+	const bound = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
+	try {
+		bound.throwIfAborted();
+		const aborted = new Promise<never>((_resolve, reject) =>
+			bound.addEventListener("abort", () => reject(bound.reason), { once: true }),
+		);
+		// A sync throw must land inside the race, or `aborted` rejects later unhandled.
+		const latest = await Promise.race([Promise.resolve().then(() => lookup(bound)), aborted]);
+		return typeof latest === "string" && latest.length > 0 ? latest : null;
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
@@ -245,6 +280,7 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 		packageName,
 		timeoutMs,
 		registryUrl,
+		latestVersion: lookup,
 		intervalMs,
 		updateCommand,
 		updateDocsUrl,
@@ -258,7 +294,11 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 			if (cache?.adapter) {
 				cacheAdapter = cache.adapter;
 			} else {
-				cacheAdapter = await createStoreCacheAdapter(packageName, registryUrl);
+				// The stored `registryUrl` names the version source, so a custom lookup never reads the registry's state.
+				cacheAdapter = await createStoreCacheAdapter(
+					packageName,
+					lookup ? "latestVersion" : registryUrl,
+				);
 			}
 		}
 
@@ -301,7 +341,9 @@ export async function runUpdateCheck(check: UpdateCheck): Promise<void> {
 		}
 
 		// ── Network check: fetch latest version ──────────────────
-		const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs, signal);
+		const latestVersion = lookup
+			? await lookUpLatestVersion(lookup, timeoutMs, signal)
+			: await fetchLatestVersion(packageName, registryUrl, timeoutMs, signal);
 
 		if (latestVersion === null) {
 			// Soft failure — update timestamp to avoid retrying too soon

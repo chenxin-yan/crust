@@ -8,20 +8,20 @@ import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { promptConfirmation } from "./confirm-prompt.ts";
-import { ConfirmationRequiredError, confirm } from "./confirm.ts";
+import { promptConfirmation } from "./confirmation-prompt.ts";
+import { ConfirmationRequiredError, confirmation } from "./confirmation.ts";
 import { help } from "./help.ts";
-import { input } from "./input.ts";
+import { jsonInput } from "./json-input.ts";
 
 const drop = defineCommand("drop", (cmd) =>
-	cmd.use(confirm).action(async ({ ctx, stdout }) => {
+	cmd.use(confirmation).action(async ({ ctx, stdout }) => {
 		const ask = await ctx.confirm;
 		await ask("Drop the database?");
 		stdout("dropped");
 	}),
 );
 
-const app = new Crust("app").extend(confirm()).add(drop);
+const app = new Crust("app").extend(confirmation()).add(drop);
 
 /** Runs `app drop` on a fake TTY and presses `keys` once the prompt shows. */
 async function answer(...keys: Key[]) {
@@ -32,13 +32,13 @@ async function answer(...keys: Key[]) {
 	return { ...(await pending), screen: harness.screen() };
 }
 
-describe("confirm", () => {
+describe("confirmation", () => {
 	// The prompt shows only outside CI; the runner may be a CI job.
 	beforeEach(() => vi.stubEnv("CI", undefined));
 	afterEach(() => vi.unstubAllEnvs());
 
-	it("resolves without asking under --yes", async () => {
-		expect(await captureExecute(app, ["drop", "--yes"])).toEqual({
+	it.each(["--yes", "-y"])("resolves without asking under %s", async (flag) => {
+		expect(await captureExecute(app, ["drop", flag])).toEqual({
 			stdout: "dropped\n",
 			stderr: "",
 			exitCode: 0,
@@ -46,8 +46,8 @@ describe("confirm", () => {
 	});
 
 	it.each([
-		["confirm first", () => [confirm(), input()] as const],
-		["input first", () => [input(), confirm()] as const],
+		["confirmation first", () => [confirmation(), jsonInput()] as const],
+		["input first", () => [jsonInput(), confirmation()] as const],
 	])("takes yes from --input (%s)", async (_order, extensions) => {
 		const withInput = new Crust("app").extend(...extensions()).add(drop);
 
@@ -133,9 +133,9 @@ describe("confirm", () => {
 		expect(result).toEqual({ stdout: "", stderr: "", exitCode: 130 });
 	});
 
-	it("offers --yes only on commands that use confirm", async () => {
+	it("offers --yes only on commands that use confirmation", async () => {
 		const list = defineCommand("list", (cmd) => cmd.action(({ stdout }) => stdout("listed")));
-		const scoped = new Crust("app").extend(confirm(), input(), help()).add(drop, list);
+		const scoped = new Crust("app").extend(confirmation(), jsonInput(), help()).add(drop, list);
 
 		expect((await captureExecute(scoped, ["drop", "--help"])).stdout).toContain("--yes");
 		expect((await captureExecute(scoped, ["list", "--help"])).stdout).not.toContain("--yes");
@@ -156,14 +156,14 @@ describe("confirm", () => {
 		});
 	});
 
-	it("rejects a command that uses confirm without extending confirm()", async () => {
+	it("rejects a command that uses confirmation without extending confirmation()", async () => {
 		// @ts-expect-error -- runtime regression deliberately exercises the preparation check.
 		const unextended = new Crust("app").add(drop);
 		const error = await unextended.snapshot().catch((caught: unknown) => caught);
 		expect(error).toBeInstanceOf(CrustError);
 		expect(error).toMatchObject({
 			code: "DEFINITION",
-			details: { subject: "extension", name: "crust:confirm", reason: "missing-extension" },
+			details: { subject: "extension", name: "crust:confirmation", reason: "missing-extension" },
 		});
 	});
 });
