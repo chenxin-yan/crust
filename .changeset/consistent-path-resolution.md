@@ -17,7 +17,7 @@ Paths now follow one rule everywhere: a relative path resolves against the place
 
 **Behavior change:** in `@crustjs/skills`, a relative `sourceDir` (`installSkill()`, `getSkillStatus()`) or `extras` entry (`skill()`, `writeSkills()`) resolves against the working directory. It used to resolve against the nearest `package.json` above the CLI's entry file, which depended on how the CLI was distributed. During `crust build` the working directory is the project root, so `skill({ extras })` is unaffected there. Elsewhere, pass a path under `artifactPath()`, an absolute path, or a `file:` URL.
 
-**Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `template`, and a `template` URL that is not `file:` fails with `Path URL must use the file: protocol`.
+**Behavior change:** in `@crustjs/create`, a `command` step's relative `cwd` resolves against the directory passed to `runSteps()`, where it used to resolve against the process working directory. `scaffold()` rejects an empty `copy`, and a `copy` URL that is not `file:` fails with `Path URL must use the file: protocol`.
 
 **Behavior change:** the `create-crust` prompt accepts the same directory paths as the positional argument, including `:` and `\`, so a Windows path such as `C:\projects\my-cli` can be typed. Only the basename is checked.
 

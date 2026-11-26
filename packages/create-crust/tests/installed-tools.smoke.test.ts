@@ -182,7 +182,11 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 				versions[pkg.name] = pkg.version;
 			}
 			// The scaffolded project's runtime dependencies, packed from their local builds.
-			const runtimePackages = workspaceClosure(["@crustjs/core", "@crustjs/extensions"]);
+			const runtimePackages = workspaceClosure([
+				"@crustjs/core",
+				"@crustjs/extensions",
+				"@crustjs/testing",
+			]);
 			for (const { name, dir } of runtimePackages) {
 				if (!existsSync(join(dir, "dist"))) throw new Error(`Build ${name} first.`);
 				const pkg = readJson(join(dir, "package.json"));

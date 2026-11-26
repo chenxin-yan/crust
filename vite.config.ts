@@ -15,13 +15,7 @@ export default defineConfig({
 		useTabs: true,
 		sortImports: true,
 		sortPackageJson: false,
-		ignorePatterns: [
-			...sharedIgnorePatterns,
-			"**/tests/fixtures/",
-			"packages/create-crust/templates/base/package.json",
-			"packages/create-crust/templates/base/tsconfig.json",
-			"packages/create-crust/templates/base/src/cli.ts",
-		],
+		ignorePatterns: [...sharedIgnorePatterns, "**/tests/fixtures/"],
 		overrides: [
 			{
 				files: ["apps/docs/examples/landing/**"],

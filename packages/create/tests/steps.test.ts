@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -131,6 +132,21 @@ describe("runSteps", () => {
 			},
 		);
 
+		it.skipIf(process.platform === "win32")(
+			"runs the given package manager over a detected one",
+			async () => {
+				writeFileSync(join(tempDir, "bun.lock"), "");
+				const binDir = join(tempDir, "bin");
+				mkdirSync(binDir);
+				writeFileSync(join(binDir, "pnpm"), '#!/bin/sh\nprintf "%s\\n" "$@" > install-ran\n', {
+					mode: 0o755,
+				});
+				vi.stubEnv("PATH", binDir);
+				await runSteps([{ type: "install", packageManager: "pnpm" }], tempDir);
+				expect(readFileSync(join(tempDir, "install-ran"), "utf-8")).toBe("install\n");
+			},
+		);
+
 		it("reports when the detected package manager is unavailable", async () => {
 			writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
 			vi.stubEnv("PATH", tempDir);
@@ -155,6 +171,22 @@ describe("runSteps", () => {
 			expect(existsSync(join(subDir, "file.txt"))).toBe(true);
 			expect(existsSync(join(tempDir, "file.txt"))).toBe(false);
 		});
+
+		// Output on stdout would corrupt a CLI's own stdout, such as `--json` output.
+		it("sends the child's stdout to this process's stderr", () => {
+			const steps = pathToFileURL(join(import.meta.dirname, "..", "src", "steps.ts")).href;
+			const script = `import { runSteps } from ${JSON.stringify(steps)};
+await runSteps([{ type: "command", cmd: "echo child-output" }], ${JSON.stringify(tempDir)});`;
+
+			const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+				encoding: "utf-8",
+				timeout: 20_000,
+			});
+
+			expect(result.status, result.stderr).toBe(0);
+			expect(result.stdout).toBe("");
+			expect(result.stderr).toContain("child-output");
+		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────────
@@ -162,16 +194,21 @@ describe("runSteps", () => {
 	// ────────────────────────────────────────────────────────────────────────────
 
 	describe("step sequencing", () => {
-		it("stops on first failure and does not execute remaining steps", async () => {
+		it("stops on the first failure with the child's exit code on the error", async () => {
 			await expect(
 				runSteps(
 					[
-						{ type: "command", cmd: "exit 1" },
+						{ type: "command", cmd: "exit 3" },
 						{ type: "command", cmd: "echo should-not-run > fail.txt" },
 					],
 					tempDir,
 				),
-			).rejects.toThrow('Command "exit 1" exited with code 1');
+			).rejects.toThrow(
+				expect.objectContaining({
+					message: 'Command "exit 3" exited with code 3',
+					exitCode: 3,
+				}),
+			);
 
 			// The second command should not have run
 			expect(existsSync(join(tempDir, "fail.txt"))).toBe(false);

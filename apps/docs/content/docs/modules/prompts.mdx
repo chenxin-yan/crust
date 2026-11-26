@@ -130,7 +130,7 @@ Multifilter combines fuzzy matching with multi-selection and returns values in o
 const body = await editor({ initial: "## Summary\n", filename: "issue.md" });
 ```
 
-Editor opens the user's editor on a temporary file holding `initial` and returns the file's text once the editor exits. The editor is `$VISUAL`, else `$EDITOR`, run by the shell as Git runs it, so a value such as `code --wait` works; on POSIX the shell `exec`s it, so it must be one command. It runs on the process's own terminal. The temporary file is named `filename`, a file name and not a path (editors pick syntax highlighting from its extension), and removed afterwards.
+Editor opens the user's editor on a temporary file holding `initial` and returns the file's text once the editor exits. The editor is `$VISUAL`, else `$EDITOR`, run by the shell as Git runs it, so a value such as `code --wait` works; on POSIX the shell `exec`s it, so it must be one command. It runs on the process's own stdin and stderr: its output goes to stderr, so a redirected stdout stays clean. The temporary file is named `filename`, a file name and not a path (editors pick syntax highlighting from its extension), and removed afterwards.
 
 - Where `canPrompt()` is false it rejects with `NonInteractiveError` without starting the editor.
 - It rejects when `filename` is a path, when neither variable is set, or when the editor exits with a non-zero status.

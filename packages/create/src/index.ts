@@ -1,8 +1,8 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Template Engine
+// Scaffold
 // ────────────────────────────────────────────────────────────────────────────
 
-export { interpolate, scaffold } from "./scaffold.ts";
+export { scaffold } from "./scaffold.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Steps
@@ -14,7 +14,12 @@ export { runSteps } from "./steps.ts";
 // Utilities
 // ────────────────────────────────────────────────────────────────────────────
 
-export { detectPackageManager, isInGitRepo, type PackageManager } from "./detect.ts";
+export {
+	detectPackageManager,
+	isInGitRepo,
+	type PackageManager,
+	packageManagerFromUserAgent,
+} from "./detect.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

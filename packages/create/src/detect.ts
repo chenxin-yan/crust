@@ -8,7 +8,7 @@ import { type PackageManager, packageManagerFromUserAgent } from "@crustjs/utils
 // Package Manager Detection
 // ────────────────────────────────────────────────────────────────────────────
 
-export type { PackageManager };
+export { type PackageManager, packageManagerFromUserAgent };
 
 /**
  * Lockfile names mapped to their package manager.
@@ -28,11 +28,12 @@ const LOCKFILE_MAP: ReadonlyArray<readonly [string, PackageManager]> = [
  *
  * Detection strategy (first match wins):
  * 1. Check for lockfiles in `cwd` (bun.lock/bun.lockb → pnpm-lock.yaml → yarn.lock → package-lock.json)
- * 2. Parse the `npm_config_user_agent` environment variable
- * 3. Default to `"npm"`
+ * 2. Parse the `npm_config_user_agent` environment variable, which package managers set for the
+ *    scripts and `create` commands they run
  *
  * @param cwd - The directory to check for lockfiles. Defaults to `process.cwd()`.
- * @returns The detected package manager name: `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`.
+ * @returns The detected package manager name: `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`, or
+ *   `undefined` when neither source names one, so the caller picks its own fallback.
  *
  * @example
  * ```ts
@@ -40,7 +41,7 @@ const LOCKFILE_MAP: ReadonlyArray<readonly [string, PackageManager]> = [
  * // => "bun" (if bun.lock exists)
  * ```
  */
-export function detectPackageManager(cwd?: string): PackageManager {
+export function detectPackageManager(cwd?: string): PackageManager | undefined {
 	const dir = cwd ?? process.cwd();
 
 	// Check lockfiles in priority order
@@ -50,8 +51,7 @@ export function detectPackageManager(cwd?: string): PackageManager {
 		}
 	}
 
-	// Fall back to npm_config_user_agent (set by npm/yarn/pnpm/bun when running scripts)
-	return packageManagerFromUserAgent(process.env.npm_config_user_agent) ?? "npm";
+	return packageManagerFromUserAgent(process.env.npm_config_user_agent) ?? undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

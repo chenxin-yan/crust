@@ -1,27 +1,4 @@
-<%~ it.shebang %>
-import { Crust } from "@crustjs/core";
-import { help, version } from "@crustjs/extensions";
-
-import pkg from "../package.json" with { type: "json" };
-
-const app = new Crust(<%~ JSON.stringify(it.name) %>, { description: "A CLI built with Crust", version: pkg.version })
-	.extend(version(), help())
-	.args({
-		name: "name",
-		type: "string",
-		description: "Your name",
-		default: "world",
-	})
-	.flags({
-		greet: {
-			type: "string",
-			description: "Greeting to use",
-			default: "Hello",
-			short: "g",
-		},
-	})
-	.action(({ args, flags, stdout }) => {
-		stdout(`${flags.greet}, ${args.name}!`);
-	});
+#!/usr/bin/env node
+import { app } from "./app.ts";
 
 await app.execute();

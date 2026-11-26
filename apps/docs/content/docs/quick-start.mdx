@@ -24,6 +24,8 @@ The initializer asks for a runtime (Bun or Node.js), a build output, and whether
 <Files>
   <Folder name="my-cli" defaultOpen>
     <Folder name="src" defaultOpen>
+      <File name="app.ts" />
+      <File name="app.test.ts" />
       <File name="cli.ts" />
     </Folder>
     <File name="package.json" />
@@ -37,7 +39,7 @@ The initializer asks for a runtime (Bun or Node.js), a build output, and whether
 <Step>
 ### Run it
 
-The `dev` script runs `src/cli.ts` with your selected runtime:
+`src/app.ts` defines the CLI and `src/cli.ts` runs it. The `dev` script runs `src/cli.ts` with your selected runtime:
 
 ```npm
 npm run dev -- Ada --greet Welcome
@@ -65,13 +67,19 @@ Options:
   -v, --version                Show version number
 ```
 
+`src/app.test.ts` runs the CLI in-process with [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) and checks its output:
+
+```npm
+npm run test
+```
+
 </Step>
 <Step>
 ### Add a subcommand
 
 Chain `.command()` onto the root:
 
-<include lang="ts" meta='title="src/cli.ts"'>
+<include lang="ts" meta='title="src/app.ts"'>
   ../../examples/quick-start/subcommand.ts
 </include>
 

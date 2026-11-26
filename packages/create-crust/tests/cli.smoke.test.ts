@@ -33,7 +33,11 @@ const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke"
 const localPackageDir = join(smokeRoot, "local-packages");
 
 // The scaffolded project's runtime dependencies, packed from their local builds.
-const packedPackages = workspaceClosure(["@crustjs/core", "@crustjs/extensions"]);
+const packedPackages = workspaceClosure([
+	"@crustjs/core",
+	"@crustjs/extensions",
+	"@crustjs/testing",
+]);
 // Linked, not packed: the published layout is the staged `.crust/root`, while the workspace
 // package's bin is its source, which the smoke runs with Bun by path.
 const linkedCrustDir = join(repoRoot, "packages", "crust");
@@ -164,15 +168,17 @@ function useLocalDependencyPackages(projectDir: string, specs: Record<string, st
 
 /**
  * Adds a second `bin` entry to a scaffolded project: `src/admin.ts` is the
- * template entry with its root command renamed to `<name>-admin`, so the
- * build has two commands with distinct names, entries, and actions.
+ * template's app with its root command renamed to `<name>-admin`, executed under
+ * the entry's shebang, so the build has two commands with distinct names, entries,
+ * and actions.
  */
 function addSecondEntry(projectDir: string, name: string): string {
 	const command = `${name}-admin`;
 	const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf8");
+	const app = readFileSync(join(projectDir, "src", "app.ts"), "utf8");
 	writeFileSync(
 		join(projectDir, "src", "admin.ts"),
-		cli.replace(`new Crust(${JSON.stringify(name)}`, `new Crust(${JSON.stringify(command)}`),
+		`${cli.slice(0, cli.indexOf("\n") + 1)}${app.replace(`new Crust(${JSON.stringify(name)}`, `new Crust(${JSON.stringify(command)}`)}\nawait app.execute();\n`,
 	);
 	const packageJsonPath = join(projectDir, "package.json");
 	const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
@@ -257,6 +263,7 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	expect(existsSync(join(sampleDir, "package.json"))).toBe(true);
 	expect(existsSync(join(sampleDir, "tsconfig.json"))).toBe(true);
 	expect(existsSync(join(sampleDir, "src", "cli.ts"))).toBe(true);
+	expect(existsSync(join(sampleDir, "src", "app.test.ts"))).toBe(true);
 	expect(existsSync(join(sampleDir, "README.md"))).toBe(true);
 
 	const name = basename(sampleDir);
@@ -284,6 +291,11 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	const checkTypesCommand = npmArgv(["run", "check:types"]);
 	const checkTypes = await run(checkTypesCommand, sampleDir);
 	assertSuccess("generated project type-check", checkTypesCommand, sampleDir, checkTypes);
+
+	// Run the template's own test script the way its users do.
+	const testCommand = npmArgv(["run", "test"]);
+	const test = await run(testCommand, sampleDir);
+	assertSuccess("generated project test", testCommand, sampleDir, test);
 
 	const buildCommand = crustBuildArgv(sampleDir, artifact);
 

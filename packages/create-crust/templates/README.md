@@ -17,6 +17,9 @@ Install dependencies if you skipped installation or just cloned the project:
 # Run in dev mode
 <%~ it.run %> dev
 
+# Run the tests in src/*.test.ts
+<%~ it.run %> test
+
 # Type-check
 <%~ it.run %> check:types
 

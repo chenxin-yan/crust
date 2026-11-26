@@ -1,69 +1,72 @@
+import type { PackageManager } from "@crustjs/utils/package-manager";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Scaffold Options & Result
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Options for the {@link scaffold} function.
+ * Files written from code: each key is a path in the new project, `/`-separated, and each value
+ * is the file's text.
+ */
+export type ScaffoldFiles = Readonly<Record<string, string>>;
+
+/**
+ * Options for the {@link scaffold} function. At least one of `copy` and `write` is required.
  *
  * @example
  * ```ts
  * const options: ScaffoldOptions = {
- *   template: new URL("../templates/base", import.meta.url),
+ *   copy: new URL("../templates/base", import.meta.url),
  *   dest: "./my-project",
- *   context: { name: "my-app", description: "A cool CLI" },
- *   conflict: "abort",
+ *   write: { "README.md": "# my-app\n" },
  * };
  * ```
  */
-export interface ScaffoldOptions {
-	/**
-	 * Template directory source.
-	 *
-	 * - `string`: filesystem path; a relative one resolves against the working directory, like
-	 *   `dest`. For templates shipped with a CLI built by `crust build`, pass
-	 *   `artifactPath("templates/base")`.
-	 * - `URL`: `file:` URL, such as `new URL("../templates/base", import.meta.url)` in a package
-	 *   that is published unbundled.
-	 */
-	readonly template: string | URL;
-
-	/** Destination directory. A relative path resolves against the working directory. */
+export type ScaffoldOptions = (
+	| {
+			/**
+			 * A directory copied exactly: every file's bytes and permission bits. A file named with a single
+			 * leading `_` is written with a `.` instead (`_gitignore` becomes `.gitignore`).
+			 *
+			 * - `string`: filesystem path; a relative one resolves against the working directory, like
+			 *   `dest`. For a directory shipped with a CLI built by `crust build`, pass
+			 *   `artifactPath("templates/base")`.
+			 * - `URL`: `file:` URL, such as `new URL("../templates/base", import.meta.url)` in a
+			 *   package that is published unbundled.
+			 */
+			readonly copy: string | URL;
+			/**
+			 * Files written from code, after `copy`. A key that names a copied file replaces its content
+			 * and keeps its permission bits. Keys are written as given: no `_` rename.
+			 */
+			readonly write?: ScaffoldFiles;
+	  }
+	| { readonly copy?: undefined; readonly write: ScaffoldFiles }
+) & {
+	/** Destination directory, not empty. A relative path resolves against the working directory. */
 	readonly dest: string;
 
 	/**
-	 * Variables to interpolate into template file contents.
-	 * Keys map to `{{key}}` placeholders in template files, or are passed to `render`.
-	 */
-	readonly context: Record<string, string>;
-
-	/**
-	 * Custom renderer for text file contents, replacing the built-in `{{key}}`
-	 * interpolation (the output is not interpolated again). Called once per text
-	 * file with its contents and `context`; a returned promise is awaited.
-	 * Binary files are copied without calling it. Thrown or rejected errors
-	 * propagate from `scaffold()`; files written earlier in the call remain.
-	 * Templates run through the renderer as trusted code.
+	 * What to do when the destination already holds files. A destination holding only `.git`
+	 * counts as empty.
 	 *
-	 * @default interpolate
-	 */
-	readonly render?: (source: string, context: Record<string, string>) => string | Promise<string>;
-
-	/**
-	 * How to handle an existing non-empty destination directory.
-	 *
-	 * - `"abort"` — throw an error (default)
-	 * - `"overwrite"` — proceed and overwrite existing files
+	 * - `"abort"`: throw before writing (default)
+	 * - `"overwrite"`: replace conflicting files and leave the others
+	 * - `"replace"`: delete everything but `.git` first
 	 *
 	 * @default "abort"
 	 */
-	readonly conflict?: "abort" | "overwrite";
-}
+	readonly conflict?: "abort" | "overwrite" | "replace";
+
+	/** Run every check and return the files that would be written, without writing or deleting. */
+	readonly dryRun?: boolean;
+};
 
 /**
  * Result returned by the {@link scaffold} function.
  */
 export interface ScaffoldResult {
-	/** List of all written file paths, relative to the destination directory. */
+	/** Every written file path, relative to the destination directory, sorted. */
 	readonly files: readonly string[];
 }
 
@@ -86,8 +89,11 @@ export interface ScaffoldResult {
  * ```
  */
 export type PostScaffoldStep =
-	/** Detect the package manager and install dependencies. */
-	| { readonly type: "install" }
+	/**
+	 * Install dependencies with `packageManager`, or the one {@link detectPackageManager} finds,
+	 * else npm.
+	 */
+	| { readonly type: "install"; readonly packageManager?: PackageManager }
 	/** Initialize Git and optionally create a commit containing all files. */
 	| { readonly type: "git-init"; readonly commit?: string }
 	/** Open the project in `$EDITOR` or VS Code; does not fail when no editor is found. */

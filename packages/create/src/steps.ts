@@ -5,7 +5,7 @@ import { resolve as resolvePath } from "node:path";
 import { runProcess, which } from "@crustjs/utils/process";
 import { getTerminalSignal, writeProcessOutput } from "@crustjs/utils/terminal";
 
-import { detectPackageManager } from "./detect.ts";
+import { detectPackageManager, type PackageManager } from "./detect.ts";
 import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -19,10 +19,15 @@ import type { PostScaffoldStep, RunStepsOptions } from "./types.ts";
  * file scaffolding is complete. Steps run in array order; if any step fails,
  * the error propagates immediately (remaining steps are skipped).
  *
+ * `install` and `command` children write their output to this process's standard error, so it
+ * never mixes with what the CLI prints on standard output.
+ *
  * @param steps - Array of {@link PostScaffoldStep} objects to execute.
  * @param cwd - The working directory for steps (typically the scaffold dest). A relative path
  *   resolves against the process working directory.
  * @param options - Where non-fatal warnings go and what cancels the steps; see {@link RunStepsOptions}.
+ * @throws An `Error` with the child's `exitCode` (`null` when a signal ended it) when a step's
+ *   command fails.
  * @throws `signal.reason` when the signal aborts, after the running child exits or, 5 seconds
  *   later, is killed.
  *
@@ -50,7 +55,7 @@ export async function runSteps(
 		signal?.throwIfAborted();
 		switch (step.type) {
 			case "install":
-				await runInstall(root, signal);
+				await runInstall(root, step.packageManager ?? detectPackageManager(root) ?? "npm", signal);
 				break;
 			case "git-init":
 				await runGitInit(root, step.commit, signal);
@@ -69,11 +74,12 @@ export async function runSteps(
 // Step Implementations
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Detect the package manager and run its install command.
- */
-async function runInstall(cwd: string, signal: AbortSignal | undefined): Promise<void> {
-	const pm = detectPackageManager(cwd);
+/** Run the package manager's install command. */
+async function runInstall(
+	cwd: string,
+	pm: PackageManager,
+	signal: AbortSignal | undefined,
+): Promise<void> {
 	const executable = which(pm);
 	if (!executable) {
 		throw new Error(`Package manager "${pm}" was not found on PATH. Install ${pm} and try again.`);
@@ -81,11 +87,11 @@ async function runInstall(cwd: string, signal: AbortSignal | undefined): Promise
 
 	const { exitCode } = await runProcess(executable, ["install"], {
 		cwd,
-		stdio: "inherit",
+		stdio: "stderr",
 		signal,
 	});
 	if (exitCode !== 0) {
-		throw new Error(`"${pm} install" exited with code ${exitCode}`);
+		throw stepError(`"${pm} install" exited with code ${exitCode}`, exitCode);
 	}
 }
 
@@ -156,15 +162,20 @@ async function runCommand(
 	cwd: string,
 	signal: AbortSignal | undefined,
 ): Promise<void> {
-	const { exitCode } = await runProcess(cmd, [], { cwd, shell: true, stdio: "inherit", signal });
+	const { exitCode } = await runProcess(cmd, [], { cwd, shell: true, stdio: "stderr", signal });
 	if (exitCode !== 0) {
-		throw new Error(`Command "${cmd}" exited with code ${exitCode}`);
+		throw stepError(`Command "${cmd}" exited with code ${exitCode}`, exitCode);
 	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
+
+/** A failed step's error, carrying the child's exit status (`null` when a signal ended it). */
+function stepError(message: string, exitCode: number | null): Error & { exitCode: number | null } {
+	return Object.assign(new Error(message), { exitCode });
+}
 
 /**
  * Build `-c` arguments that fill in a missing git `user.name` / `user.email`.
@@ -221,8 +232,9 @@ async function spawnChecked(
 		signal,
 	});
 	if (exitCode !== 0) {
-		throw new Error(
+		throw stepError(
 			`"${label}" failed with exit code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
+			exitCode,
 		);
 	}
 }
