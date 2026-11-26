@@ -133,7 +133,8 @@ export interface CredentialStoreInternals {
 	/**
 	 * How a write into `document` stores its secret, picked before the document lock: the file's
 	 * key, else the keyring's (created once), else plaintext. Only a `login` replaces a file key
-	 * the keyring no longer holds. `signal` is observed until a key write is dispatched.
+	 * the keyring no longer holds. `signal` is observed until a key write is dispatched. A
+	 * plaintext fallback goes to the store's `keyring.onWarning`.
 	 */
 	writeKey(
 		document: CredentialsDocument | undefined,

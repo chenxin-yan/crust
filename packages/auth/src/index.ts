@@ -16,5 +16,7 @@ export type {
 	ProfileAuthClient,
 	ProfileAuthStatus,
 	ProfileClient,
+	ProfileLoginOptions,
 	ProfilesOptions,
+	TokenOptions,
 } from "./types.ts";

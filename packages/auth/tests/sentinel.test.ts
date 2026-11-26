@@ -270,7 +270,7 @@ async function clientLogins(token: () => Response) {
 	await settle(
 		auth
 			.login({
-				device: true,
+				flow: "device",
 				onUrl: () => {
 					throw new Error("unexpected browser login");
 				},

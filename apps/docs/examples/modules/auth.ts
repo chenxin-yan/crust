@@ -34,12 +34,14 @@ await auth.login({
 //#endregion
 
 //#region storage
-const secured = createAuth({
-	app: "acme",
-	issuer: "https://login.acme.example",
-	clientId: "acme-cli",
-	apiOrigins: ["https://api.acme.example"],
-	// Without an OS keyring the login is stored unencrypted; say so (or pass `strict: true`).
+await auth.login({
+	onUrl: async ({ url, open }) => {
+		console.error(`Sign in at: ${url}`);
+		await open();
+	},
+	onCode: ({ message }) => console.error(message),
+	// Without an OS keyring the login is stored unencrypted; say so (or pass `strict: true` to
+	// createAuth()).
 	onWarning: ({ code }) => {
 		if (code === "plaintext-storage") {
 			console.error("No OS keyring found: your login is stored unencrypted.");
@@ -47,7 +49,7 @@ const secured = createAuth({
 	},
 });
 // "bun-secrets", "napi-keyring" or "file", and the logins not yet encrypted.
-const { storage } = await secured.status();
+const { storage } = await auth.status();
 //#endregion
 
 //#region token
@@ -82,13 +84,25 @@ const accounts = createAuth({
 	profiles: { env: "ACME_PROFILE" },
 });
 
-// `acme login --profile work`; without the flag, the current profile.
+// `acme login --profile work`; without the flag, the profile is named after the account. Either
+// way, later runs use the profile that was signed in to.
 const profileLogin = defineCommand("login", (command) =>
 	command
 		.flags({ profile: { type: "string", description: "The profile to sign in to" } })
 		.action(({ flags, signal, stderr }) =>
-			accounts.profile(flags.profile).login({
+			accounts.login({
 				signal,
+				// Runs after sign-in, before the login is stored; a throw stores nothing.
+				profile:
+					flags.profile ??
+					(async ({ accessToken }) => {
+						const me = await fetch("https://api.acme.example/me", {
+							headers: { authorization: `Bearer ${accessToken}` },
+							signal,
+						});
+						if (!me.ok) throw new Error(`Could not read the account: HTTP ${me.status}`);
+						return ((await me.json()) as { login: string }).login;
+					}),
 				onUrl: async ({ url, open }) => {
 					stderr(`Sign in at: ${url}`);
 					await open();
@@ -107,7 +121,7 @@ const profileList = defineCommand("list", (command) =>
 	}),
 );
 
-// `acme profile use work`: the profile every later run uses.
+// `acme profile use work`: switches to another profile for every later run.
 const profileUse = defineCommand("use", (command) =>
 	command
 		.args({ name: "name", type: "string", required: true })

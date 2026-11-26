@@ -116,7 +116,9 @@ describe("entry points", () => {
 			"ProfileAuthClient",
 			"ProfileAuthStatus",
 			"ProfileClient",
+			"ProfileLoginOptions",
 			"ProfilesOptions",
+			"TokenOptions",
 			"createAuth",
 		]);
 		expect(index).not.toMatch(/export \*/);

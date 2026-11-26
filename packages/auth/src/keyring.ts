@@ -294,7 +294,8 @@ export interface FileKeys {
 	/**
 	 * How a write into a file recording `fileKeyId` and `fileKeyring` stores its secret. Creates the key when the
 	 * keyring has none. Only a `login` may replace a file key that is missing or another.
-	 * `signal` is observed until the key's write is dispatched.
+	 * `signal` is observed until the key's write is dispatched. A plaintext fallback is reported
+	 * to the keyring options' `onWarning` once per process.
 	 */
 	forWrite(
 		fileKeyId: string | undefined,
@@ -427,9 +428,9 @@ export function fileKeys(
 		}
 		if (found.state === "unavailable") {
 			if (options?.strict) throw new CredentialKeyError("unavailable");
-			if (!warned.has(app)) {
+			if (options?.onWarning && !warned.has(app)) {
 				warned.add(app);
-				options?.onWarning?.({ code: "plaintext-storage" });
+				options.onWarning({ code: "plaintext-storage" });
 			}
 			return PLAINTEXT;
 		}

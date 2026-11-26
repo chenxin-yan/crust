@@ -46,8 +46,14 @@ import {
 	StaleCommitError,
 	UnsafeStorageError,
 } from "./errors.ts";
-import { createTokenSource } from "./token-source.ts";
-import type { AuthWarning, BrowserLoginPrompt, DeviceLoginPrompt, LoginOptions } from "./types.ts";
+import { createTokenSource, refreshFlights } from "./token-source.ts";
+import type {
+	AuthWarning,
+	BrowserLoginPrompt,
+	DeviceLoginPrompt,
+	LoginOptions,
+	ProfileLoginOptions,
+} from "./types.ts";
 
 const openBrowser = vi.hoisted(() => vi.fn(async (_url: string, _options?: object) => true));
 vi.mock("./browser.ts", () => ({ openBrowser }));
@@ -133,7 +139,6 @@ function setup(
 		env?: string;
 		metadata?: Record<string, unknown>;
 		strict?: boolean;
-		onWarning?: (warning: AuthWarning) => void;
 	} = {},
 ) {
 	const temp = tempApp();
@@ -410,7 +415,7 @@ describe("login() in a browser", () => {
 				});
 			};
 			const login = auth.login({
-				device: callback === "onCode",
+				flow: callback === "onCode" ? "device" : "auto",
 				signal: controller.signal,
 				onUrl: callback === "onUrl" ? prompt : browser().onUrl,
 				onCode: callback === "onCode" ? prompt : noCode,
@@ -486,7 +491,7 @@ describe("login() with a device code", () => {
 		const prompts: DeviceLoginPrompt[] = [];
 		await settle(
 			auth.login({
-				device: true,
+				flow: "device",
 				onUrl: noUrl,
 				onCode: fakeTimersFrom((prompt) => void prompts.push(prompt)),
 			}),
@@ -513,7 +518,7 @@ describe("login() with a device code", () => {
 		let message = "";
 		await settle(
 			auth.login({
-				device: true,
+				flow: "device",
 				onUrl: noUrl,
 				onCode: fakeTimersFrom((prompt) => void (message = prompt.message)),
 			}),
@@ -523,7 +528,7 @@ describe("login() with a device code", () => {
 
 	it("sends resource in the device authorization request and every poll", async () => {
 		const { auth, issuer, requests } = setup(undefined, { resource: "https://api.example.com" });
-		await settle(auth.login({ device: true, onUrl: noUrl, onCode: fakeTimersFrom(() => {}) }));
+		await settle(auth.login({ flow: "device", onUrl: noUrl, onCode: fakeTimersFrom(() => {}) }));
 		const sent = requests.filter(
 			({ url }) => url === `${issuer}/device` || url === `${issuer}/token`,
 		);
@@ -545,7 +550,7 @@ describe("login() with a device code", () => {
 		const { auth, requests, issuer } = setup();
 		const controller = new AbortController();
 		const login = auth.login({
-			device: true,
+			flow: "device",
 			signal: controller.signal,
 			onUrl: noUrl,
 			onCode: () => {
@@ -561,7 +566,7 @@ describe("login() with a device code", () => {
 		const { auth, requests, issuer } = setup();
 		const thrown = new Error("onCode failed");
 		const error = await settle(
-			auth.login({ device: true, onUrl: noUrl, onCode: async () => Promise.reject(thrown) }),
+			auth.login({ flow: "device", onUrl: noUrl, onCode: async () => Promise.reject(thrown) }),
 		);
 		expect(error).toBe(thrown);
 		expect(requests.some((request) => request.url === `${issuer}/token`)).toBe(false);
@@ -572,7 +577,12 @@ describe("login() with a device code", () => {
 		const starting = new AbortController();
 		const first = setup((issuer) => ({ [`${issuer}/device`]: () => hang(starting) }));
 		const onCode = vi.fn();
-		const login = first.auth.login({ device: true, signal: starting.signal, onUrl: noUrl, onCode });
+		const login = first.auth.login({
+			flow: "device",
+			signal: starting.signal,
+			onUrl: noUrl,
+			onCode,
+		});
 		expect(await settle(login)).toBeInstanceOf(AbortError);
 		expect(onCode).not.toHaveBeenCalled();
 		expect(await first.auth.status()).toEqual({ source: "none", storage: noLogins });
@@ -580,7 +590,7 @@ describe("login() with a device code", () => {
 		const polling = new AbortController();
 		const second = setup();
 		const waiting = second.auth.login({
-			device: true,
+			flow: "device",
 			signal: polling.signal,
 			onUrl: noUrl,
 			onCode: fakeTimersFrom(() => void setTimeout(() => polling.abort(), 1_000)),
@@ -619,9 +629,19 @@ describe("login() without a person at a terminal", () => {
 		const { auth } = setup();
 		const onCode = vi.fn();
 		expect(
-			await settle(auth.login({ device: true, onUrl: noUrl, onCode: fakeTimersFrom(onCode) })),
+			await settle(auth.login({ flow: "device", onUrl: noUrl, onCode: fakeTimersFrom(onCode) })),
 		).toBeUndefined();
 		expect(onCode).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		["over SSH", () => vi.stubEnv("SSH_CONNECTION", "1 2 3 4")],
+		["on CI without a terminal", () => terminal({ tty: false, ci: true })],
+	])("runs the browser login when asked to, %s", async (_name, arrange) => {
+		arrange();
+		const { auth } = setup();
+		await auth.login({ flow: "browser", onUrl: browser().onUrl, onCode: noCode });
+		expect((await auth.token()).value).toBe("AT");
 	});
 });
 
@@ -856,18 +876,29 @@ describe("the stored login", () => {
 		expect(requests.filter(({ url }) => url === `${issuer}/revoke`).length).toBeGreaterThan(0);
 	});
 
-	it("a logout while a login runs is not undone", async () => {
+	it("logout() of a login that never existed, or is already gone, reports absent", async () => {
+		const { auth, requests, issuer } = setup();
+		expect(await auth.logout()).toEqual({ local: "absent", remote: "skipped" });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		expect(await auth.logout()).toEqual({ local: "deleted", remote: "revoked" });
+		expect(await auth.logout()).toEqual({ local: "absent", remote: "skipped" });
+		expect(requests.filter(({ url }) => url === `${issuer}/revoke`)).toHaveLength(2);
+	});
+
+	it("a logout while a login runs is not undone, even when there was no login to delete", async () => {
 		const { auth } = setup();
 		const play = browser();
+		let loggedOut: unknown;
 		const error = await rejection(
 			auth.login({
 				onUrl: async (prompt) => {
-					await auth.logout();
+					loggedOut = await auth.logout();
 					play.onUrl(prompt);
 				},
 				onCode: noCode,
 			}),
 		);
+		expect(loggedOut).toEqual({ local: "absent", remote: "skipped" });
 		expect(error).toBeInstanceOf(StaleCommitError);
 		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
@@ -877,12 +908,13 @@ describe("storage", () => {
 	it("encrypts the login under a key in the OS keyring by default; status() reads the key, never writes it", async () => {
 		const keyring = fakeKeyring("napi-keyring");
 		const warnings: AuthWarning[] = [];
-		const { auth, app, dir } = setup(undefined, { onWarning: (warning) => warnings.push(warning) });
+		const onWarning = (warning: AuthWarning) => warnings.push(warning);
+		const { auth, app, dir } = setup();
 		expect(await auth.status()).toEqual({
 			source: "none",
 			storage: { kind: "napi-keyring", plaintextRecords: 0 },
 		});
-		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, onWarning });
 		const text = readFileSync(join(dir, "credentials.json"), "utf8");
 		expect(JSON.parse(text).encryption).toEqual({
 			kind: "aes-256-gcm",
@@ -898,14 +930,154 @@ describe("storage", () => {
 		expect(warnings).toEqual([]);
 	});
 
-	it("without a keyring, stores the login in plaintext and tells onWarning once, printing nothing", async () => {
-		const warnings: AuthWarning[] = [];
-		const { auth } = setup(undefined, { onWarning: (warning) => warnings.push(warning) });
+	it("without a keyring, stores the login in plaintext and tells each login's onWarning, printing nothing", async () => {
+		const { auth } = setup();
+		const first: AuthWarning[] = [];
+		const second: AuthWarning[] = [];
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, onWarning: (w) => first.push(w) });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, onWarning: (w) => second.push(w) });
 		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
-		await auth.login({ onUrl: browser().onUrl, onCode: noCode });
-		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect(first).toEqual([{ code: "plaintext-storage" }]);
+		expect(second).toEqual([{ code: "plaintext-storage" }]);
 		expect(writes).toEqual([]);
 		expect((await auth.status()).storage).toEqual({ kind: "file", plaintextRecords: 1 });
+	});
+
+	it("without a keyring, tells the onWarning of the token() call whose refresh stored the login", async () => {
+		let issued = 0;
+		const { auth } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		const warnings: AuthWarning[] = [];
+		const token = await auth.token({ onWarning: (warning) => warnings.push(warning) });
+		expect(token.value).toBe("AT2");
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect((await token.refresh!({})).value).toBe("AT3");
+		expect(warnings).toEqual([{ code: "plaintext-storage" }, { code: "plaintext-storage" }]);
+		// A token that needs no refresh writes nothing, so nothing is reported.
+		await auth.token({ onWarning: (warning) => warnings.push(warning) });
+		expect(warnings).toHaveLength(2);
+	});
+
+	it("without a keyring, a shared refresh tells every call still waiting for it, not one that left", async () => {
+		let issued = 0;
+		const { auth, app, issuer, fetch } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		// The login's lock is held until all three calls wait for the same refresh.
+		const store = credentialStore({ app });
+		const { key } = createTokenSource({
+			config: defineServers({ servers: [{ issuer, clientId: "cli" }] }),
+			identity: { issuer, clientId: "cli", apiOrigins: [API] },
+			store,
+			fetch,
+		});
+		const lock = await holdLock((fn) => credentialStoreInternals(store).lockIdentity(key, fn));
+		const flight = () => [...refreshFlights.values()][0];
+		const joined: AuthWarning[] = [];
+		const left: AuthWarning[] = [];
+		const leaving = new AbortController();
+		// The first call starts the refresh without a callback; the others join it.
+		const starter = auth.token();
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(1));
+		const joiner = auth.token({ onWarning: (warning) => joined.push(warning) });
+		const quitter = auth.token({
+			signal: leaving.signal,
+			onWarning: (warning) => left.push(warning),
+		});
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(3));
+		leaving.abort();
+		expect(await rejection(quitter)).toBeInstanceOf(AbortError);
+		await lock.release();
+		expect((await starter).value).toBe("AT2");
+		expect((await joiner).value).toBe("AT2");
+		expect(joined).toEqual([{ code: "plaintext-storage" }]);
+		expect(left).toEqual([]);
+	});
+
+	it("without a keyring, a call that joins a shared refresh while its token request runs is told too", async () => {
+		let issued = 0;
+		let answer!: () => void;
+		const answered = new Promise<void>((resolve) => (answer = resolve));
+		const { auth, tokenRequests } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: async () => {
+				issued += 1;
+				if (issued > 1) await answered;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		const flight = () => [...refreshFlights.values()][0];
+		const warnings: AuthWarning[] = [];
+		// The first call starts the refresh without a callback; the second joins once its request is sent.
+		const starter = auth.token();
+		await vi.waitFor(() => expect(tokenRequests()).toHaveLength(2));
+		const joiner = auth.token({ onWarning: (warning) => warnings.push(warning) });
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(2));
+		answer();
+		expect((await starter).value).toBe("AT2");
+		expect((await joiner).value).toBe("AT2");
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect(tokenRequests()).toHaveLength(2);
+	});
+
+	it("without a keyring, a throwing onWarning fails only its own call of a shared refresh", async () => {
+		let issued = 0;
+		const { auth, app, issuer, fetch, tokenRequests } = await signedIn((issuer) => ({
+			[`${issuer}/token`]: () => {
+				issued += 1;
+				return json({ ...TOKEN, access_token: `AT${issued}`, expires_in: issued === 1 ? 1 : 3600 });
+			},
+		}));
+		// The login's lock is held until both calls wait for the same refresh.
+		const store = credentialStore({ app });
+		const { key } = createTokenSource({
+			config: defineServers({ servers: [{ issuer, clientId: "cli" }] }),
+			identity: { issuer, clientId: "cli", apiOrigins: [API] },
+			store,
+			fetch,
+		});
+		const lock = await holdLock((fn) => credentialStoreInternals(store).lockIdentity(key, fn));
+		const flight = () => [...refreshFlights.values()][0];
+		const broken = new Error("broken output");
+		const warnings: AuthWarning[] = [];
+		const thrower = auth.token({
+			onWarning: () => {
+				throw broken;
+			},
+		});
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(1));
+		const other = auth.token({ onWarning: (warning) => warnings.push(warning) });
+		await vi.waitFor(() => expect(flight()?.waiters).toBe(2));
+		await lock.release();
+		expect(await rejection(thrower)).toBe(broken);
+		expect((await other).value).toBe("AT2");
+		expect(warnings).toEqual([{ code: "plaintext-storage" }]);
+		expect(tokenRequests()).toHaveLength(2);
+	});
+
+	it("without a keyring, a login that is stale stores nothing and reports no plaintext write", async () => {
+		const { auth } = setup();
+		const play = browser();
+		const warnings: AuthWarning[] = [];
+		const error = await rejection(
+			auth.login({
+				onUrl: async (prompt) => {
+					await auth.logout();
+					play.onUrl(prompt);
+				},
+				onCode: noCode,
+				onWarning: (warning) => warnings.push(warning),
+			}),
+		);
+		expect(error).toBeInstanceOf(StaleCommitError);
+		expect(warnings).toEqual([]);
+		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
 	it("strict refuses to store a login without a keyring, with a typed key error", async () => {
@@ -916,10 +1088,8 @@ describe("storage", () => {
 		expect(await auth.status()).toEqual({ source: "none", storage: noLogins });
 	});
 
-	it("rejects a strict or onWarning of the wrong type", () => {
-		for (const options of [{ strict: "yes" }, { onWarning: "print" }]) {
-			expect(() => setup(undefined, options as never)).toThrow(OAuthConfigError);
-		}
+	it("rejects a strict of the wrong type", () => {
+		expect(() => setup(undefined, { strict: "yes" } as never)).toThrow(OAuthConfigError);
 	});
 });
 
@@ -1246,7 +1416,7 @@ describe("profiles", () => {
 		expect(
 			Object.values(records).map((record) => (record as { identity: unknown }).identity),
 		).toEqual([{ issuer: world.issuer, clientId: "cli", profile: "work", apiOrigins: [API] }]);
-		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: true }]);
 	});
 
 	it("token() and status() read the file once, so the current profile and its login are one snapshot", async () => {
@@ -1302,7 +1472,7 @@ describe("profiles", () => {
 			const moved = key.replace("work#", "moved#");
 			return { ...document!, records: { ...document!.records, [moved]: document!.records[key] } };
 		});
-		expect(await auth.profiles.list()).toEqual([{ name: "work", current: false }]);
+		expect(await auth.profiles.list()).toEqual([{ name: "work", current: true }]);
 	});
 
 	it("use() refuses a corrupt login or one that belongs to another profile, writing nothing", async () => {
@@ -1386,6 +1556,7 @@ describe("profiles", () => {
 		const work = profile("work");
 		await signIn(auth);
 		await signIn(work);
+		await auth.profiles.use("default");
 		expect((await auth.token()).value).toBe("AT1");
 		expect((await profile("default").token()).value).toBe("AT1");
 		const { token } = work;
@@ -1459,7 +1630,7 @@ describe("profiles", () => {
 		const { auth, signIn, app, requests } = profiled();
 		await signIn(auth.profile("work"));
 		await signIn(auth.profile("b-side"));
-		await signIn(auth);
+		await signIn(auth.profile("default"));
 		await auth.profile("b-side").logout();
 		const otherIssuer = uniqueIssuer();
 		await storeLogin(
@@ -1506,12 +1677,12 @@ describe("profiles", () => {
 		expect(keyring.writes()).toBe(1);
 	});
 
-	it("the remembered profile survives other profiles' logins, refreshes and logouts, and its own logout clears it", async () => {
+	it("the current profile survives other profiles' refreshes and logouts, and its own logout clears it", async () => {
 		const { auth, signIn, document } = profiled();
 		await signIn(auth.profile("work"));
-		await auth.profiles.use("work");
 		const personal = auth.profile("personal");
 		await signIn(personal);
+		await auth.profiles.use("work");
 		await (
 			await personal.token()
 		).refresh!({});
@@ -1522,10 +1693,130 @@ describe("profiles", () => {
 		expect(document()).not.toHaveProperty("currentProfile");
 	});
 
-	it("a login does not change the current profile", async () => {
+	it("a login makes its profile the current one, in the write that stores it", async () => {
+		const { auth, signIn, document } = profiled({ profilesEnv: "ACME_PROFILE" });
+		vi.stubEnv("ACME_PROFILE", "");
+		const current = async () => (await auth.status()).profile;
+		await signIn(auth.profile("work"));
+		expect(await current()).toEqual({ name: "work", via: "current" });
+		expect((await auth.token()).value).toBe("AT1");
+		// A function's name, a given name, and the profile the variable picks for one run.
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, profile: () => "octocat" });
+		expect(await current()).toEqual({ name: "octocat", via: "current" });
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, profile: "personal" });
+		expect(await current()).toEqual({ name: "personal", via: "current" });
+		vi.stubEnv("ACME_PROFILE", "ci");
+		await signIn(auth);
+		vi.stubEnv("ACME_PROFILE", "");
+		expect(await current()).toEqual({ name: "ci", via: "current" });
+		// The current profile's own login keeps it.
+		await signIn(auth);
+		expect(Object.values(document().currentProfile)).toEqual(["ci"]);
+		expect(await auth.profiles.list()).toEqual([
+			{ name: "ci", current: true },
+			{ name: "octocat", current: false },
+			{ name: "personal", current: false },
+			{ name: "work", current: false },
+		]);
+	});
+
+	it("a login that stores nothing leaves the current profile, and a client without profiles records none", async () => {
 		const { auth, signIn } = profiled();
 		await signIn(auth.profile("work"));
-		expect((await auth.status()).profile).toEqual({ name: "default", via: "default" });
+		// A logout of the profile while the user signs in makes its login stale.
+		const stale = await rejection(
+			auth.login({
+				onCode: noCode,
+				profile: "personal",
+				onUrl: async (prompt) => {
+					await auth.profile("personal").logout();
+					browser().onUrl(prompt);
+				},
+			}),
+		);
+		expect(stale).toBeInstanceOf(StaleCommitError);
+		expect((await auth.status()).profile).toEqual({ name: "work", via: "current" });
+		const unprofiled = setup();
+		await unprofiled.auth.login({ onUrl: browser().onUrl, onCode: noCode });
+		expect(
+			JSON.parse(readFileSync(join(unprofiled.dir, "credentials.json"), "utf8")),
+		).not.toHaveProperty("currentProfile");
+	});
+
+	it("login({ profile }) stores the login as the profile a function names from the new tokens, or as a given name", async () => {
+		const { auth } = profiled();
+		const seen: string[] = [];
+		await auth.login({
+			onUrl: browser().onUrl,
+			onCode: noCode,
+			profile: async (tokens) => {
+				seen.push(tokens.accessToken);
+				return "octocat";
+			},
+		});
+		expect(seen).toEqual(["AT1"]);
+		expect(await auth.profiles.list()).toEqual([{ name: "octocat", current: true }]);
+		expect((await auth.token()).value).toBe("AT1");
+		await auth.login({ onUrl: browser().onUrl, onCode: noCode, profile: "work" });
+		expect((await auth.profile("work").token()).value).toBe("AT2");
+		expect(await auth.status()).toMatchObject({
+			source: "login",
+			profile: { name: "work", via: "current" },
+		});
+	});
+
+	it("login({ profile }) is read only by the client's own login(), not by a profile's or the current one's", async () => {
+		const { auth } = profiled();
+		// Not a fresh literal, so TypeScript allows the extra property.
+		const options = { onUrl: browser().onUrl, onCode: noCode, profile: "personal" };
+		await auth.profile().login(options);
+		await auth.profile("work").login({ ...options, onUrl: browser().onUrl });
+		expect(await auth.profiles.list()).toEqual([
+			{ name: "default", current: false },
+			{ name: "work", current: true },
+		]);
+		const { auth: unprofiled } = setup();
+		await unprofiled.login({ ...options, onUrl: browser().onUrl });
+		expect(await unprofiled.status()).toMatchObject({ source: "login" });
+	});
+
+	it("login({ profile }) stores nothing when the function throws, is aborted or names a bad profile", async () => {
+		const { auth, requests } = profiled();
+		const thrown = new Error("no account");
+		const login = (profile: ProfileLoginOptions["profile"], signal?: AbortSignal) =>
+			auth.login({ onUrl: browser().onUrl, onCode: noCode, profile, signal });
+		expect(
+			await rejection(
+				login(() => {
+					throw thrown;
+				}),
+			),
+		).toBe(thrown);
+		expect(await configReason(login(async () => "a/b"))).toBe("invalid-option");
+		const controller = new AbortController();
+		const pending = login(() => {
+			queueMicrotask(() => controller.abort());
+			return new Promise<string>(() => {});
+		}, controller.signal);
+		expect(await rejection(pending)).toBeInstanceOf(AbortError);
+		expect(await auth.profiles.list()).toEqual([]);
+		// A logout of the named profile while the user signs in is not undone.
+		let loggedOut: unknown;
+		const stale = await rejection(
+			login(async () => {
+				loggedOut = await auth.profile("work").logout();
+				return "work";
+			}),
+		);
+		expect(loggedOut).toEqual({ local: "absent", remote: "skipped" });
+		expect(stale).toBeInstanceOf(StaleCommitError);
+		expect(await auth.profiles.list()).toEqual([]);
+		// A bad name given up front is refused before any request.
+		const before = requests.length;
+		const error = await rejection(login(".work"));
+		expect(error).toMatchObject({ reason: "invalid-option" });
+		expect((error as Error).message).not.toContain(".work");
+		expect(requests).toHaveLength(before);
 	});
 
 	it("refuse a bad name where it is received, without echoing it", async () => {
