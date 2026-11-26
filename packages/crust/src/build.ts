@@ -48,12 +48,10 @@ import {
 } from "./node-exe.ts";
 import { buildEntrypoint } from "./snapshot.ts";
 import {
-	type ALL_TARGETS,
 	BUILD_RUNTIMES,
 	type BuildRuntime,
 	BUN_TARGETS,
 	type BunTarget,
-	HOST_TARGET,
 	NODE_TARGETS,
 	type NodeTarget,
 	resolveTargets,
@@ -154,7 +152,7 @@ export function readCrustConfig(pkg: JsonObject): CrustConfig {
 		config.artifact = crust.artifact;
 	}
 	if (crust.targets !== undefined) {
-		// An empty list would mean "every target" downstream, the opposite of what it says.
+		// An empty list would mean "this machine's target" downstream, which it does not say.
 		if (!isStringArray(crust.targets) || crust.targets.length === 0) {
 			throw new Error(
 				'package.json crust.targets must be a non-empty array of canonical compiler targets, e.g. ["bun-linux-x64", "bun-darwin-arm64"].',
@@ -420,19 +418,12 @@ export type BuildOptions = {
 	 */
 	artifact?: ArtifactKind;
 	/**
-	 * Canonical compiler targets, `"host"` for this machine, or `"all"` for every
-	 * target of the compiler. Overrides package.json `crust.targets`; omit both to
-	 * stage this machine's target only.
+	 * Canonical compiler targets. Overrides package.json `crust.targets`; omit
+	 * both to stage this machine's target only.
 	 * Rejected for runtime packages. Known names are completion hints only; any
 	 * string is checked at build time.
 	 */
-	targets?: readonly (
-		| BunTarget
-		| NodeTarget
-		| typeof HOST_TARGET
-		| typeof ALL_TARGETS
-		| (string & {})
-	)[];
+	targets?: readonly (BunTarget | NodeTarget | (string & {}))[];
 	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. */
 	envFiles?: readonly string[];
 	/** Minify the output. Default: true. */
@@ -557,10 +548,8 @@ export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	};
 
 	if (artifact === "package") return { ...common, runtime, artifact };
-	// This machine by default; a release stages crust.targets or `all` (`crust publish` checks).
-	const targetInputs = options.targets?.length
-		? options.targets
-		: (config.targets ?? [HOST_TARGET]);
+	// No names means this machine's target; a release stages crust.targets (`crust publish` checks).
+	const targetInputs = options.targets?.length ? options.targets : config.targets;
 	if (runtime === "bun") {
 		return {
 			...common,

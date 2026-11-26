@@ -2,7 +2,6 @@ import { defineCommand } from "@crustjs/core";
 
 import { build } from "../build.ts";
 import { ARTIFACT_KINDS } from "../distribute.ts";
-import { ALL_TARGETS, HOST_TARGET } from "../targets.ts";
 
 /**
  * The `crust build` command: {@link build} with its flags mapped onto
@@ -14,7 +13,6 @@ import { ALL_TARGETS, HOST_TARGET } from "../targets.ts";
  * crust build --artifact package               # Stage a root-only runtime package
  * crust build --artifact binary                # Stage binaries for crust.targets, or this machine
  * crust build --target bun-linux-x64           # Stage only Linux x64 (crust.artifact: binary)
- * crust build --target all                     # Stage every target, for a release
  * crust build --no-minify                      # Disable minification
  * crust build --env-file .env.production       # Inline PUBLIC_* constants from a file
  * ```
@@ -34,7 +32,8 @@ export const buildCommand = defineCommand(
 				target: {
 					type: "string",
 					multiple: true,
-					description: `Canonical compiler target(s) for binaries, "${HOST_TARGET}" for this machine, or "${ALL_TARGETS}" for every target; repeatable. Omit to stage package.json crust.targets, or this machine's target`,
+					description:
+						"Canonical compiler target(s) for binaries; repeatable. Omit to stage package.json crust.targets, or this machine's target",
 					short: "t",
 				},
 				"env-file": {

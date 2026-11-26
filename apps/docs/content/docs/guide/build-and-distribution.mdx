@@ -29,11 +29,15 @@ Merge these fields into your `package.json`, keeping your dependencies:
   "private": true,
   "type": "module",
   "bin": { "my-cli": "src/cli.ts" },
-  "crust": { "runtime": "bun", "artifact": "binary" },
+  "crust": {
+    "runtime": "bun",
+    "artifact": "binary",
+    "targets": ["bun-linux-x64", "bun-linux-arm64", "bun-darwin-arm64", "bun-windows-x64"]
+  },
   "scripts": {
     "build": "crust build",
     "start": "node .crust/root/bin/my-cli.js",
-    "release": "crust publish"
+    "release": "crust build && crust publish"
   }
 }
 ```
@@ -42,6 +46,7 @@ Merge these fields into your `package.json`, keeping your dependencies:
 - **`private`:** keeps the source project from being published. Crust generates separate publishable packages in `.crust/`.
 - **`crust.runtime`:** the runtime your CLI runs on. [Without it](/docs/modules/crust#packagejson-configuration), Crust infers one.
 - **`crust.artifact`:** required; what the build distributes, independent of the runtime. `--artifact package` or `--artifact binary` overrides it for one build.
+- **`crust.targets`:** the platforms a binary release ships; see [choose release targets](#choose-release-targets). Runtime packages leave it out.
 
 | Runtime | `"artifact": "package"`                         | `"artifact": "binary"`                                    |
 | ------- | ----------------------------------------------- | --------------------------------------------------------- |
@@ -58,7 +63,7 @@ The commands below assume Node.js and Bun are installed. Node.js binaries also n
 npm run build
 ```
 
-Binaries are built for your machine only, unless [`crust.targets`](#choose-release-targets) lists the platforms you release. Runtime packages have no targets.
+Binaries are built for the platforms [`crust.targets`](#choose-release-targets) lists, or for your machine only without it. Runtime packages have no targets.
 
 Each successful build replaces `.crust/`; a failed build keeps the previous one. Add `.crust/` and `.crust.lock/` to `.gitignore`. On Linux x64 with Bun binaries:
 
@@ -77,13 +82,7 @@ Runtime packages have no platform directories; `root/bin/my-cli.js` is the bundl
 
 ### Choose release targets
 
-A release ships every platform you support. Build every target of the compiler with `--target all`:
-
-```sh
-npm run build -- --target all
-```
-
-Or list the platforms you support in [`crust.targets`](/docs/modules/crust#packagejson-configuration), and `npm run build` stages them all:
+A binary release ships exactly the platforms you list in [`crust.targets`](/docs/modules/crust#packagejson-configuration), by their [target names](/docs/modules/crust#supported-targets), and `npm run build` stages them all:
 
 ```json title="package.json (partial)"
 {
@@ -97,11 +96,11 @@ Or list the platforms you support in [`crust.targets`](/docs/modules/crust#packa
 ```sh
 # Override the targets for one build (Bun example)
 npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
-# Only this machine, for a quick local build
-npm run build -- --target host
+# Only this machine, for a quick local build on Linux x64
+npm run build -- --target bun-linux-x64
 ```
 
-[`crust publish`](#publish-with-crust-publish) refuses binaries that miss a release target: every target in `crust.targets` except `host`, or every target of the compiler without it. See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
+[`crust publish`](#publish-with-crust-publish) of binaries requires `crust.targets` and refuses a stage that misses one of its targets. Without `crust.targets`, `crust build` stages only this machine's target. See [supported targets](/docs/modules/crust#supported-targets), including musl targets for Alpine Linux.
 
 ### Binary runtime version
 
@@ -191,10 +190,9 @@ node .crust/root/bin/my-cli.js --help
 
 ## Publish with `crust publish`
 
-Use a package name you own and a new version, then build your [release targets](#choose-release-targets):
+Use a package name you own and a new version. The `release` script builds your [release targets](#choose-release-targets), then publishes:
 
 ```sh
-npm run build -- --target all   # binaries without crust.targets; otherwise npm run build
 npm run release -- --dry-run
 # Publish order: ... -> root
 
@@ -203,7 +201,7 @@ npm run release
 ```
 
 - `--dry-run` validates staged metadata and prints the plan **without contacting the registry**.
-- Binaries must include every [release target](#choose-release-targets), or it fails with `Stage is incomplete`, names the missing ones, and suggests `crust build --target all`.
+- Binaries need [`crust.targets`](#choose-release-targets): without it, it fails and asks you to list your release targets. The stage must hold every listed target, or it fails with `Stage is incomplete`, names the missing ones, and suggests `crust build`.
 - A real publish uses npm, uploads platform packages before the root, and stops on failure.
 - Rerun to resume: existing `name@version` pairs are skipped, never overwritten or re-tagged.
 
@@ -226,7 +224,7 @@ permissions:
   id-token: write
 ```
 
-After installing dependencies and building the release targets, run `npm run release`; do not run `npm login` in CI.
+After installing dependencies, run `npm run release`, which builds the release targets and publishes; do not run `npm login` in CI.
 
 npm runs inside each staged package, so it does not read the project's `.npmrc`. To use a credentials file, select it explicitly, and keep it out of version control:
 

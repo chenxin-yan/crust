@@ -188,9 +188,6 @@ describe("planBuild", () => {
 		"stages only this machine's target without --target or crust.targets",
 		() => {
 			expect(planBuild(binary, tmpDir)).toMatchObject({ runtime: "bun", targets: [host] });
-			expect(planBuild({ ...binary, targets: ["all"] }, tmpDir)).toMatchObject({
-				targets: BUN_TARGETS.targets,
-			});
 			writePackageJson({ crust: { runtime: "node", artifact: "binary" } });
 			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 				runtime: "node",
@@ -450,14 +447,14 @@ describe("planBuild", () => {
 		});
 	}
 
-	it.skipIf(host === null)("resolves --target host to this machine's target", () => {
-		expect(planBuild({ ...binary, targets: ["host"] }, tmpDir)).toMatchObject({
-			runtime: "bun",
-			targets: [host],
-		});
-		expect(
-			planBuild({ ...binary, targets: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
-		).toMatchObject({ targets: host === "bun-linux-x64" ? [host] : [host, "bun-linux-x64"] });
+	it("takes target names only, from --target or crust.targets", () => {
+		for (const name of ["all", "host"]) {
+			expect(() => planBuild({ ...binary, targets: [name] }, tmpDir)).toThrow(
+				`Unknown target "${name}"`,
+			);
+			writePackageJson({ crust: { targets: [name] } });
+			expect(() => planBuild(binary, tmpDir)).toThrow(`Unknown target "${name}"`);
+		}
 	});
 });
 
@@ -628,6 +625,10 @@ describe("readCrustConfig", () => {
 		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
 		expect(crust.properties.artifact.enum).toEqual([...ARTIFACT_KINDS]);
+		expect(crust.properties.targets.items.enum).toEqual([
+			...BUN_TARGETS.targets,
+			...NODE_TARGETS.targets,
+		]);
 	});
 });
 
@@ -985,7 +986,6 @@ describe("build", () => {
 				const result = await build({
 					cwd: tmpDir,
 					artifact: "binary",
-					targets: ["host"],
 					validate: false,
 					onLog: (line) => logged.push(line),
 				});
@@ -1069,8 +1069,6 @@ describe("buildCommand", () => {
 					"build",
 					"--artifact",
 					"binary",
-					"--target",
-					"host",
 				]);
 
 				expect(result.exitCode, result.stderr).toBe(0);
@@ -1120,8 +1118,6 @@ describe("buildCommand", () => {
 				"build",
 				"--artifact",
 				"binary",
-				"--target",
-				"host",
 				...argv,
 			]);
 

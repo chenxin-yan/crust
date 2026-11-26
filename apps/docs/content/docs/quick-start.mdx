@@ -102,9 +102,9 @@ npm run build
 npm run start Ada
 ```
 
-- `build` runs `crust build`, which stages your selected artifact and npm packaging metadata in `.crust/`.
+- `build` runs `crust build`, which stages your selected artifact and npm packaging metadata in `.crust/`. A binary is built for every platform in `crust.targets`, which lists every target of the runtime until you trim it.
 - `start` runs the built CLI from `.crust/root/bin/`.
-- `release` runs `crust publish` to publish the staged packages to npm.
+- `release` runs `crust build && crust publish` to build and publish the staged packages to npm.
 
 npm is optional: standalone binaries embed their runtime and can also ship as [release downloads or through Homebrew and other installers](/docs/guide/build-and-distribution#custom-distribution), without the Node-based npm launcher. Runtime packages still require their selected runtime. See [Build and distribution](/docs/guide/build-and-distribution) for targets and output layouts.
 

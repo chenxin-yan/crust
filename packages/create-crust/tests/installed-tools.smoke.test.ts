@@ -37,8 +37,10 @@ const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 describe("installed create-crust and crust (Linux/npm)", () => {
 	it("packs, installs, scaffolds, builds through the root shim, and runs", async (context) => {
 		context.skip(process.platform !== "linux", "The installed-tool smoke runs on Linux only.");
-		const target = hostTarget()?.replace(/^bun-/, "");
-		if (!target) throw new Error("Unsupported host for installed-tool smoke.");
+		const bunTarget = hostTarget();
+		// Also this machine's Node target name: this smoke runs on glibc Linux only.
+		const target = bunTarget?.replace(/^bun-/, "");
+		if (!bunTarget || !target) throw new Error("Unsupported host for installed-tool smoke.");
 		for (const tool of ["node", "npm", "bun", "git", "pnpm", "tar", "xz"]) {
 			if (!which(tool)) throw new Error(`${tool} is required on PATH.`);
 		}
@@ -148,9 +150,11 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			const stage = join(repoRoot, "packages/crust/.crust");
 			const manifest = readJson(join(stage, "manifest.json"));
 			const stagedRoot = readJson(join(stage, "root/package.json"));
-			// Host-only staging hides npm's handling of incompatible optional packages and their bins.
+			// A one-target stage hides npm's handling of incompatible optional packages and their bins.
 			if (!manifest.packages.some((pkg: { os: string }) => pkg.os !== process.platform)) {
-				throw new Error("Build crust with all targets first; host-only staging is insufficient.");
+				throw new Error(
+					"Build crust with `crust build` first, which stages every target in its crust.targets; a one-target stage is insufficient.",
+				);
 			}
 			// Platform packages plus the Node binary backend, both optional.
 			expect(stagedRoot.optionalDependencies).toEqual({
@@ -294,7 +298,7 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			}
 			await run([crust, "--help"], project);
 			expect(existsSync(join(project, ".crust"))).toBe(false);
-			await run([crust, "build", "--target", "host"], project, 0, 120_000);
+			await run([crust, "build", "--target", bunTarget], project, 0, 120_000);
 			const built = readJson(join(project, ".crust/manifest.json"));
 			expect(built.root.bins).toEqual(["installed-cli"]);
 			expect(built.packages).toHaveLength(1);
@@ -326,7 +330,7 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			symlinkSync(realpathSync(which("node")!), join(nodeOnly, "node"));
 			const bunVersion = (await run(["bun", "--version"], consumer)).stdout.trim();
 			const embedded = await run(
-				[crust, "build", "--target", "host"],
+				[crust, "build", "--target", bunTarget],
 				project,
 				0,
 				120_000,
@@ -373,7 +377,7 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			pkg.crust = { ...pkg.crust, runtime: "node", artifact: "binary" };
 			writeFileSync(join(project, "package.json"), `${JSON.stringify(pkg, null, "\t")}\n`);
 			const nodeBinary = await run(
-				[crust, "build", "--target", "host"],
+				[crust, "build", "--target", target],
 				project,
 				0,
 				180_000,
@@ -431,7 +435,7 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			for (const backend of ["tsdown", "@tsdown/exe"]) {
 				expect(existsSync(join(project, "node_modules", backend))).toBe(false);
 			}
-			await run([crust, "build", "--target", "host"], project, 0, 120_000, legacyPath);
+			await run([crust, "build", "--target", bunTarget], project, 0, 120_000, legacyPath);
 			expect(readJson(join(project, ".crust/manifest.json"))).toMatchObject({
 				runtime: "bun",
 				artifact: "binary",
@@ -442,7 +446,7 @@ describe("installed create-crust and crust (Linux/npm)", () => {
 			pkg.crust = { ...pkg.crust, runtime: "node", artifact: "binary" };
 			writeFileSync(join(project, "package.json"), `${JSON.stringify(pkg, null, "\t")}\n`);
 			const missing = await run(
-				[crust, "build", "--target", "host"],
+				[crust, "build", "--target", target],
 				project,
 				1,
 				60_000,

@@ -31,11 +31,27 @@
 					]
 				},
 				"targets": {
-					"description": "Canonical compiler targets `crust build` stages for binaries when no --target flag is passed, or `host` for the building machine, or `all` for every target of the compiler (e.g. bun-linux-x64, or linux-x64 for node); without it only the building machine's target is staged, and `crust publish` requires every target of the compiler. Rejected for runtime packages.",
+					"description": "Canonical compiler targets of a binary release: Bun names for the bun runtime (bun-linux-x64, …), Node names for node (linux-x64, …). `crust build` stages them when no --target flag is passed, and `crust publish` requires every one; without the list, `crust build` stages only the building machine's target and `crust publish` of binaries fails. Rejected for runtime packages.",
 					"type": "array",
 					"minItems": 1,
 					"items": {
-						"type": "string"
+						"type": "string",
+						"enum": [
+							"bun-linux-x64",
+							"bun-linux-arm64",
+							"bun-linux-x64-musl",
+							"bun-linux-arm64-musl",
+							"bun-darwin-x64",
+							"bun-darwin-arm64",
+							"bun-windows-x64",
+							"bun-windows-arm64",
+							"linux-x64",
+							"linux-arm64",
+							"darwin-x64",
+							"darwin-arm64",
+							"win-x64",
+							"win-arm64"
+						]
 					}
 				},
 				"bunPlugins": {

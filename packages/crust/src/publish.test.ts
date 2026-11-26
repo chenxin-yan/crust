@@ -13,7 +13,6 @@ import {
 	readPublishManifest,
 	validatePublishManifest,
 } from "./publish.ts";
-import { BUN_TARGETS, hostTarget } from "./targets.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -186,7 +185,7 @@ describe("publish manifest validation", () => {
 		);
 	});
 
-	it("rejects binaries missing a release target: crust.targets, or every target without it", () => {
+	it("requires crust.targets for binaries and every listed target staged", () => {
 		const projectDir = join(tmpDir, "project");
 		mkdirSync(projectDir);
 		const writeProject = (crust?: object) =>
@@ -197,11 +196,13 @@ describe("publish manifest validation", () => {
 
 		writeProject({ targets: ["bun-linux-x64", "bun-windows-x64", "bun-darwin-arm64"] });
 		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
-			"Stage is incomplete: .crust/ holds linux-x64, darwin-arm64, but a release ships every target in package.json crust.targets; missing bun-windows-x64.\n  crust build stages only this machine's target by default.",
+			"Stage is incomplete: .crust/ holds linux-x64, darwin-arm64, but package.json crust.targets also lists bun-windows-x64.\n  Run `crust build`, which stages every target in crust.targets.",
 		);
+		writeProject({ targets: ["bun-darwin-arm64", "bun-linux-x64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).not.toThrow();
 		writeProject();
 		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
-			"but a release ships every Bun target; missing bun-linux-arm64, bun-linux-x64-musl, bun-linux-arm64-musl, bun-darwin-x64, bun-windows-x64, bun-windows-arm64.",
+			"A binary release ships the targets in package.json crust.targets, which is missing.\n  List your release targets in package.json crust.targets and run `crust build`. Valid Bun targets: bun-linux-x64, bun-linux-arm64, bun-linux-x64-musl, bun-linux-arm64-musl, bun-darwin-x64, bun-darwin-arm64, bun-windows-x64, bun-windows-arm64",
 		);
 		const nodeManifest: DistributionManifest = {
 			...manifest,
@@ -209,7 +210,7 @@ describe("publish manifest validation", () => {
 			packages: manifest.packages.map((pkg) => ({ ...pkg, bins: {} })),
 		};
 		expect(() => assertStageMatchesProject(projectDir, nodeManifest)).toThrow(
-			"but a release ships every Node target; missing linux-arm64, darwin-x64, win-x64, win-arm64.",
+			"Valid Node targets: linux-x64, linux-arm64, darwin-x64, darwin-arm64, win-x64, win-arm64",
 		);
 		writeProject({ targets: ["linux-x64", "darwin-arm64"] });
 		expect(() => assertStageMatchesProject(projectDir, nodeManifest)).not.toThrow();
@@ -218,32 +219,8 @@ describe("publish manifest validation", () => {
 		expect(() =>
 			assertStageMatchesProject(projectDir, { ...nodeManifest, packages: [] }),
 		).not.toThrow();
-		// What `crust build --target all` stages is a complete release, with or without crust.targets.
-		const everyTarget: DistributionManifest = {
-			...manifest,
-			packages: BUN_TARGETS.targets.map((target) => ({
-				...manifest.packages[0]!,
-				target: BUN_TARGETS.info[target].alias,
-			})),
-		};
-		expect(() => assertStageMatchesProject(projectDir, everyTarget)).not.toThrow();
 		writeProject({ targets: ["all"] });
-		expect(() => assertStageMatchesProject(projectDir, everyTarget)).not.toThrow();
-		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
-			"Run `crust build --target all`, or list your release targets",
-		);
-		// `host` is the machine that built the stage, so a stage from another machine is complete.
-		const other = BUN_TARGETS.targets.find((target) => target !== hostTarget(BUN_TARGETS))!;
-		const otherMachine: DistributionManifest = {
-			...manifest,
-			packages: [{ ...manifest.packages[0]!, target: BUN_TARGETS.info[other].alias }],
-		};
-		writeProject({ targets: ["host"] });
-		expect(() => assertStageMatchesProject(projectDir, otherMachine)).not.toThrow();
-		writeProject({ targets: ["host", "bun-windows-x64"] });
-		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
-			"missing bun-windows-x64.",
-		);
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow('Unknown target "all"');
 	});
 
 	it("validates a root-only Node manifest and publishes just the root", async () => {

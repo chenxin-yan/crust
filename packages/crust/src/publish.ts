@@ -13,13 +13,7 @@ import {
 
 import { readCrustConfig } from "./build.ts";
 import { type LineIO, validatePackageIdentity } from "./distribute.ts";
-import {
-	BUN_TARGETS,
-	HOST_TARGET,
-	NODE_TARGETS,
-	resolveTargets,
-	type TargetTable,
-} from "./targets.ts";
+import { BUN_TARGETS, NODE_TARGETS, resolveTargets, type TargetTable } from "./targets.ts";
 
 /** Only the persisted fields publishing consumes; build reports remain informational. */
 type PublishManifest = {
@@ -160,10 +154,9 @@ export function readPublishManifest(stageDir: string): PublishManifest {
 
 /**
  * Rejects a stage built before the project's name or version changed, which
- * would publish the old release, and binaries missing a release target:
- * `crust build` stages only this machine by default, while a release ships
- * package.json `crust.targets`, or every target of the compiler (`--target all`) without it.
- * `host` in `crust.targets` is not required: it names the machine that built the stage.
+ * would publish the old release, and binaries that are not a release: a
+ * binary release ships every target in package.json `crust.targets`, which it
+ * requires, while `crust build` stages only this machine's target without it.
  */
 export function assertStageMatchesProject(projectDir: string, manifest: PublishManifest): void {
 	const packageJsonPath = join(projectDir, "package.json");
@@ -186,15 +179,20 @@ export function assertStageMatchesProject(projectDir: string, manifest: PublishM
 	if (manifest.packages.length === 0 || !isRecord(project)) return;
 	const table: TargetTable<string> = manifest.runtime === "node" ? NODE_TARGETS : BUN_TARGETS;
 	const configured = readCrustConfig(project).targets;
+	if (!configured) {
+		throw new Error(
+			`A binary release ships the targets in package.json crust.targets, which is missing.\n` +
+				`  List your release targets in package.json crust.targets and run \`crust build\`. Valid ${table.runtime} targets: ${table.targets.join(", ")}`,
+		);
+	}
 	const staged = new Set(manifest.packages.map((pkg) => pkg.target));
-	// `host` names the machine that built the stage, which the publishing machine cannot know.
-	const release = configured?.filter((target) => target !== HOST_TARGET);
-	const required = configured && release?.length === 0 ? [] : resolveTargets(table, release);
-	const missing = required.filter((target) => !staged.has(table.info[target]!.alias));
+	const missing = resolveTargets(table, configured).filter(
+		(target) => !staged.has(table.info[target]!.alias),
+	);
 	if (missing.length > 0) {
 		throw new Error(
-			`Stage is incomplete: .crust/ holds ${[...staged].join(", ")}, but a release ships ${configured ? "every target in package.json crust.targets" : `every ${table.runtime} target`}; missing ${missing.join(", ")}.\n` +
-				`  crust build stages only this machine's target by default. Run \`crust build --target all\`, or list your release targets in package.json crust.targets and run \`crust build\`.`,
+			`Stage is incomplete: .crust/ holds ${[...staged].join(", ")}, but package.json crust.targets also lists ${missing.join(", ")}.\n` +
+				`  Run \`crust build\`, which stages every target in crust.targets.`,
 		);
 	}
 }

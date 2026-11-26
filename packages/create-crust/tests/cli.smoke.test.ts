@@ -20,6 +20,7 @@ import { pathToFileURL } from "node:url";
 import type { BuildOptions } from "@crustjs/crust";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { BUN_TARGETS, hostTarget, NODE_TARGETS } from "../../crust/src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { floorRuntime, seaNodeBinDir, workspaceClosure } from "../../crust/tests/helpers.ts";
 import { type RunProcessResult, which } from "../../utils/src/process.ts";
@@ -102,15 +103,14 @@ function assertSuccess(
 }
 
 /** The linked workspace crust's bin is its Bun source entry, so run it with Bun. */
-function crustBuildArgv(projectDir: string, artifact: Artifact): string[] {
+function crustBuildArgv(projectDir: string, runtime: Runtime, artifact: Artifact): string[] {
 	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "src", "cli.ts");
-	// Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts).
-	return [
-		which("bun")!,
-		crustCli,
-		"build",
-		...(artifact === "package" ? [] : ["--target", "host"]),
-	];
+	if (artifact === "package") return [which("bun")!, crustCli, "build"];
+	// The scaffold lists every target; this machine's alone avoids cross-compile
+	// downloads (flaky on Windows CI for Linux Bun artifacts).
+	const target = runtime === "bun" ? hostTarget(BUN_TARGETS) : hostTarget(NODE_TARGETS);
+	if (!target) throw new Error(`No ${runtime} target matches this machine.`);
+	return [which("bun")!, crustCli, "build", "--target", target];
 }
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
@@ -297,7 +297,7 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	const test = await run(testCommand, sampleDir);
 	assertSuccess("generated project test", testCommand, sampleDir, test);
 
-	const buildCommand = crustBuildArgv(sampleDir, artifact);
+	const buildCommand = crustBuildArgv(sampleDir, runtime, artifact);
 
 	// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
 	// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
@@ -334,7 +334,7 @@ async function smokeRuntime(runtime: Runtime, artifact: Artifact): Promise<void>
 	expect(manifest).toMatchObject({ runtime, artifact });
 	expect(manifest.root.bins).toEqual(commands);
 	if (artifact === "binary") {
-		// `--target host` stages exactly one platform package, holding every command's binary.
+		// One `--target` stages exactly one platform package, holding every command's binary.
 		expect(manifest.packages).toHaveLength(1);
 		expect(Object.keys(manifest.packages[0].bins)).toEqual(commands);
 		for (const command of commands) {

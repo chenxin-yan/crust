@@ -18,6 +18,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
+import { BUN_TARGETS, NODE_TARGETS } from "../../crust/src/targets.ts";
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import extensionsPackage from "../../extensions/package.json";
 import testingPackage from "../../testing/package.json";
@@ -198,10 +199,11 @@ describe("create-crust CLI", () => {
 			name,
 			// `crust publish` publishes `.crust/`; refuse a stray `npm publish` of the build input.
 			private: true,
-			crust: { runtime, artifact },
 			bin: { [name]: "src/cli.ts" },
 			scripts: {
 				dev: { bun: "bun run src/cli.ts", node: "node src/cli.ts" }[runtime],
+				build: "crust build",
+				release: "crust build && crust publish",
 				// A binary's Node launcher runs the binary built for this machine.
 				start: `${artifact === "binary" ? "node" : runtime} .crust/root/bin/${name}.js`,
 				test: { bun: "bun test", node: 'node --test "src/**/*.test.ts"' }[runtime],
@@ -217,6 +219,13 @@ describe("create-crust CLI", () => {
 			},
 		});
 		expect("engines" in pkg).toBe(runtime === "node");
+		// A binary release ships exactly crust.targets: every target of the runtime until trimmed.
+		const table = runtime === "bun" ? BUN_TARGETS : NODE_TARGETS;
+		expect(pkg.crust).toEqual({
+			runtime,
+			artifact,
+			...(artifact === "binary" ? { targets: [...table.targets] } : {}),
+		});
 	};
 
 	for (const runtime of ["bun", "node"]) {
