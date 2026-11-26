@@ -179,7 +179,7 @@ describe("create-crust CLI", () => {
 				{ cwd: tempRoot, entrypoint: shim },
 			);
 
-			expect(result.stderr).not.toContain("Template directory");
+			expect(result.stderr).not.toContain("to copy does not exist");
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toContain("Created my-cli!");
 			expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);

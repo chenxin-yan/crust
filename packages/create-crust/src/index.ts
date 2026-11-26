@@ -303,9 +303,9 @@ export const app = new Crust("create-crust", {
 			message: "Scaffolding project...",
 			task: () =>
 				scaffold({
-					template: artifactPath("templates/base"),
+					copy: artifactPath("templates/base"),
 					dest: resolvedDir,
-					files: projectFiles(name, runtime, artifact, packageManager),
+					write: projectFiles(name, runtime, artifact, packageManager),
 					conflict: overwrite ? "overwrite" : "abort",
 				}),
 		});

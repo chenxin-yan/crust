@@ -2,7 +2,7 @@
 title: "Create"
 ---
 
-`@crustjs/create` writes a new project from a template directory, copied as it is, and from files your code writes, then runs post-scaffold steps. It does not provide prompts or terminal UI.
+`@crustjs/create` writes a new project from a directory it copies as it is and from files your code writes, then runs post-scaffold steps. It does not provide prompts or terminal UI.
 
 ## Install
 
@@ -20,23 +20,23 @@ Pair it with any CLI and prompt libraries needed by your create tool.
 
 `scaffold()` returns every written path relative to the destination.
 
-## Locating templates
+## Locating the directory to copy
 
-| `template` value                                | Resolves from                                | Use for                                                       |
+| `copy` value                                    | Resolves from                                | Use for                                                       |
 | ----------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------- |
-| `artifactPath("templates/base")`                | The `crust.include` directory beside the CLI | Templates shipped with a CLI built by `crust build`           |
-| `new URL("../templates/base", import.meta.url)` | The module that contains the call            | Templates inside a package published unbundled                |
-| `"./templates/base"`                            | The user's current working directory         | Templates in the project where the command runs               |
+| `artifactPath("templates/base")`                | The `crust.include` directory beside the CLI | A directory shipped with a CLI built by `crust build`         |
+| `new URL("../templates/base", import.meta.url)` | The module that contains the call            | A directory inside a package published unbundled              |
+| `"./templates/base"`                            | The user's current working directory         | A directory in the project where the command runs             |
 | `"/srv/templates/base"`                         | That exact filesystem path                   | A location already resolved by your own code or configuration |
 
-Ship templates with [`crust.include`](/docs/guide/build-and-distribution#ship-extra-directories-with-crustinclude) and locate them with [`artifactPath()`](/docs/api/crust#artifactpathpath): it finds them from the staged tree, an npm install, or a standalone executable. An `import.meta.url` URL follows the module file, which moves once the CLI is bundled or compiled. `npx`, `bun x`, and global installs run the generator from a cache while the working directory is the user's project, so a relative string resolves there.
+Ship the directory with [`crust.include`](/docs/guide/build-and-distribution#ship-extra-directories-with-crustinclude) and locate it with [`artifactPath()`](/docs/api/crust#artifactpathpath): it finds it from the staged tree, an npm install, or a standalone executable. An `import.meta.url` URL follows the module file, which moves once the CLI is bundled or compiled. `npx`, `bun x`, and global installs run the generator from a cache while the working directory is the user's project, so a relative string resolves there.
 
-- Only `file:` URLs are accepted, and the template must be a directory.
+- Only `file:` URLs are accepted, and `copy` must name a directory.
 - Convert an existing filesystem path with `pathToFileURL()` rather than concatenating `file://`.
 
-## Template conventions
+## Copied files
 
-The template directory is copied exactly: every file's bytes and permission bits. Nothing in it is read or replaced, so it can hold binaries, executable scripts, and files in any syntax.
+The directory is copied exactly: every file's bytes and permission bits. Nothing in it is read or replaced, so it can hold binaries, executable scripts, and files in any syntax.
 
 ```text
 templates/base/_gitignore   -> my-project/.gitignore
@@ -44,32 +44,32 @@ templates/base/__tests__/   -> my-project/__tests__/
 ```
 
 - A single leading `_` on a copied file's name becomes `.`; `__` and a file named only `_` or `_.` stay unchanged. Directory names are never renamed.
-- Symlinks in the template, to files or directories, are skipped.
-- To layer templates, call `scaffold()` more than once with `conflict: "overwrite"`.
+- Symlinks in the copied directory, to files or directories, are skipped.
+- To layer directories, call `scaffold()` more than once with `conflict: "overwrite"`.
 
 ## Files written from code
 
-A file that depends on the user's answers is written from code: `files` maps a path in the new project to its text. TypeScript checks the code that produces each file.
+A file that depends on the user's answers is written from code: `write` maps a path in the new project to its text. TypeScript checks the code that produces each file.
 
 <include lang="ts" meta='title="src/index.ts"'>
   ../../../examples/modules/create-files.ts
 </include>
 
-- A `files` entry wins over the template file at the same path and keeps that file's permission bits.
+- `write` comes after `copy`, so a `write` entry wins over the copied file at the same path and keeps that file's permission bits.
 - Keys are written as given, with no `_` rename. A key must stay inside the new project and outside `.git`.
-- Values are text. Binaries and executables belong in the template.
-- Import a JSON file from the template to start from its typed contents, as with `package.json` above.
-- To change one line of a template file, read it, replace the line, and pass the result.
-- For a prose file with many substitutions, such as a README, keep it as a real file outside the copied directory and render it into `files` with a template engine of your choice. `create-crust` renders its README with [Eta](https://eta.js.org).
+- Values are text. Binaries and executables belong in the copied directory.
+- Import a JSON file from the copied directory to start from its typed contents, as with `package.json` above.
+- To change one line of a copied file, read it, replace the line, and pass the result.
+- For a prose file with many substitutions, such as a README, keep it as a real file outside the copied directory and render it into `write` with a template engine of your choice. `create-crust` renders its README with [Eta](https://eta.js.org).
 
-TypeScript checks the code that produces the text, not the text itself: a misspelled key writes a new file and leaves the template's file as it was. Keep one test that runs your scaffolder and checks its output.
+TypeScript checks the code that produces the text, not the text itself: a misspelled key writes a new file and leaves the copied file as it was. Keep one test that runs your scaffolder and checks its output.
 
 ## `scaffold(options)`
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldOptions" />
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldResult" />
 
-See [Locating templates](#locating-templates) for how `template` resolves. A call needs `template`, `files`, or both; one that names neither does not compile.
+See [Locating the directory to copy](#locating-the-directory-to-copy) for how `copy` resolves. A call needs `copy`, `write`, or both; one that names neither does not compile.
 
 | `conflict`          | Destination with files                                                  |
 | ------------------- | ----------------------------------------------------------------------- |
@@ -79,7 +79,7 @@ See [Locating templates](#locating-templates) for how `template` resolves. A cal
 
 A destination holding only `.git` counts as empty, so `git init` before scaffolding needs no `conflict`.
 
-Every check runs before anything is deleted or written: the template exists and every file to copy can be read, there is something to write, every `files` key stays inside the new project, nothing is written inside `.git`, no two planned files differ only in letter case, no planned file is also the directory of another in any letter case, the conflict rule, and the symlink rules below. `"replace"` also refuses a template inside the destination, or a destination inside the template, since it would delete template files before copying them. It also refuses a destination that is a filesystem root. `"overwrite"` refuses an existing directory where a file goes, or an existing file where a directory goes. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
+Every check runs before anything is deleted or written: the directory to copy exists and every file in it can be read, there is something to write, every `write` key stays inside the new project, nothing is written inside `.git`, no two planned files differ only in letter case, no planned file is also the directory of another in any letter case, the conflict rule, and the symlink rules below. `"replace"` also refuses a directory to copy inside the destination, or a destination inside the directory to copy, since it would delete files before copying them. It also refuses a destination that is a filesystem root. `"overwrite"` refuses an existing directory where a file goes, or an existing file where a directory goes. `dryRun: true` runs the same checks and returns the same `{ files }` without writing or deleting anything.
 
 Symlinks in the destination:
 

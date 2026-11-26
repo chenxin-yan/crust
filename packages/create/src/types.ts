@@ -11,14 +11,14 @@ import type { PackageManager } from "@crustjs/utils/package-manager";
 export type ScaffoldFiles = Readonly<Record<string, string>>;
 
 /**
- * Options for the {@link scaffold} function. At least one of `template` and `files` is required.
+ * Options for the {@link scaffold} function. At least one of `copy` and `write` is required.
  *
  * @example
  * ```ts
  * const options: ScaffoldOptions = {
- *   template: new URL("../templates/base", import.meta.url),
+ *   copy: new URL("../templates/base", import.meta.url),
  *   dest: "./my-project",
- *   files: { "README.md": "# my-app\n" },
+ *   write: { "README.md": "# my-app\n" },
  * };
  * ```
  */
@@ -29,19 +29,19 @@ export type ScaffoldOptions = (
 			 * leading `_` is written with a `.` instead (`_gitignore` becomes `.gitignore`).
 			 *
 			 * - `string`: filesystem path; a relative one resolves against the working directory, like
-			 *   `dest`. For templates shipped with a CLI built by `crust build`, pass
+			 *   `dest`. For a directory shipped with a CLI built by `crust build`, pass
 			 *   `artifactPath("templates/base")`.
 			 * - `URL`: `file:` URL, such as `new URL("../templates/base", import.meta.url)` in a
 			 *   package that is published unbundled.
 			 */
-			readonly template: string | URL;
+			readonly copy: string | URL;
 			/**
-			 * Files written from code. A key that names a template file replaces its content and keeps
-			 * its permission bits. Keys are written as given: no `_` rename.
+			 * Files written from code, after `copy`. A key that names a copied file replaces its content
+			 * and keeps its permission bits. Keys are written as given: no `_` rename.
 			 */
-			readonly files?: ScaffoldFiles;
+			readonly write?: ScaffoldFiles;
 	  }
-	| { readonly template?: undefined; readonly files: ScaffoldFiles }
+	| { readonly copy?: undefined; readonly write: ScaffoldFiles }
 ) & {
 	/** Destination directory, not empty. A relative path resolves against the working directory. */
 	readonly dest: string;

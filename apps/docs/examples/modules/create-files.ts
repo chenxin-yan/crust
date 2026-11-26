@@ -9,12 +9,12 @@ const docker = true;
 const index = await readFile(new URL("../templates/base/src/index.ts", import.meta.url), "utf8");
 
 await scaffold({
-	template: new URL("../templates/base", import.meta.url),
+	copy: new URL("../templates/base", import.meta.url),
 	dest: `./${name}`,
-	files: {
-		// Replaces the template's package.json; `pkg` is typed from that file.
+	write: {
+		// Replaces the copied package.json; `pkg` is typed from that file.
 		"package.json": `${JSON.stringify({ ...pkg, name }, null, "\t")}\n`,
-		// Changes one line of a template file.
+		// Changes one line of a copied file.
 		"src/index.ts": index.replace('"app"', JSON.stringify(name)),
 		// Added only when asked for.
 		...(docker ? { Dockerfile: 'FROM node:24\nCOPY . .\nCMD ["node", "src/index.ts"]\n' } : {}),
