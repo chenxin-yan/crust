@@ -168,6 +168,15 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 		() => defineCommand("a", { sections: [{ title: "a\nb", body: "x" }] }, action),
 	],
 	["invalid-sections", () => defineContext("env").sections({ title: "Env", body: " " })],
+	// An audience id that could never match: an Extension's id is non-empty and trimmed.
+	[
+		"invalid-sections",
+		() => new Crust("cli", { sections: [{ title: "Notes", body: "x", except: ["crust:help "] }] }),
+	],
+	[
+		"invalid-sections",
+		() => new Crust("cli", { sections: [{ title: "N", body: "x", only: [""] }] }),
+	],
 	[
 		"duplicate-section",
 		() =>

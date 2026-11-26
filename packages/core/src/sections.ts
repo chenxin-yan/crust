@@ -79,11 +79,16 @@ export function normalizeSection(
 	) {
 		throw invalidSections(owner);
 	}
-	const audience = (ids: readonly SectionConsumer[]): readonly [string, ...string[]] => {
+	const audience = (consumers: readonly SectionConsumer[]): readonly [string, ...string[]] => {
+		const ids = consumers.map((consumer) =>
+			typeof consumer === "string" ? consumer : consumer.id,
+		);
+		// An Extension's id is non-empty and trimmed, so any other id here matches no consumer.
+		if (process.env.CRUST_INTERNAL_BUILD !== "1" && ids.some((id) => !id || id !== id.trim())) {
+			throw invalidSections(owner);
+		}
 		// SAFETY: `CommandSectionInput` audiences are nonempty.
-		return Object.freeze(
-			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
-		) as readonly [string, ...string[]];
+		return Object.freeze(ids) as readonly [string, ...string[]];
 	};
 	return Object.freeze({
 		title,

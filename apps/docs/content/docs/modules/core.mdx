@@ -71,7 +71,7 @@ import { buildCommandDocumentation, visibleSectionsFor } from "@crustjs/core/too
 
 const snapshot = await app.snapshot();
 const documentation = buildCommandDocumentation(snapshot);
-const visible = visibleSectionsFor(snapshot, webDocs);
+const visible = visibleSectionsFor(snapshot, "acme:web-docs");
 ```
 
 | Export                                                                             | Role                                                               |
