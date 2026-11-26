@@ -2261,6 +2261,14 @@ describe("Context replacements", () => {
 			status: "completed",
 			result: 99,
 		});
+		// A key holding `undefined` is an absent key, as when a value that may be unset is passed on.
+		const forwarded = defineContext("a")
+			.flags({ value: { type: "string", default: "s", env: undefined } })
+			.setup(({ flags }) => flags.value.length + 1);
+		expect(await app.run(["read"], {}, { provide: [forwarded()] })).toMatchObject({
+			status: "completed",
+			result: 2,
+		});
 	});
 
 	it("replaces a Context a command or an Extension provides, and ignores a name nothing provides", async () => {

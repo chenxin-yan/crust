@@ -359,11 +359,11 @@ function sameDefinition(a: unknown, b: unknown): boolean {
 		return Array.isArray(b) && a.length === b.length && a.every((v, i) => sameDefinition(v, b[i]));
 	}
 	if (!isPlainObject(a) || !isPlainObject(b)) return false;
-	const keys = Object.keys(a);
-	return (
-		keys.length === Object.keys(b).length &&
-		keys.every((key) => Object.hasOwn(b, key) && sameDefinition(a[key], b[key]))
-	);
+	// A key holding `undefined` is an absent key: a definition accepts either.
+	const held = (object: Record<string, unknown>) =>
+		Object.keys(object).filter((key) => object[key] !== undefined);
+	const keys = held(a);
+	return keys.length === held(b).length && keys.every((key) => sameDefinition(a[key], b[key]));
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

@@ -3,6 +3,7 @@
 import { Crust, defineCommand } from "@crustjs/core";
 import { confirm, createPrompts, input, multiselect, password, select } from "@crustjs/prompts";
 
+import { help } from "../src/help.ts";
 import { nextSteps } from "../src/next-steps.ts";
 
 declare const fromFlag: string | undefined;
@@ -29,6 +30,7 @@ async function _promptsAcceptUndefined() {
 		initial: fromFlag === "a" ? "a" : undefined,
 		maxVisible: maybeCount,
 	});
+	await select({ message: "Pick", choices: [{ label: "One", value: 1, hint: fromFlag }] });
 	const many: ("a" | "b")[] = await multiselect({
 		message: "Pick",
 		choices: ["a", "b"],
@@ -59,4 +61,5 @@ async function _runInputAcceptsUndefined() {
 		}),
 	);
 	nextSteps({ onError: () => [{ command: add, input: undefined, description: fromFlag }] });
+	help({ command: undefined });
 }

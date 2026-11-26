@@ -88,7 +88,9 @@ export interface HelpExtension {
 	(
 		options: HelpOptions & { readonly command: true },
 	): Extension<{}, [], typeof helpFlags, readonly [HelpCommandDefinition]>;
-	(options?: HelpOptions & { readonly command?: false }): Extension<{}, [], typeof helpFlags, []>;
+	(
+		options?: HelpOptions & { readonly command?: false | undefined },
+	): Extension<{}, [], typeof helpFlags, []>;
 	readonly id: ExtensionId;
 }
 
