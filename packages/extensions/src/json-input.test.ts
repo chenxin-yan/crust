@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Crust, CrustError, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, CrustError, defineExtension } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -265,7 +265,7 @@ describe("jsonInput", () => {
 
 	it("binds before every preRun, including one registered before jsonInput()", async () => {
 		const seen: unknown[] = [];
-		const check = defineExtension(defineExtensionId("check")).preRun(
+		const check = defineExtension("check").preRun(
 			({ flags }) => void seen.push((flags as Record<string, unknown>).region),
 		);
 		const app = new Crust("app")
@@ -391,9 +391,9 @@ describe("jsonInput", () => {
 		"cancels a pending stdin read on SIGINT on %s",
 		async (_runtime, command, options) => {
 			const script = `
-			import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+			import { Crust, defineExtension } from "@crustjs/core";
 			import { jsonInput } from ${inputModule};
-			const ready = defineExtension(defineExtensionId("ready")).setup(({ stderr }) => stderr("ready"));
+			const ready = defineExtension("ready").setup(({ stderr }) => stderr("ready"));
 			const app = new Crust("app").extend(ready, jsonInput()).action(() => {});
 			process.exitCode = await app.execute({ argv: ["--input", "-"] });
 		`;

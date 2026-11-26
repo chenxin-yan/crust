@@ -1,15 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { unwrap } from "../tests/helpers.ts";
-import {
-	type AnyCrust,
-	Crust,
-	defineContext,
-	defineCommand,
-	defineExtension,
-	defineExtensionId,
-	type ExtensionId,
-} from "./index.ts";
+import { type AnyCrust, Crust, defineContext, defineCommand, defineExtension } from "./index.ts";
 
 describe("runtime structured invocation", () => {
 	it("checks choices and number ranges", async () => {
@@ -69,7 +61,7 @@ describe("runtime structured invocation", () => {
 					},
 				},
 			})
-			.extend(defineExtension(defineExtensionId("handled")).noAction(() => {}));
+			.extend(defineExtension("handled").noAction(() => {}));
 		const erased: AnyCrust = app;
 		expect(await erased.run([], {})).toMatchObject({
 			status: "failed",
@@ -78,7 +70,7 @@ describe("runtime structured invocation", () => {
 		expect(schemas).toBe(0);
 		expect(await erased.run([], { args: { file: "a" }, flags: { config: "c" } })).toMatchObject({
 			status: "handled",
-			by: defineExtensionId("handled"),
+			by: "handled",
 		});
 		expect(schemas).toBe(1);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
@@ -91,10 +83,10 @@ describe("runtime structured invocation", () => {
 describe("local metadata boundaries", () => {
 	it("checks metadata at consumption without narrowing independent inputs", async () => {
 		const title = "Notes" as string;
-		const audience: [ExtensionId, ...ExtensionId[]] = [defineExtensionId("help")];
+		const audience: [string, ...string[]] = ["help"];
 		const config = { sections: [{ title, body: "text", only: audience }] };
 		const app = new Crust("cli", config).flags({ verbose: { type: "boolean" } });
-		audience.push(defineExtensionId("man"));
+		audience.push("man");
 		expect((await app.snapshot()).meta.sections?.[0]?.only?.map(String)).toEqual(["help"]);
 		const child = defineCommand("child", { aliases: ["c", "c"] }, (b) => b);
 		expect((await new Crust("cli").add(child).snapshot()).subCommands.child?.meta.aliases).toEqual([

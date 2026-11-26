@@ -4,15 +4,11 @@
 
 import {
 	type Extension,
-	type ExtensionId,
 	type OutputStream,
 	type RootMetaKey,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import type { PackageManager } from "@crustjs/utils/package-manager";
-
-const UPDATE_NOTIFIER: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:update-notifier");
 
 export type UpdateNotifierPackageManager = PackageManager;
 
@@ -181,7 +177,7 @@ type UpdateNotifierRegistration<K extends RootMetaKey> = Extension<{}, [], {}, [
 export interface UpdateNotifierExtension {
 	(options: UpdateNotifierOptions & { currentVersion: string }): UpdateNotifierRegistration<never>;
 	(options: UpdateNotifierOptions): UpdateNotifierRegistration<"version">;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 // The builder requires no metadata so one factory serves both overloads; the
@@ -224,7 +220,7 @@ export interface UpdateNotifierExtension {
  * ```
  */
 export const updateNotifier: UpdateNotifierExtension = /* @__PURE__ */ defineExtension(
-	UPDATE_NOTIFIER,
+	"crust:update-notifier",
 ).factory((extension, options: UpdateNotifierOptions) => {
 	const {
 		currentVersion,

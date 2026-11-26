@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -13,7 +13,7 @@ describe("built-in extensions", () => {
 	it("lets official help coexist with a user Extension named help", async () => {
 		let userHelpRan = false;
 		const app = new Crust("app")
-			.extend(defineExtension(defineExtensionId("help")).setup(() => void (userHelpRan = true)))
+			.extend(defineExtension("help").setup(() => void (userHelpRan = true)))
 			.extend(help());
 
 		const { stdout } = await captureExecute(app, []);

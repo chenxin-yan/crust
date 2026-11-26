@@ -3,7 +3,6 @@ import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferInput, InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { AnyContextInstance } from "./api/context.ts";
-import type { ExtensionId } from "./identity.ts";
 import type { IsClosedName, IsUnion } from "./validation/shared.ts";
 
 export type Awaitable<T> = T | Promise<T>;
@@ -1103,7 +1102,8 @@ export type InputFlags<F extends FlagsDef> =
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
-export type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
+/** A section consumer: an Extension's id, or a value exposing one at `.id`, such as the Extension itself. */
+export type SectionConsumer = string | { readonly id: string };
 
 type Audience<C> =
 	| { readonly only: C; readonly except?: never }
@@ -1121,7 +1121,7 @@ type SectionContent = {
 export type CommandSectionInput = SectionContent & SectionAudience;
 
 /** A validated documentation section rendered after built-in command documentation. */
-export type CommandSection = SectionContent & Audience<readonly [ExtensionId, ...ExtensionId[]]>;
+export type CommandSection = SectionContent & Audience<readonly [string, ...string[]]>;
 
 /** Metadata describing a CLI command */
 export interface CommandMeta extends CommandExtras {

@@ -1,6 +1,6 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
-export const outcomes = defineExtension(defineExtensionId("acme:outcomes"))
+export const outcomes = defineExtension("acme:outcomes")
 	.flags({ skip: { type: "boolean" } })
 	.handle("skip", () => {}) // [!code highlight]
 	// [!code highlight:2]

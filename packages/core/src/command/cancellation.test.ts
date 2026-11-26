@@ -2,7 +2,7 @@ import { getTerminalSignal } from "@crustjs/utils/terminal";
 import { describe, expect, it, beforeEach, afterEach, onTestFinished, vi } from "vite-plus/test";
 
 import { lineSink } from "../../tests/helpers.ts";
-import { Crust, defineContext, defineExtension, defineExtensionId } from "../index.ts";
+import { Crust, defineContext, defineExtension } from "../index.ts";
 
 const quiet = { stdout: { write() {} }, stderr: { write() {} } };
 
@@ -148,7 +148,7 @@ describe("invocation cancellation signal", () => {
 			const exitCode = new Crust("cli")
 				.provide(resource())
 				.extend(
-					defineExtension(defineExtensionId("errors")).onError((error) => {
+					defineExtension("errors").onError((error) => {
 						seen.push(error);
 					}),
 				)
@@ -192,7 +192,7 @@ describe("invocation cancellation signal", () => {
 			const exitCode = new Crust("cli")
 				.provide(resource())
 				.extend(
-					defineExtension(defineExtensionId("render")).renderer((ctx) => ({
+					defineExtension("render").renderer((ctx) => ({
 						text: ctx.stdout.write,
 						diag: ctx.stderr.write,
 						cleanup: (error) => cleanups.push(error),
@@ -223,7 +223,7 @@ describe("invocation cancellation signal", () => {
 		const stderr: string[] = [];
 		const exitCode = new Crust("cli")
 			.extend(
-				defineExtension(defineExtensionId("errors")).onError((error) => {
+				defineExtension("errors").onError((error) => {
 					seen.push(error);
 				}),
 			)
@@ -260,7 +260,7 @@ describe("invocation cancellation signal", () => {
 			const stderr: string[] = [];
 			const exitCode = new Crust("cli")
 				.extend(
-					defineExtension(defineExtensionId("render")).renderer((ctx) => ({
+					defineExtension("render").renderer((ctx) => ({
 						text: ctx.stdout.write,
 						diag: ctx.stderr.write,
 						error: (error) => rendered.push(error),
@@ -294,7 +294,7 @@ describe("invocation cancellation signal", () => {
 	it("execute() keeps exit code 130 when an onError hook rendering a postRun AbortError resets process.exitCode", async () => {
 		const exitCode = await new Crust("cli")
 			.extend(
-				defineExtension(defineExtensionId("late-abort"))
+				defineExtension("late-abort")
 					.postRun(() => {
 						throw new DOMException("Cancelled during postRun.", "AbortError");
 					})
@@ -485,7 +485,7 @@ describe("invocation cancellation signal", () => {
 				seen.push(signal);
 				await ctx.dependency;
 			});
-		const probe = defineExtension(defineExtensionId("probe"))
+		const probe = defineExtension("probe")
 			.preRun((ctx) => {
 				seen.push(ctx.signal);
 			})

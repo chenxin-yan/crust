@@ -1,6 +1,5 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
-import { defineExtensionId } from "../identity.ts";
 import { type AnyContextFactory, type ContextFactory, defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -47,7 +46,7 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	);
 	new Crust("cli").provide(config(), db()).add(command);
 
-	const extension = defineExtension(defineExtensionId("typed-deps"))
+	const extension = defineExtension("typed-deps")
 		.use(db)
 		.preRun(async ({ ctx }) => void (await ctx.db));
 	new Crust("cli").provide(config(), db()).extend(extension);
@@ -62,10 +61,10 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 		new Crust("cli").add(command);
 		// @ts-expect-error -- Extension dependencies are checked by .extend()
 		new Crust("cli").extend(extension);
-		const badProvide = defineExtension(defineExtensionId("bad-provide")).provide(db());
+		const badProvide = defineExtension("bad-provide").provide(db());
 		// @ts-expect-error -- Extension providers with unmet transitive deps are checked by .extend()
 		new Crust("cli").extend(badProvide);
-		const badCommand = defineExtension(defineExtensionId("bad-command")).add(command);
+		const badCommand = defineExtension("bad-command").add(command);
 		// @ts-expect-error -- Extension-contributed command deps are checked by .extend()
 		new Crust("cli").extend(badCommand);
 	};
@@ -122,14 +121,14 @@ function _typecheckCallbacksReadOnlyTheContextsTheirUseNames() {
 	);
 	new Crust("cli").provide(db.of("fake"), config()).add(readsBoth);
 
-	defineExtension(defineExtensionId("reads-db"))
+	defineExtension("reads-db")
 		.use(db)
 		.preRun(async ({ ctx }) => {
 			void (await ctx.db);
 			// @ts-expect-error -- a hook reads what its Extension's .use() names, too
 			void ctx.config;
 		});
-	defineExtension(defineExtensionId("reads-both"))
+	defineExtension("reads-both")
 		.use(db, config)
 		.preRun(async ({ ctx }) => {
 			type _Db = Expect<Equal<Awaited<typeof ctx.db>, string>>;
@@ -146,7 +145,7 @@ function _typecheckCallbacksReadOnlyTheContextsTheirUseNames() {
 // .use() takes an Extension or its factory for the Contexts it provides
 function _typecheckUseTakesAnExtensionForTheContextsItProvides() {
 	const greeter = defineContext("greeter").setup(() => (name: string) => `hi ${name}`);
-	const greeting = defineExtension(defineExtensionId("greeting"))
+	const greeting = defineExtension("greeting")
 		.provide(greeter())
 		.factory((extension) => extension);
 	const viaFactory = defineCommand("hello", (cmd) =>
@@ -187,7 +186,7 @@ function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 	const query = defineCommand("query", (cmd) =>
 		cmd.use(db).action(async ({ ctx }) => void (await ctx.db)),
 	);
-	const carrier = defineExtension(defineExtensionId("carrier")).add(query);
+	const carrier = defineExtension("carrier").add(query);
 
 	new Crust("cli").provide(config(), db()).add(query);
 	new Crust("cli").provide(config(), db()).extend(carrier);
@@ -313,7 +312,7 @@ function _typecheckAcceptsWidenedAndEmptyUseSpreads(deps: readonly AnyContextFac
 
 // checks literal Context sections like command sections
 function _typecheckChecksLiteralContextSections() {
-	const man = defineExtensionId("man");
+	const man = "man";
 	defineContext("env")
 		.sections({ title: "Environment", body: "APP_TOKEN" })
 		.setup(() => 1);
@@ -338,7 +337,7 @@ function _typecheckTypesTransitiveFlagsOfExtensionUseSources() {
 	const api = defineContext("api")
 		.use(config)
 		.setup(async ({ ctx }) => `api:${await ctx.config}`);
-	const value = defineExtension(defineExtensionId("api")).provide(api());
+	const value = defineExtension("api").provide(api());
 	const factory = value.factory((extension) => extension);
 	const byValue = defineCommand("value", (command) =>
 		command.use(value).action(({ flags }) => {
@@ -384,8 +383,8 @@ function _typecheckTypesContextFlagsAtUseSites() {
 	const confirm = defineContext("confirm")
 		.flags({ yes: { type: "boolean" } })
 		.setup(() => true);
-	const provided = defineExtension(defineExtensionId("provided")).provide(confirm());
-	const hooked = defineExtension(defineExtensionId("hooked")).use(confirm).provide(confirm());
+	const provided = defineExtension("provided").provide(confirm());
+	const hooked = defineExtension("hooked").use(confirm).provide(confirm());
 	const providedApp = new Crust("cli")
 		.extend(provided)
 		.add(status)
@@ -456,9 +455,7 @@ function _typecheckTypesContextFlagsAtUseSites() {
 	void modeApp.run(["batched"], { flags: { mode: "x" } });
 	void modeApp.run(["chained"], { flags: { mode: "x" } });
 	void modeApp.run(["inline"], { flags: { mode: "x" } });
-	const modeExtension = defineExtension(defineExtensionId("mode"))
-		.provide(secondMode())
-		.use(firstMode);
+	const modeExtension = defineExtension("mode").provide(secondMode()).use(firstMode);
 	void new Crust("cli").extend(modeExtension).run([], { flags: { mode: "x" } });
 
 	// A conditional dependency's flags stay beside the Context's own, as either alternative.

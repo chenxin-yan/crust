@@ -4,13 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
 import { executeCrust } from "../../tests/helpers.ts";
-import {
-	Crust,
-	CrustError,
-	defineExtension,
-	defineExtensionId,
-	type InvocationOutcome,
-} from "../index.ts";
+import { Crust, CrustError, defineExtension, type InvocationOutcome } from "../index.ts";
 import { standardJsonSchema } from "../tooling.ts";
 
 const user = z.object({ id: z.number(), role: z.string().default("member") });
@@ -75,7 +69,7 @@ describe(".output()", () => {
 
 	it("passes the validated result or the OUTPUT failure to postRun", async () => {
 		const outcomes: InvocationOutcome[] = [];
-		const extension = defineExtension(defineExtensionId("observe")).postRun(
+		const extension = defineExtension("observe").postRun(
 			(_ctx, outcome) => void outcomes.push(outcome),
 		);
 		const app = new Crust("cli")
@@ -102,10 +96,10 @@ describe(".output()", () => {
 	});
 
 	it("skips validation when a flag handler or noAction takes over", async () => {
-		const stop = defineExtension(defineExtensionId("stop"))
+		const stop = defineExtension("stop")
 			.flags({ stop: { type: "boolean" } })
 			.handle("stop", () => {});
-		const fallback = defineExtension(defineExtensionId("fallback")).noAction(() => {});
+		const fallback = defineExtension("fallback").noAction(() => {});
 
 		const handled = await new Crust("cli")
 			.extend(stop)

@@ -11,7 +11,6 @@ import {
 	type CommandDefinitionBuilder,
 } from "../command/crust.ts";
 import { CrustError, type DefinitionErrorReason } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 
 // Each definition rule has one check. TypeScript owns rules about types and structure; the
 // definition checks own string contents and the assembled tree. The checks run from source
@@ -30,7 +29,7 @@ async function definitionReason(define: () => unknown): Promise<string | undefin
 	return undefined;
 }
 
-const ext = (id: string) => defineExtension(defineExtensionId(id));
+const ext = (id: string) => defineExtension(id);
 const action = <B extends CommandDefinitionBuilder<any, any>>(command: B) =>
 	command.action(() => {});
 
@@ -225,8 +224,8 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 				)
 				.snapshot(),
 	],
-	["empty-id", () => defineExtensionId("")],
-	["empty-id", () => defineExtensionId(" x")],
+	["empty-id", () => ext("")],
+	["empty-id", () => ext(" x")],
 	[
 		"foreign-command-builder",
 		() =>

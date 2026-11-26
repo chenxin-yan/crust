@@ -1,13 +1,9 @@
 import {
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	CrustError,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
-
-const NO_COLOR: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:no-color");
 
 // Overlapping execute() calls share process.env, so per-run snapshots would
 // capture each other's temporary overrides and restores would race. Instead,
@@ -32,7 +28,7 @@ function applyColorFlag(flagValue: boolean): () => void {
 		throw new CrustError(
 			"DEFINITION",
 			"noColor: cannot start a --color run while a --no-color run is in flight (or vice versa); opposing overlapping runs share process.env",
-			{ subject: "extension", name: NO_COLOR, reason: "opposing-overlap" },
+			{ subject: "extension", name: noColor.id, reason: "opposing-overlap" },
 		);
 	}
 	activeFlag = flagValue;
@@ -69,7 +65,7 @@ export async function withTypedColorFlag<T>(
 	context: ExtensionContext,
 	render: () => Promise<T>,
 ): Promise<T> {
-	if (context.command.flags.color?.extension !== NO_COLOR) return render();
+	if (context.command.flags.color?.extension !== noColor.id) return render();
 	const end = context.argv.indexOf("--");
 	// shortcut: a `--color` or `--no-color` meant for a passthrough argument counts too, since the hook cannot see where passthrough starts; upgrade if Core reports that boundary.
 	const words = end === -1 ? context.argv : context.argv.slice(0, end);
@@ -105,7 +101,7 @@ export async function withTypedColorFlag<T>(
  * `setup`, because the env is process-global and cannot hold both values.
  */
 export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> =
-	/* @__PURE__ */ defineExtension(NO_COLOR).factory((extension) =>
+	/* @__PURE__ */ defineExtension("crust:no-color").factory((extension) =>
 		extension
 			.flags(colorFlags)
 			// A setup, so the variables apply before any handler renders (`--help --no-color`).

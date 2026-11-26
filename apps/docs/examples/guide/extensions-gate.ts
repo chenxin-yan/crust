@@ -1,14 +1,12 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
 const signedIn = false;
 
-const requireLogin = defineExtension(defineExtensionId("acme:require-login")).preRun(
-	({ command }) => {
-		if (command.extension === help.id) return; // [!code highlight]
-		if (!signedIn) throw new Error("Not signed in");
-	},
-);
+const requireLogin = defineExtension("acme:require-login").preRun(({ command }) => {
+	if (command.extension === help.id) return; // [!code highlight]
+	if (!signedIn) throw new Error("Not signed in");
+});
 
 const app = new Crust("app")
 	.extend(help({ command: true }), requireLogin)

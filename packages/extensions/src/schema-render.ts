@@ -1,4 +1,4 @@
-import type { CommandSnapshot, ExtensionId } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 import {
 	type CommandDocumentation,
 	buildCommandDocumentation,
@@ -41,7 +41,7 @@ function item(token: string, label: string, description: string): string {
  * Compact Markdown index of every visible command: usage, description, args,
  * flags, and the documentation sections visible to `consumer`.
  */
-export function renderCommandIndex(root: CommandSnapshot, consumer: ExtensionId): string {
+export function renderCommandIndex(root: CommandSnapshot, consumer: string): string {
 	const lines = [`# ${root.meta.name}`];
 	const visit = (doc: CommandDocumentation) => {
 		lines.push("", `## \`${doc.usage}\``);

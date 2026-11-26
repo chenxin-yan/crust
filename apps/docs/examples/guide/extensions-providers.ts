@@ -1,8 +1,8 @@
-import { Crust, defineContext, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineContext, defineExtension } from "@crustjs/core";
 
 const logger = defineContext("logger").setup(({ stdout }) => ({ info: stdout }));
 
-export const logging = defineExtension(defineExtensionId("acme:logging"))
+export const logging = defineExtension("acme:logging")
 	.provide(logger()) // [!code highlight]
 	.use(logger) // [!code highlight]
 	.postRun(async ({ ctx }, outcome) => {

@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 import { prompts } from "@crustjs/prompts/extension";
 import { captureExecute, withEnv } from "@crustjs/testing";
@@ -711,7 +711,7 @@ it("documents the files and the settings in the root's help", async () => {
 it("runs as if started in another folder with a -C Extension listed first", async () => {
 	write(join(root, "other", "acme.config.json"), { replicas: 7 });
 	const { config } = acme();
-	const chdir = defineExtension(defineExtensionId("app:chdir"))
+	const chdir = defineExtension("app:chdir")
 		.flags({ dir: { type: "path", short: "C" } })
 		.setup((ctx) => {
 			if (ctx.flags.dir) process.chdir(ctx.flags.dir);

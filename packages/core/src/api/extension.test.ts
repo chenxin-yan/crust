@@ -8,13 +8,12 @@ import {
 	defineCommand,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
 	type Extension,
 } from "../index.ts";
 import { definingOf } from "./context.ts";
 
 describe("defineExtension", () => {
-	const HELP = defineExtensionId("acme:help");
+	const HELP = "acme:help";
 	const help = defineExtension(HELP).factory(
 		(extension, options: { readonly verbose?: boolean } = {}) =>
 			extension.flags({ verbose: { type: "boolean", default: options.verbose ?? false } }),
@@ -33,6 +32,17 @@ describe("defineExtension", () => {
 		type _args = Expect<
 			Equal<Parameters<typeof help>, [options?: { readonly verbose?: boolean } | undefined]>
 		>;
+	});
+
+	it("rejects blank and untrimmed dynamic ids", () => {
+		for (const id of ["", " ", " acme:docs", "acme:docs\n"] as string[]) {
+			expect(() => defineExtension(id), JSON.stringify(id)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: { subject: "extension", reason: "empty-id" },
+				}),
+			);
+		}
 	});
 
 	it("accepts the factory and the handle as section consumers", async () => {
@@ -102,10 +112,10 @@ describe("defineExtension", () => {
 
 	it("runs noAction after validation in place of a missing action, skipping preRun, unless a handler fires", async () => {
 		const seen: string[] = [];
-		const first = defineExtension(defineExtensionId("first"))
+		const first = defineExtension("first")
 			.setup(() => void seen.push("first setup"))
 			.preRun(() => void seen.push("first pre"));
-		const second = defineExtension(defineExtensionId("second"))
+		const second = defineExtension("second")
 			.preRun(() => void seen.push("second pre"))
 			.noAction(() => void seen.push("second noAction"));
 		const app = new Crust("app")
@@ -134,7 +144,7 @@ describe("defineExtension", () => {
 		const claimed = new Crust("app")
 			.extend(
 				second,
-				defineExtension(defineExtensionId("claim"))
+				defineExtension("claim")
 					.flags({ stop: { type: "boolean" } })
 					.handle("stop", () => {}),
 			)
@@ -212,7 +222,7 @@ describe("defineExtension", () => {
 	});
 
 	it("rejects factories that return a differently identified Extension", () => {
-		const other = defineExtension(defineExtensionId("acme:other"));
+		const other = defineExtension("acme:other");
 		const rebranded = defineExtension(HELP).factory(() => other);
 		expect(rebranded.id).toBe(HELP);
 		expect(() => rebranded()).toThrow(CrustError);
@@ -275,7 +285,7 @@ describe("defineExtension", () => {
 });
 
 describe("Extension Context declarations", () => {
-	const ID = defineExtensionId("acme:contexts");
+	const ID = "acme:contexts";
 
 	it("uses declare consumption only; hooks read Contexts the application provides", async () => {
 		const logger = defineContext("logger").setup(() => "app logger");

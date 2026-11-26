@@ -64,7 +64,7 @@ Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder`
 
 ### Ids and builders
 
-- Give each Extension a namespaced id, such as `acme:preview`, with `defineExtensionId()`.
+- The string passed to `defineExtension()` is the Extension's id. It names the Extension in errors, in `outcome.by` of a `handled` invocation, in Command Snapshots and the build report, and as a [section consumer](#section-consumers). Write it inline as `<scope>:<name>`, such as `acme:preview`; it must be non-empty and trimmed. To refer to an Extension, pass the Extension itself, as in `only: [help]` or `outcome.by === help.id`, not its id string: a misspelled variable is a compile error, a misspelled string is not.
 - Registering the same id again replaces the earlier registration. In a later `.extend()` call, the flags only the earlier one contributed leave the `flags` types as well.
 - Builder methods other than `.factory()` return new frozen Extensions; there is no build step.
 - Declare flags and Contexts before the hooks that read them. Collection methods such as `.flags()` append; setting a hook again replaces its callback.
@@ -99,7 +99,7 @@ Contributed commands work like commands added with `.add()`, including typed `ru
 A package can add its own key to argument, flag, or command definitions and read it in its Extension. Add the key to `ArgExtras`, `FlagExtras`, or `CommandExtras` with a `declare module` block in the entry that exports the Extension, and declare it with `.owns()`. [`@crustjs/completion`](/docs/modules/completion#live-values) owns its `complete` key this way:
 
 ```ts title="acme-hints/index.ts"
-import { defineExtension, defineExtensionId } from "@crustjs/core";
+import { defineExtension } from "@crustjs/core";
 
 declare module "@crustjs/core" {
   interface FlagExtras {
@@ -109,7 +109,7 @@ declare module "@crustjs/core" {
 }
 
 export const hints = () =>
-  defineExtension(defineExtensionId("acme:hints"))
+  defineExtension("acme:hints")
     .owns("hint")
     .preRun(({ command, sources, stderr }) => {
       for (const [name, flag] of Object.entries(command.flags)) {
@@ -212,7 +212,7 @@ Two methods bind values into the invocation from `setup` or `preRun`. Later hook
 Use `bindInput` for structured input, such as the JSON [`jsonInput()`](/docs/modules/extensions/json-input) reads from `--input`. Use `bindText` for what a person typed: `bindInput({ flags: { port: "8080" } })` fails, because `"8080"` is not a number, and converting the text yourself first would run a custom `parse` twice. A value `bindText` rejects throws the `PARSE` error the same word gets on the command line, so a prompt can show it and ask again:
 
 ```ts
-defineExtension(defineExtensionId("acme:port")).preRun((ctx) => {
+defineExtension("acme:port").preRun((ctx) => {
   if (ctx.sources.flags.port === undefined) ctx.bindText({ flags: { port: "8080" } });
 });
 ```
@@ -380,7 +380,8 @@ Run preview first.
 ![preview](preview.png)
 ```
 
-- `only: [webDocs]` keeps the Screenshots section out of other consumers, such as help. Use `except` to exclude consumers instead; both accept Extension values or ids.
-- `visibleSectionsFor(snapshot, id)` selects visible commands and merges same-title sections for that consumer. For one command, use `sectionsFor(sections, id)`.
+- `only: [webDocs]` keeps the Screenshots section out of other consumers, such as help. Use `except` to exclude consumers instead.
+- `visibleSectionsFor(snapshot, webDocs)` selects visible commands and merges same-title sections for that consumer; the Extension can name itself inside its own hook. For one command, use `sectionsFor(sections, webDocs)`.
+- `only`, `except`, `sectionsFor()`, and `visibleSectionsFor()` also accept an id string, for a consumer that is not an Extension.
 
 Both come from [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath).

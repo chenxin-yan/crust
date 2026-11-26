@@ -4,16 +4,12 @@ import {
 	type CommandSnapshot,
 	type Extension,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import type { CommandInputSchema } from "@crustjs/core/tooling";
 
 import { printedOutput } from "./text-output.ts";
-
-const SCHEMA: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:schema");
 
 /** What `schema [path...]` prints for one command, and returns as its result. */
 export interface CommandSchema {
@@ -79,7 +75,7 @@ export interface SchemaExtension {
 	): Extension<{}, [], typeof llmsFlags, readonly [SchemaCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
 	(options?: SchemaOptions): Extension<{}, [], typeof llmsFlags>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 /**
@@ -87,7 +83,7 @@ export interface SchemaExtension {
  * without running the app. The renderer loads on the first call.
  */
 export async function renderCommandIndex(root: CommandSnapshot): Promise<string> {
-	return (await import("./schema-render.ts")).renderCommandIndex(root, SCHEMA);
+	return (await import("./schema-render.ts")).renderCommandIndex(root, schema.id);
 }
 
 const schemaFactory: ExtensionFactory<
@@ -96,7 +92,7 @@ const schemaFactory: ExtensionFactory<
 	[],
 	typeof llmsFlags,
 	readonly [SchemaCommandDefinition<string>]
-> = /* @__PURE__ */ defineExtension(SCHEMA).factory((extension, options = {}) =>
+> = /* @__PURE__ */ defineExtension("crust:schema").factory((extension, options = {}) =>
 	extension
 		.flags(llmsFlags)
 		.add(

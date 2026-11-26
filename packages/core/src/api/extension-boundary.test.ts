@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { type Equal, type Expect, lineSink, unwrap } from "../../tests/helpers.ts";
 import { type AnyCrust, Crust, defineCommand } from "../command/crust.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { ExecuteOptions } from "../types.ts";
 import { type AnyContextInstance, defineContext } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
@@ -15,7 +14,7 @@ describe("checked Extension attachment", () => {
 			return "db";
 		});
 		const command = defineCommand("child", (c) => c.use(db).action(() => 1));
-		const extension = defineExtension(defineExtensionId("commands")).add(command);
+		const extension = defineExtension("commands").add(command);
 		const registrations = [extension];
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		const app = new Crust("app").extend(...registrations);
@@ -23,14 +22,14 @@ describe("checked Extension attachment", () => {
 		expect(calls).toBe(0);
 	});
 	it("consumes the immutable defining Extension rather than overwritten spread fields", async () => {
-		const extension = defineExtension(defineExtensionId("original")).add(
+		const extension = defineExtension("original").add(
 			defineCommand("child", (c) => c.action(() => 42)),
 		);
-		const copy = { ...extension, id: defineExtensionId("forged") };
+		const copy = { ...extension, id: "forged" };
 		const app = new Crust("app").extend(copy);
 		expect(await app.run(["child"])).toMatchObject({ status: "completed", result: 42 });
 		// Replacement also follows the defining id, not the overwritten public one.
-		const replaced = new Crust("app").extend(copy, defineExtension(defineExtensionId("original")));
+		const replaced = new Crust("app").extend(copy, defineExtension("original"));
 		expect(await replaced.run(["child"])).toMatchObject({ status: "failed" });
 	});
 });
@@ -43,7 +42,7 @@ it("keeps compatible hook providers and unrelated descendant replacements lazy",
 	});
 	const compatible = defineCommand("child", (c) => c.provide(text.of("child")).action(() => 42));
 	const seen: string[] = [];
-	const hook = defineExtension(defineExtensionId("hook"))
+	const hook = defineExtension("hook")
 		.use(text)
 		.preRun(async ({ ctx }) => {
 			seen.push((await ctx.db).toUpperCase());
@@ -57,14 +56,14 @@ it("keeps compatible hook providers and unrelated descendant replacements lazy",
 		c.provide(defineContext("db").setup(() => 7)()).action(async ({ ctx }) => await ctx.db),
 	);
 	const command = defineCommand("consumer", (c) => c.use(text));
-	const noHook = defineExtension(defineExtensionId("commands")).add(command);
+	const noHook = defineExtension("commands").add(command);
 	expect(
 		await new Crust("app").provide(text()).extend(noHook).add(unrelated).run(["other"]),
 	).toMatchObject({ status: "completed", result: 7 });
 });
 
 it("checks pending Extension flag relations at preparation", async () => {
-	const ext = defineExtension(defineExtensionId("pending")).flags({
+	const ext = defineExtension("pending").flags({
 		token: {
 			type: "string",
 		},
@@ -107,7 +106,7 @@ it("rejects dynamically named Extension commands that collide with another root 
 	let configured = 0;
 	// A factory with a caller-chosen name, like `skills({ command })`.
 	const contribute = (id: string, name: string, aliases: string[] = []) =>
-		defineExtension(defineExtensionId(id)).add(
+		defineExtension(id).add(
 			defineCommand(name, { aliases }, (c) => {
 				configured++;
 				return c.action(() => "extension");
@@ -169,7 +168,7 @@ it("rejects dynamically named Extension commands that collide with another root 
 });
 
 it("types a same-id Extension re-registration by the replacement's flags and commands", async () => {
-	const id = defineExtensionId("replaced");
+	const id = "replaced";
 	const first = defineExtension(id)
 		.flags({ mode: { type: "number" } })
 		.add(defineCommand("lint", (c) => c.action(() => 1)));
@@ -199,7 +198,7 @@ it("types a same-id Extension re-registration by the replacement's flags and com
 });
 
 it("types the recursive and Context flags of same-id Extensions in one call by the later one", async () => {
-	const id = defineExtensionId("replaced");
+	const id = "replaced";
 	const number = defineContext("number")
 		.flags({ depth: { type: "number" } })
 		.setup(() => 1);
@@ -228,7 +227,7 @@ it("types the recursive and Context flags of same-id Extensions in one call by t
 });
 
 it("keeps an app command's type when the Extension command colliding with it is replaced", async () => {
-	const id = defineExtensionId("temporary");
+	const id = "temporary";
 	const colliding = defineExtension(id).add(defineCommand("foo", (c) => c.action(() => "text")));
 	const app = new Crust("app")
 		.add(defineCommand("foo", (c) => c.action(() => 123)))
@@ -262,17 +261,15 @@ it("checks Extension flag relations before trusted reuse, including each factory
 	const flags: Record<string, { type: "boolean" }> = { token: { type: "boolean" } };
 	const provided = [owner()];
 	expect(() =>
-		defineExtension(defineExtensionId("direct"))
+		defineExtension("direct")
 			.flags(flags)
 			.provide(...provided),
 	).toThrow("collides");
-	const factory = defineExtension(defineExtensionId("factory")).factory((extension) =>
+	const factory = defineExtension("factory").factory((extension) =>
 		extension.flags(flags).provide(...provided),
 	);
 	expect(() => factory()).toThrow("collides");
-	expect(() => defineExtension(defineExtensionId("peers")).provide(owner(), peer())).toThrow(
-		"collides",
-	);
+	expect(() => defineExtension("peers").provide(owner(), peer())).toThrow("collides");
 });
 
 it("keeps same-name Context replacement order inside checked Extensions", async () => {
@@ -282,24 +279,19 @@ it("keeps same-name Context replacement order inside checked Extensions", async 
 	const current = defineContext("owner")
 		.flags({ current: { type: "string" } })
 		.setup(() => "current");
-	const ext = defineExtension(defineExtensionId("replacement")).provide(old(), current());
+	const ext = defineExtension("replacement").provide(old(), current());
 	const app = new Crust("app").extend(ext).action(({ ctx }) => ctx.owner);
 	expect(await app.run([], {})).toMatchObject({ status: "completed", result: "current" });
 	const emptyOld = defineContext("empty").setup(() => "old");
 	const emptyNew = defineContext("empty").setup(() => "new");
-	const empty = defineExtension(defineExtensionId("empty-replacement")).provide(
-		emptyOld(),
-		emptyNew(),
-	);
+	const empty = defineExtension("empty-replacement").provide(emptyOld(), emptyNew());
 	expect(
 		await new Crust("app")
 			.extend(empty)
 			.action(({ ctx }) => ctx.empty)
 			.run([], {}),
 	).toMatchObject({ status: "completed", result: "new" });
-	expect(() => defineExtension(defineExtensionId("repeated-owned")).provide(old(), old())).toThrow(
-		"collides",
-	);
+	expect(() => defineExtension("repeated-owned").provide(old(), old())).toThrow("collides");
 });
 
 it("keeps root providers' flags off contributed commands that do not use them", async () => {
@@ -315,9 +307,7 @@ it("keeps root providers' flags off contributed commands that do not use them", 
 		recipes++;
 		return c.flags({ token: { type: "number" } });
 	});
-	const ext = defineExtension(defineExtensionId("pending-commands")).add(
-		defineCommand("parent", (c) => c.add(child)),
-	);
+	const ext = defineExtension("pending-commands").add(defineCommand("parent", (c) => c.add(child)));
 	const widened: AnyContextInstance = owner();
 	const app = new Crust("app").extend(ext).provide(widened);
 	expect(recipes).toBe(0);
@@ -341,14 +331,12 @@ it("checked Extensions validate earlier pending commands against new flags and p
 			recipes++;
 			return c.flags({ token: { type: "boolean" } });
 		});
-		const pending = defineExtension(defineExtensionId("pending")).add(
-			defineCommand("parent", (c) => c.add(child)),
-		);
+		const pending = defineExtension("pending").add(defineCommand("parent", (c) => c.add(child)));
 		// A provided Context reaches every command only when the Extension's hooks use it.
 		const addition =
 			source === "flags"
-				? defineExtension(defineExtensionId("addition")).flags({ token: { type: "string" } })
-				: defineExtension(defineExtensionId("addition")).use(owner).provide(owner());
+				? defineExtension("addition").flags({ token: { type: "string" } })
+				: defineExtension("addition").use(owner).provide(owner());
 		const root = new Crust("app").extend(pending);
 		const app = root.extend(addition);
 		expect(recipes).toBe(0);
@@ -385,7 +373,7 @@ it("checked inputs validate open provider flags only where they are parsed", asy
 			.run(["child", "leaf"]),
 	).toMatchObject({ status: "completed", result: "leaf" });
 	for (const recursive of [true, false]) {
-		const ext = defineExtension(defineExtensionId("recursive")).flags({
+		const ext = defineExtension("recursive").flags({
 			token: {
 				type: "string",
 				required: true,
@@ -411,10 +399,10 @@ it("checked inputs validate open provider flags only where they are parsed", asy
 
 it("checked Extension additions preserve nonrecursive flags and same-id replacement", async () => {
 	const child = defineCommand("child", (c) => c.flags({ token: { type: "number" } }));
-	const id = defineExtensionId("pending-replacement");
+	const id = "pending-replacement";
 	const pending = defineExtension(id).add(child);
 	const root = new Crust("app").extend(pending);
-	const local = defineExtension(defineExtensionId("local")).flags({
+	const local = defineExtension("local").flags({
 		token: {
 			type: "string",
 			recursive: false,
@@ -429,7 +417,7 @@ it("checked Extension additions preserve nonrecursive flags and same-id replacem
 });
 
 it("rejects supplied flag keys retired by same-ID Extension replacement", async () => {
-	const id = defineExtensionId("retired-flags");
+	const id = "retired-flags";
 	const original = new Crust("app")
 		.extend(defineExtension(id).flags({ oldFlag: { type: "string", required: true } }))
 		.action(({ flags }): string => flags.oldFlag);
@@ -445,7 +433,7 @@ it("rejects supplied flag keys retired by same-ID Extension replacement", async 
 });
 
 it("rejects retired recursive keys on existing and later descendants and same-call replacements", async () => {
-	const id = defineExtensionId("retired-recursive");
+	const id = "retired-recursive";
 	const old = defineExtension(id).flags({ oldFlag: { type: "string", required: true } });
 	const replacement = defineExtension(id);
 	const grand = defineCommand("grand", (g) => g.action(() => "grand"));
@@ -459,7 +447,7 @@ it("rejects retired recursive keys on existing and later descendants and same-ca
 	await expect(
 		unwrap(later.run(["child", "grand"], { flags: { oldFlag: "value" } })),
 	).rejects.toThrow('Unknown flag "--oldFlag"');
-	const pendingExtension = defineExtension(defineExtensionId("later-recipe")).add(
+	const pendingExtension = defineExtension("later-recipe").add(
 		defineCommand("pending", (c) => c.action(() => "pending")),
 	);
 	const pending = new Crust("app").extend(old, replacement, pendingExtension);
@@ -480,7 +468,7 @@ it("rejects retired Extension provider flags in both registration forms without 
 			setups++;
 			return "provider";
 		});
-	const id = defineExtensionId("retired-provider");
+	const id = "retired-provider";
 	const old = defineExtension(id).provide(provider());
 	const replacement = defineExtension(id);
 	const original = new Crust("app")
@@ -502,7 +490,7 @@ it("rejects retired Extension provider flags in both registration forms without 
 });
 
 it("keeps surviving and reintroduced keys and nonrecursive replacement scope", async () => {
-	const id = defineExtensionId("retired-local");
+	const id = "retired-local";
 	const old = defineExtension(id).flags({
 		local: {
 			type: "string",
@@ -545,7 +533,7 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 });
 
 it("does not mistake inherited object names for surviving replacement flags", async () => {
-	const id = defineExtensionId("retired-prototype-name");
+	const id = "retired-prototype-name";
 	const old = defineExtension(id).flags({ toString: { type: "string", required: true } });
 	const replacement = defineExtension(id).flags({ other: { type: "boolean" } });
 	const app = new Crust("app").extend(old, replacement);
@@ -559,7 +547,7 @@ it("retires actually inherited provider flags even below a later Context shadow"
 		.flags({ inherited: { type: "string", required: true } })
 		.setup(() => "original");
 	const shadow = defineContext("shadowed").setup(() => 42);
-	const id = defineExtensionId("retired-shadowed-provider");
+	const id = "retired-shadowed-provider";
 	const old = defineExtension(id).provide(provider());
 	const original = new Crust("app")
 		.extend(old)
@@ -590,7 +578,7 @@ it("keeps compatible conditional descendant providers lazy in either hook attach
 			setups++;
 			return "child";
 		});
-		const demand = defineExtension(defineExtensionId("conditional-demand"))
+		const demand = defineExtension("conditional-demand")
 			.use(text)
 			.setup(async ({ ctx }) => {
 				expect((await ctx.db).toUpperCase()).toBe(condition ? "CHILD" : "DB");

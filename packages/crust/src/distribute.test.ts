@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { type BuildReport, defineExtensionId } from "@crustjs/core";
+import type { BuildReport } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
 import { afterAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
@@ -461,7 +461,7 @@ describe("runDistributeBuild", () => {
 		const plan = createPlan(tmpDir, { name: "my-cli", version: "0.1.0" });
 		const build = {
 			"test-cli": {
-				extensions: [{ id: defineExtensionId("crust:man"), files: ["man/test-cli.1"] }],
+				extensions: [{ id: "crust:man", files: ["man/test-cli.1"] }],
 			},
 		} satisfies Record<string, BuildReport>;
 

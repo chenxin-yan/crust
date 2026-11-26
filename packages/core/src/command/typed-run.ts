@@ -1,7 +1,6 @@
 import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
 
 import type { ContextValue } from "../api/context.ts";
-import type { ExtensionId } from "../identity.ts";
 import type {
 	ArgsDef,
 	FlagsDef,
@@ -86,7 +85,7 @@ export type RunOutcome<Result, Events extends readonly unknown[] | undefined = u
 	readonly exitCode: number;
 } & (
 	| ({ readonly status: "completed"; readonly result: Result } & CompletedEvents<Events>)
-	| { readonly status: "handled"; readonly by: ExtensionId }
+	| { readonly status: "handled"; readonly by: string }
 	| ({ readonly status: "failed"; readonly error: unknown } & FailedEvents<Events>)
 );
 

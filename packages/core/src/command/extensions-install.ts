@@ -1,7 +1,6 @@
 import type { AnyContextInstance } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
 import { normalizeSection, type SectionOwner } from "../sections.ts";
 import type { CommandDefinition } from "./crust.ts";
 import { registerFlag, type CommandContext, type CommandNode } from "./node.ts";
@@ -10,7 +9,7 @@ import { contributeSection, createSnapshotProjector } from "./snapshot.ts";
 export type MaterializeCommandDefinition = (
 	definition: CommandDefinition,
 	parent: CommandNode,
-	extensionId?: ExtensionId,
+	extensionId?: string,
 ) => CommandNode;
 
 function contributionTarget(
@@ -114,7 +113,7 @@ export function sectionContextsFor(
 export interface ExtensionProvider {
 	readonly instance: AnyContextInstance;
 	readonly position: number;
-	readonly extension: ExtensionId;
+	readonly extension: string;
 }
 
 /**

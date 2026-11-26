@@ -1,5 +1,5 @@
 import type { ArgDef, CommandSnapshot } from "@crustjs/core";
-import { Crust, defineExtensionId } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
@@ -581,7 +581,7 @@ describe("renderSkill", () => {
 		});
 
 		it("renders only sections whose audience includes skills", async () => {
-			const other = defineExtensionId("acme:other");
+			const other = "acme:other";
 			const cmd = makeCommand({
 				meta: {
 					name: "deploy",

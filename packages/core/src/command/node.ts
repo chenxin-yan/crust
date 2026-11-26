@@ -3,7 +3,6 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import type { AnyContextFactory, AnyContextInstance } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
 import {
 	flagSpellings,
 	isFlagNegatable,
@@ -23,7 +22,7 @@ export type CommandAction = (ctx: CrustCommandContext) => unknown;
 export interface CommandContext {
 	instance: AnyContextInstance;
 	/** The Extension whose `.provide()` supplied it; a command's `.use()` of that Extension declares it. */
-	extension?: ExtensionId;
+	extension?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -54,11 +53,11 @@ export interface CommandNode {
 	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
 	/** Prepared nodes only: the Extension declaring each Extension flag in {@link effectiveFlags}. */
-	extensionFlags?: ReadonlyMap<string, ExtensionId>;
+	extensionFlags?: ReadonlyMap<string, string>;
 	/** Prepared root only: its `recursive: false` Extension flags, which documentation lists as its own. */
 	rootOnlyFlags?: ReadonlySet<string> | undefined;
 	/** Prepared nodes only: the Extension that contributed this command or its top-level ancestor. */
-	extension?: ExtensionId | undefined;
+	extension?: string | undefined;
 	/** Cached canonical/short/alias table for the effective flags. */
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
@@ -82,14 +81,14 @@ export interface CommandNode {
 	 */
 	inheritedDemands: readonly AnyContextFactory[];
 	/** Ids of Extensions this command uses for their Contexts; preparation checks the app extends each. */
-	usedExtensions: readonly ExtensionId[];
+	usedExtensions: readonly string[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: ExtensionData[];
 	/**
 	 * Root builder only, set with `extensions`: how many root `contexts` existed at
 	 * each Extension's last registration. Its providers replace those and yield to later ones.
 	 */
-	extensionPositions?: ReadonlyMap<ExtensionId, number>;
+	extensionPositions?: ReadonlyMap<string, number>;
 	/** The Command Action */
 	run?: CommandAction | undefined;
 	/** Schema from `.output()` that validates and transforms the action result */

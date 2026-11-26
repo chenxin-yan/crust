@@ -1,13 +1,9 @@
 import {
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	CrustError,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
-
-const JSON_INPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:json-input");
 
 const inputFlags = {
 	input: {
@@ -46,7 +42,7 @@ async function readInput(value: string, context: ExtensionContext): Promise<stri
  * documentation saying so.
  */
 export const jsonInput: ExtensionFactory<[], {}, [], typeof inputFlags> =
-	/* @__PURE__ */ defineExtension(JSON_INPUT).factory((extension) =>
+	/* @__PURE__ */ defineExtension("crust:json-input").factory((extension) =>
 		extension
 			.flags(inputFlags)
 			.sections(() => [

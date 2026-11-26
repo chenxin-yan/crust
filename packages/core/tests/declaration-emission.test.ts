@@ -18,7 +18,7 @@ const repoRoot = resolve(import.meta.dirname, "../../..");
 const corePkg = resolve(import.meta.dirname, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
-const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag, type AnyCrust } from "@crustjs/core";
+const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineFlag, type AnyCrust } from "@crustjs/core";
 
 export const localFlag = defineFlag({ type: "string", choices: ["a"], default: "a" });
 export const localConfigured = new Crust("local", { sections: [{ title: "Notes", body: "text" }] })
@@ -79,7 +79,7 @@ export const deploy = defineCommand("deploy", (cmd) =>
 // An exported Extension carries evaluated dependency intersections,
 // ContextInstance tuples, and its contributed CommandDefinition tuple; a
 // TS2742 regression here must fail emission.
-export const telemetry = defineExtension(defineExtensionId("telemetry"))
+export const telemetry = defineExtension("telemetry")
 	.use(auth, authenticatedApi)
 	.provide(auth())
 	.add(deploy)
@@ -93,7 +93,7 @@ export const app = new Crust("consumer-cli")
 	.add(deploy);
 
 // Metadata requirements must remain nameable through exported factories and builders.
-export const stamp = defineExtension<"version">(defineExtensionId("stamp")).factory(
+export const stamp = defineExtension<"version">("stamp").factory(
 	(extension, prefix: string) =>
 		extension
 			.flags({ prefix: { type: "string", default: prefix } })
@@ -129,10 +129,10 @@ ${Array.from(
 
 // Demand checks must hold against dist exactly as in source; each directive
 // turns into TS2578 if the shipped declarations stop rejecting its line.
-const DEMAND_PROOF_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId } from "@crustjs/core";
+const DEMAND_PROOF_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension } from "@crustjs/core";
 
 const db = defineContext("db").setup(() => "ok");
-const extension = defineExtension(defineExtensionId("demands"))
+const extension = defineExtension("demands")
 	.use(db)
 	.preRun(async ({ ctx }) => void (await ctx.db).toUpperCase());
 const base = new Crust("app").provide(db());
@@ -230,7 +230,7 @@ beforeAll(() => {
 
 // Without strictNullChecks, an explicit provider tuple can end in an optional element; the
 // required Contexts before it must still type the action's ctx and flags.
-const OPTIONAL_TAIL_SOURCE = `import { Crust, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
+const OPTIONAL_TAIL_SOURCE = `import { Crust, defineContext, defineExtension, defineFlag } from "@crustjs/core";
 
 const a = defineContext("a").flags({ verbose: defineFlag({ type: "boolean" }) }).setup(() => 1);
 const b = defineContext("b").setup(() => "b");
@@ -244,7 +244,7 @@ export function direct(contexts: Contexts) {
 }
 
 export function viaExtension(contexts: Contexts) {
-	const extension = defineExtension(defineExtensionId("optional-tail")).provide<Contexts>(...contexts);
+	const extension = defineExtension("optional-tail").provide<Contexts>(...contexts);
 	return new Crust("app").extend(extension).action(({ ctx, flags }) => {
 		const value: Promise<number> = ctx.a;
 		void [value, flags.verbose];

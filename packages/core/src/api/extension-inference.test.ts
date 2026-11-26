@@ -2,12 +2,11 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import { expect, it } from "vite-plus/test";
 
 import { Crust } from "../command/crust.ts";
-import { defineExtensionId } from "../identity.ts";
 import { defineExtension } from "./extension.ts";
 
 it("false-capable scope can omit defaulted flags from both descendant hooks", async () => {
 	function extension(recursive: boolean) {
-		return defineExtension(defineExtensionId("scope"))
+		return defineExtension("scope")
 			.flags({ port: { type: "number", default: 123, recursive } })
 			.preRun(({ flags }) => {
 				seen.push(flags.port);
@@ -30,13 +29,13 @@ it("false-capable scope can omit defaulted flags from both descendant hooks", as
 it("uncertain flag collections may be empty or leave the name to another extension", async () => {
 	const flags: Record<string, { type: "number"; default: number }> = {};
 	const seen: unknown[] = [];
-	const observer = defineExtension(defineExtensionId("observer"))
+	const observer = defineExtension("observer")
 		.flags(flags)
 		.setup(({ flags }) => {
 			seen.push(flags.port);
 		});
 	expect((await new Crust("cli").extend(observer).run([])).status).toBe("completed");
-	const supplier = defineExtension(defineExtensionId("supplier")).flags({
+	const supplier = defineExtension("supplier").flags({
 		port: {
 			type: "string",
 			default: "text",
@@ -57,7 +56,7 @@ it("optional schema multiplicity exposes raw arrays in hooks, not validated outp
 		multiple: true,
 	};
 	const seen: unknown[] = [];
-	const ext = defineExtension(defineExtensionId("schema"))
+	const ext = defineExtension("schema")
 		.flags({ toggle })
 		.preRun(({ flags }) => {
 			seen.push(flags.toggle);

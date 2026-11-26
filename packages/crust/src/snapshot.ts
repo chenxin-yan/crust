@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, posix, resolve, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
-import { type BuildReport, defineExtensionId } from "@crustjs/core";
+import type { BuildReport } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
@@ -28,6 +28,8 @@ function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
 			(extension: JsonValue): extension is JsonObject & BuildReport["extensions"][number] =>
 				isJsonObject(extension) &&
 				typeof extension.id === "string" &&
+				extension.id !== "" &&
+				extension.id === extension.id.trim() &&
 				Array.isArray(extension.files) &&
 				extension.files.every((file: JsonValue): file is string => typeof file === "string"),
 		)
@@ -204,10 +206,9 @@ export async function buildEntrypoint(
 			// The subprocess uses the application's Core, which may have a different report contract.
 			const build: JsonValue = JSON.parse(serializedBuild);
 			if (!isBuildReport(build)) {
-				throw new Error("Expected extensions with string ids and files arrays.");
+				throw new Error("Expected extensions with non-empty, trimmed string ids and files arrays.");
 			}
 			for (const extension of build.extensions) {
-				defineExtensionId(extension.id);
 				for (const file of extension.files) {
 					// Reports use Core's normalized POSIX-relative paths, not arbitrary entry side effects.
 					const path = resolve(outDir, file);

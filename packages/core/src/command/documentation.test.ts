@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
-import { defineCommand, defineContext, defineExtension, defineExtensionId } from "../index.ts";
+import { defineCommand, defineContext, defineExtension } from "../index.ts";
 import { type AnyCrust, Crust } from "./crust.ts";
 import { buildCommandDocumentation, formatDefault, formatDescription } from "./documentation.ts";
 
@@ -257,7 +257,7 @@ describe("buildCommandDocumentation", () => {
 		const region = defineContext("region")
 			.flags({ region: { type: "string" } })
 			.setup(({ flags }) => flags.region);
-		const ext = defineExtension(defineExtensionId("test:ext")).flags({
+		const ext = defineExtension("test:ext").flags({
 			trace: { type: "boolean" },
 			about: { type: "boolean", recursive: false },
 		});
@@ -319,7 +319,7 @@ describe("buildCommandDocumentation", () => {
 	it("reads a list argument's schema choices from its items when it owns a key named negatable", async () => {
 		const model = await docs(
 			new Crust("app")
-				.extend(defineExtension(defineExtensionId("owner")).owns("negatable" as never))
+				.extend(defineExtension("owner").owns("negatable" as never))
 				.args({
 					name: "labels",
 					variadic: true,

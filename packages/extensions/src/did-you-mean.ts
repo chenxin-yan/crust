@@ -1,15 +1,7 @@
-import {
-	CrustError,
-	type ExtensionFactory,
-	type ExtensionId,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { CrustError, type ExtensionFactory, defineExtension } from "@crustjs/core";
 
 import { renderHelp } from "./help.ts";
 import { withTypedColorFlag } from "./no-color.ts";
-
-const DID_YOU_MEAN: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:did-you-mean");
 
 export interface DidYouMeanOptions {
 	/**
@@ -29,7 +21,7 @@ export interface DidYouMeanOptions {
  * typed word or is within two edits of it; an empty word matches nothing.
  */
 export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> =
-	/* @__PURE__ */ defineExtension(DID_YOU_MEAN).factory((extension, options = {}) => {
+	/* @__PURE__ */ defineExtension("crust:did-you-mean").factory((extension, options = {}) => {
 		const mode = options.mode ?? "error";
 
 		return extension.onError(async (error, context) => {

@@ -3,7 +3,6 @@ import type { JsonValue } from "@crustjs/utils/json";
 import type { CommandDefinition, RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
 import { flagRecordEntries, ownDefinition, toFlagsRecord } from "../parsing/spellings.ts";
 import type {
 	ArgExtras,
@@ -50,7 +49,8 @@ import {
  * `.output()` schema output when declared, otherwise the Command Action's awaited
  * return value (`undefined` without an action). For an async generator action, the
  * result is its `return` value, and `completed` and `failed` carry the values it
- * yielded as `events` (`[]` when it yielded none); `events` is absent otherwise.
+ * yielded as `events` (`[]` when it yielded none); `events` is absent otherwise. `by` is the
+ * id of the Extension that handled the invocation or, on `failed`, whose `onError` claimed it.
  */
 export type InvocationOutcome =
 	| {
@@ -58,11 +58,11 @@ export type InvocationOutcome =
 			readonly result: unknown;
 			readonly events?: readonly unknown[];
 	  }
-	| { readonly status: "handled"; readonly by: ExtensionId }
+	| { readonly status: "handled"; readonly by: string }
 	| {
 			readonly status: "failed";
 			readonly error: unknown;
-			readonly by?: ExtensionId;
+			readonly by?: string;
 			readonly events?: readonly unknown[];
 	  };
 
@@ -86,7 +86,8 @@ export type BuildArtifacts = readonly BuildFile[];
 /** Files written for each Extension build hook, in hook execution order. */
 export interface BuildReport {
 	readonly extensions: readonly {
-		readonly id: ExtensionId;
+		/** The Extension's id. */
+		readonly id: string;
 		readonly files: readonly string[];
 	}[];
 }
@@ -550,7 +551,7 @@ export interface ExtensionData<
 	/** @internal — phantom: flags of the Contexts hooks use, which every command parses */
 	readonly _hookFlags?: HookFlags;
 	readonly [extensionHookProof]?: (deps: HookDeps) => void;
-	readonly id: ExtensionId;
+	readonly id: string;
 	/** Definition keys this Extension owns; see {@link ExtensionBuilder.owns}. */
 	readonly owns: readonly string[];
 	readonly flags: Readonly<Record<string, ExtensionFlagDef>>;
@@ -591,14 +592,14 @@ export interface Extension<
 > extends Defining<
 	ExtensionData<Deps, Provide, FlagDefs, Commands, MetaKeys, HookDeps, HookFlags>
 > {
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 /** @internal Broad Extension constraint; contravariance requires the full metadata key set. */
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
 
 /** @internal Broad Extension factory constraint. */
-export type AnyExtensionFactory = ((...args: any[]) => AnyExtension) & { readonly id: ExtensionId };
+export type AnyExtensionFactory = ((...args: any[]) => AnyExtension) & { readonly id: string };
 
 /**
  * What a command's `.use()` accepts: a Context factory, or an Extension or Extension factory,
@@ -677,9 +678,9 @@ export type ExtensionFactory<
 	HookFlags extends FlagsDef = {},
 	Id extends string = string,
 > = ((...args: Args) => Extension<Deps, Provide, Flags, Commands, MetaKeys, HookDeps, HookFlags> & {
-	readonly id: ExtensionId<Id>;
+	readonly id: Id;
 }) & {
-	readonly id: ExtensionId<Id>;
+	readonly id: Id;
 };
 
 type ExtensionFactoryOf<Args extends readonly unknown[], E> =
@@ -703,7 +704,7 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 				MetaKeys,
 				HookDeps,
 				HookFlags,
-				E extends { readonly id: ExtensionId<infer Id> } ? Id : string
+				E extends { readonly id: infer Id extends string } ? Id : string
 			>
 		: never;
 
@@ -765,7 +766,7 @@ export interface ExtensionBuilder<
 	ContextDemands<Use>,
 	ContextUseFlags<Use>
 > {
-	readonly id: ExtensionId<Id>;
+	readonly id: Id;
 	/**
 	 * Declare Contexts the hooks read from `ctx`. This consumes only: the
 	 * application (or `.provide()`) must supply each Context. Hooks run on every
@@ -956,7 +957,7 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 			Object.assign(
 				(...args: unknown[]) => {
 					const extension = define(sealed, ...args);
-					// Identity is a runtime value: types cannot tell one ExtensionId from another.
+					// Identity is a runtime value: types cannot tell one Extension id from another.
 					if (process.env.CRUST_INTERNAL_BUILD !== "1" && definingOf(extension).id !== state.id) {
 						throw new CrustError(
 							"DEFINITION",
@@ -978,14 +979,24 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
  * Start an immutable fluent Extension definition.
  *
  * Extensions apply to the whole application and own the flags and commands
- * they contribute. `defineExtension<"version">(id)` requires root metadata keys
+ * they contribute. `id` is a non-empty, trimmed string, namespaced by convention
+ * (`acme:preview`); a later registration with the same id replaces this one.
+ * `defineExtension<"version">(id)` requires root metadata keys
  * without preventing inference of flags, Contexts, or commands; chain
  * `.factory()` for a configurable Extension whose identity is a section consumer.
  */
 export function defineExtension<
 	MetaKeys extends RootMetaKey = never,
 	const Id extends string = string,
->(id: ExtensionId<Id>): ExtensionBuilder<[], [], {}, [], MetaKeys, Id> {
+>(id: Id): ExtensionBuilder<[], [], {}, [], MetaKeys, Id> {
+	// Untrimmed ids like " x " would be distinct from "x" yet render identically
+	// in error messages and audience mismatches, so reject them at the boundary.
+	if (process.env.CRUST_INTERNAL_BUILD !== "1" && (!id || id !== id.trim())) {
+		throw new CrustError("DEFINITION", "Extension id must be a non-empty, trimmed string", {
+			subject: "extension",
+			reason: "empty-id",
+		});
+	}
 	// SAFETY: metadata requirements are type-only; the runtime handle is identical for every MetaKeys.
 	return createExtension({
 		id,

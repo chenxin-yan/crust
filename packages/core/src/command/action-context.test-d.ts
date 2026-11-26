@@ -1,7 +1,6 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 const text = defineContext("db").setup(() => "text");
@@ -91,7 +90,7 @@ const syncThrowingDefinition = defineCommand("sync-throwing", (c) =>
 	}),
 );
 root.add(throwingDefinition, syncThrowingDefinition);
-root.extend(defineExtension(defineExtensionId("throwing")).add(throwingDefinition));
+root.extend(defineExtension("throwing").add(throwingDefinition));
 
 // A never-returning action still binds its Context contract.
 // @ts-expect-error -- db is not provided

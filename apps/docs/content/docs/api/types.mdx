@@ -172,7 +172,7 @@ Empty interfaces that argument definitions, flag definitions, and command metada
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandSectionInput" />
 
-A plain-text section, optionally scoped with `only` or `except` (never both) to a nonempty list of `SectionConsumer`s. A `SectionConsumer` is an `ExtensionId` or any value exposing one at `.id`, such as the `help`, `man`, and `skills` Extension factories. `SectionAudience` is the `only` / `except` part alone.
+A plain-text section, optionally scoped with `only` or `except` (never both) to a nonempty list of `SectionConsumer`s. A `SectionConsumer` is an Extension, or any value exposing its id at `.id`, such as the `help`, `man`, and `skills` Extension factories; an id string is also accepted, for a consumer that is not an Extension. `SectionAudience` is the `only` / `except` part alone.
 
 ```ts
 import { help } from "@crustjs/extensions";
@@ -183,7 +183,7 @@ const sections = [
 ] satisfies CommandSectionInput[];
 ```
 
-Renderers filter sections for their audience first, then merge entries with the same exact, case-sensitive title, joining bodies with a newline. `CommandSection` is the validated form stored on snapshot `meta.sections`, with consumers resolved to `ExtensionId`s.
+Renderers filter sections for their audience first, then merge entries with the same exact, case-sensitive title, joining bodies with a newline. `CommandSection` is the validated form stored on snapshot `meta.sections`, with consumers resolved to Extension ids.
 
 ## Command Snapshots
 
@@ -396,11 +396,11 @@ When annotating a published factory, preserve literal tuples for precise typed i
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, trimmed string; another throws a `DEFINITION` error (`empty-id`) from the [definition checks](/docs/api/crust#definition-checks).
+A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Its `id` is the string passed to `defineExtension(id)` (see [ids](/docs/guide/extensions#ids-and-builders)), which must be non-empty and trimmed; another throws a `DEFINITION` error (`empty-id`) from the [definition checks](/docs/api/crust#definition-checks).
 
 ### `RootMetaKey`
 
-`keyof RootCommandMeta`: the keys `defineExtension<MetaKeys>(id)` accepts as its first type argument. The second is the id's literal, inferred from `id` unless `MetaKeys` is given; pass it too (`defineExtension<"version", "acme:preview">(id)`) so a later [same-id registration](/docs/api/crust#extendextensions) can drop this one's flags from the types. Required keys become non-optional in the root snapshots passed to hooks, `build`, and `sections`, and `.extend()` checks at compile time that the root supplies them. See [required root metadata](/docs/guide/extensions#required-root-metadata).
+`keyof RootCommandMeta`: the keys `defineExtension<MetaKeys>(id)` accepts as its first type argument. The second is the id's literal, inferred from `id` unless `MetaKeys` is given; pass it too (`defineExtension<"version", "acme:preview">("acme:preview")`) so a later [same-id registration](/docs/api/crust#extendextensions) can drop this one's flags from the types. Required keys become non-optional in the root snapshots passed to hooks, `build`, and `sections`, and `.extend()` checks at compile time that the root supplies them. See [required root metadata](/docs/guide/extensions#required-root-metadata).
 
 ### `ExtensionFlagDef` and `ExtensionFlagsDef`
 

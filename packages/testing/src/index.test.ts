@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { Crust, defineContext, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineContext, defineExtension } from "@crustjs/core";
 import { bold } from "@crustjs/style";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -206,12 +206,10 @@ describe("captureExecute", () => {
 			releaseSuccess = resolve;
 		});
 
-		const delayedRenderer = defineExtension(defineExtensionId("delayed-renderer")).onError(
-			async () => {
-				await errorRendererGate;
-				return true;
-			},
-		);
+		const delayedRenderer = defineExtension("delayed-renderer").onError(async () => {
+			await errorRendererGate;
+			return true;
+		});
 		const failingApp = new Crust("test-cli").extend(delayedRenderer).action(() => {
 			throw new Error("boom");
 		});

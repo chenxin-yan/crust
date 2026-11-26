@@ -22,7 +22,6 @@ import type {
 	Renderer,
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
 import {
 	bindStructuredInput,
 	parseArgs,
@@ -195,7 +194,7 @@ function inputStream(
 
 /** A flag handler with the Extension that registered it. */
 interface BoundHandler extends ExtensionHandler<any, any, any> {
-	readonly by: ExtensionId;
+	readonly by: string;
 	/** A `recursive: false` flag; a child may own an unrelated flag with the same name. */
 	readonly rootOnly: boolean;
 	/** Only a boolean can be negated; `false` or `[]` is a supplied value of any other type. */
@@ -208,9 +207,9 @@ interface PreparedInvocation {
 	extensions: readonly ExtensionData[];
 	/** Handlers by flag name; Extension flags never collide, so each flag has at most one. */
 	handlers: ReadonlyMap<string, BoundHandler>;
-	noAction?: { readonly by: ExtensionId; readonly run: ExtensionHandler<any, any, any>["run"] };
+	noAction?: { readonly by: string; readonly run: ExtensionHandler<any, any, any>["run"] };
 	renderer?: {
-		readonly by: ExtensionId;
+		readonly by: string;
 		readonly select: NonNullable<ExtensionHooks<any, any, any>["renderer"]>;
 	};
 	/** Run a command of the same application as `app.run()` does: the action's `runCommand`. */
@@ -590,7 +589,7 @@ export function buildExtensionTree(
 			})),
 		)
 		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-	const flagOwners = (isRoot: boolean): ReadonlyMap<string, ExtensionId> =>
+	const flagOwners = (isRoot: boolean): ReadonlyMap<string, string> =>
 		new Map(
 			extensionFlags
 				.filter(({ recursive }) => isRoot || recursive)
@@ -665,7 +664,7 @@ export function buildExtensionTree(
 		source: CommandNode,
 		path: string,
 		isRoot: boolean,
-		contributor?: ExtensionId,
+		contributor?: string,
 		ancestorFlagShapes?: FlagShapes,
 	): CommandNode => {
 		// Extension providers are application-wide, so an extended Extension's Contexts reach every command.
@@ -691,7 +690,7 @@ export function buildExtensionTree(
 					])
 				: childEntriesOf(source).map((entry) => [entry.name, entry]),
 		);
-		const contributedBy = new Map<string, ExtensionId>();
+		const contributedBy = new Map<string, string>();
 		if (isRoot) {
 			// A collision would silently replace or shadow a command. Recipes stay unevaluated.
 			if (process.env.CRUST_INTERNAL_BUILD !== "1") checkExtensionCommandNames(entries, extensions);
@@ -944,10 +943,10 @@ async function dispatch(
 	// The caller's `provide` option: replaces the same-name Contexts for this invocation.
 	provide: readonly AnyContextInstance[] | undefined,
 	onExtensionContext?: (context: ExtensionContext) => void,
-	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
+	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<string | undefined>,
 ): Promise<
 	| { status: "completed"; result: unknown; exitCode: number; events?: readonly unknown[] }
-	| { status: "handled"; by: ExtensionId; exitCode: 0 }
+	| { status: "handled"; by: string; exitCode: 0 }
 > {
 	const { rootNode, extensions } = prepared;
 	// Nothing to wait for without a selector: action-side output stays immediate and in order.
@@ -1227,7 +1226,7 @@ async function renderFailure(
 	output: InvocationOutput,
 	signal: AbortSignal,
 	extensionContext: ExtensionContext | undefined,
-): Promise<ExtensionId | undefined> {
+): Promise<string | undefined> {
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
 	// set in preRun) survives into onError. During dispatch its Contexts remain
 	// live through postRun; errors raised after cleanup see the closed resolver.

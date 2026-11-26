@@ -1,4 +1,3 @@
-import type { ExtensionId } from "../identity.ts";
 import { standardJsonSchema } from "../parsing/schema.ts";
 import { isFlagNegatable } from "../parsing/spellings.ts";
 import type {
@@ -135,7 +134,7 @@ export interface FlagSnapshot extends Readonly<FlagExtras> {
 	 * `--json`); absent for local and Context-owned flags. Command input
 	 * (`commandInputSchema()` in `@crustjs/core/tooling`) leaves these flags out.
 	 */
-	readonly extension?: ExtensionId | undefined;
+	readonly extension?: string | undefined;
 	/**
 	 * `true` for a flag the command does not declare in its own `.flags()`: a Context-owned or
 	 * recursive Extension flag. Help lists these under "Global options".
@@ -206,7 +205,7 @@ export interface CommandSnapshot {
 	 * The Extension that contributed this command, or the Extension command it
 	 * sits under (e.g. `completion`, `skills install`); absent for the application's own commands.
 	 */
-	readonly extension?: ExtensionId;
+	readonly extension?: string;
 	/** The command's `.group()` headings; absent when it has none. */
 	readonly groups?: readonly CommandGroup[];
 	/**
@@ -345,7 +344,7 @@ function snapshotArg(def: ArgDef, declared: SerializableDefault): ArgSnapshot {
 
 function snapshotFlag(
 	def: FlagDef,
-	extension: ExtensionId | undefined,
+	extension: string | undefined,
 	inherited?: true,
 	declared = serializableDefault(def.default),
 ): FlagSnapshot {

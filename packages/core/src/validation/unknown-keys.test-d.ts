@@ -4,7 +4,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineArg, defineFlag } from "../api/flags.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
-import { defineExtensionId } from "../identity.ts";
 
 {
 	// defineFlag
@@ -67,7 +66,7 @@ import { defineExtensionId } from "../identity.ts";
 	defineContext("db").flags({ url: { type: "string" } });
 	// @ts-expect-error `evn` is not a flag property
 	defineContext("db").flags({ url: { type: "string", evn: { name: "DB_URL" } } });
-	const id = defineExtensionId("test:unknown-keys");
+	const id = "test:unknown-keys";
 	defineExtension(id).flags({ trace: { type: "boolean", recursive: false } });
 	// @ts-expect-error `recursiv` is not an Extension flag property
 	defineExtension(id).flags({ trace: { type: "boolean", recursiv: false } });

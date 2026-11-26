@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Crust, defineExtensionId } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonObject, JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
@@ -1188,9 +1188,9 @@ describe("buildCommand", () => {
 			);
 			writeFileSync(
 				join(tmpDir, "src", "cli.ts"),
-				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const artifact = defineExtension(defineExtensionId("artifact")).build(() => ["artifact.txt", "second.txt", "third.txt", "fourth.txt"].map((path) => ({ path, content: "built" })));\n` +
-					`const empty = defineExtension(defineExtensionId("empty-extension")).build(() => []);\n` +
+				`import { Crust, defineExtension } from ${JSON.stringify(corePath)};\n` +
+					`const artifact = defineExtension("artifact").build(() => ["artifact.txt", "second.txt", "third.txt", "fourth.txt"].map((path) => ({ path, content: "built" })));\n` +
+					`const empty = defineExtension("empty-extension").build(() => []);\n` +
 					`await new Crust("artifact-cli").extend(artifact, empty).action(() => {}).execute();\n`,
 			);
 
@@ -1219,10 +1219,10 @@ describe("buildCommand", () => {
 					"artifact-cli": {
 						extensions: [
 							{
-								id: defineExtensionId("artifact"),
+								id: "artifact",
 								files: ["artifact.txt", "second.txt", "third.txt", "fourth.txt"],
 							},
-							{ id: defineExtensionId("empty-extension"), files: [] },
+							{ id: "empty-extension", files: [] },
 						],
 					},
 				});
@@ -1242,8 +1242,8 @@ describe("buildCommand", () => {
 		const writeEntry = (file: string, name: string, files: Record<string, string>) =>
 			writeFileSync(
 				join(tmpDir, "src", file),
-				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const hook = defineExtension(defineExtensionId("hook")).build(() => Object.entries(${JSON.stringify(files)}).map(([path, content]) => ({ path, content })));\n` +
+				`import { Crust, defineExtension } from ${JSON.stringify(corePath)};\n` +
+					`const hook = defineExtension("hook").build(() => Object.entries(${JSON.stringify(files)}).map(([path, content]) => ({ path, content })));\n` +
 					`await new Crust(${JSON.stringify(name)}).extend(hook).action(() => {}).execute();\n`,
 			);
 		const build = (argv: string[]) =>

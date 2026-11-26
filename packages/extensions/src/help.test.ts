@@ -1,12 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 
-import {
-	Crust,
-	defineCommand,
-	defineContext,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineExtension } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -37,7 +31,7 @@ afterEach(() => {
 });
 
 function lateSkillExtension() {
-	return defineExtension(defineExtensionId("late-skill")).add(
+	return defineExtension("late-skill").add(
 		defineCommand("skill", { description: "Manage agent skills" }, (command) =>
 			command
 				.add(
@@ -52,7 +46,7 @@ function lateSkillExtension() {
 
 describe("help", () => {
 	it("renderHelp honors only and except audiences", async () => {
-		const other = defineExtensionId("acme:other");
+		const other = "acme:other";
 		const snapshot = await new Crust("demo", {
 			sections: [
 				{ title: "Help only", body: "visible", only: [help] },
@@ -273,7 +267,7 @@ describe("help", () => {
 			sections: [{ title: "Root notes", body: "Root body" }],
 		})
 			.extend(
-				defineExtension(defineExtensionId("docs")).sections(() => [
+				defineExtension("docs").sections(() => [
 					{
 						command: ["build"],
 						title: "Build notes",
@@ -540,7 +534,7 @@ describe("help", () => {
 		vi.stubEnv("NO_COLOR", "1");
 		const snapshot = await new Crust("app")
 			.extend(
-				defineExtension(defineExtensionId("docs")).sections(() => [
+				defineExtension("docs").sections(() => [
 					{ command: [], title: "Templates", body: "\x1b[34mvue-ts\x1b[39m" },
 				]),
 			)

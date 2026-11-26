@@ -6,16 +6,12 @@ import {
 	type Extension,
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 
 import { withTypedColorFlag } from "./no-color.ts";
 import { textOutput } from "./text-output.ts";
-
-const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
 
 /** Options for {@link renderHelp}. */
 export interface RenderHelpOptions {
@@ -34,7 +30,7 @@ export async function renderHelp(
 	options?: RenderHelpOptions,
 ): Promise<string> {
 	const { renderHelpText } = await import("./help-render.ts");
-	return renderHelpText(command, path, HELP, options?.columns);
+	return renderHelpText(command, path, help.id, options?.columns);
 }
 
 const helpFlags = {
@@ -91,7 +87,7 @@ export interface HelpExtension {
 	(
 		options?: HelpOptions & { readonly command?: false | undefined },
 	): Extension<{}, [], typeof helpFlags, []>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 const helpFactory: ExtensionFactory<
@@ -100,7 +96,7 @@ const helpFactory: ExtensionFactory<
 	[],
 	typeof helpFlags,
 	readonly HelpCommandDefinition[]
-> = /* @__PURE__ */ defineExtension(HELP).factory((extension, options = {}) => {
+> = /* @__PURE__ */ defineExtension("crust:help").factory((extension, options = {}) => {
 	const shown = extension
 		.flags(helpFlags)
 		.handle("help", showHelp, { eager: true })

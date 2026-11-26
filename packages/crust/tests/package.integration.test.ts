@@ -69,10 +69,10 @@ describe.skipIf(!which("bun") || !which("npm"))("Bun runtime package", everyHost
 			join(project, "src", "greet.ts"),
 			`import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Crust, defineExtension, defineExtensionId, artifactPath } from ${JSON.stringify(coreDist)};
+import { Crust, defineExtension, artifactPath } from ${JSON.stringify(coreDist)};
 import { help } from ${JSON.stringify(extensionsDist)};
 import { punctuation } from "crust-greeting-dep";
-const man = defineExtension(defineExtensionId("man")).build(() => [{ path: "man/bun-greet.1", content: ".Dd" }]);
+const man = defineExtension("man").build(() => [{ path: "man/bun-greet.1", content: ".Dd" }]);
 await new Crust("bun-greet", { description: "Greets under Bun" })
 	.extend(man, help())
 	.args({ name: "name", type: "string", required: true })

@@ -67,12 +67,11 @@ if (outcome.status === "completed") console.log(outcome.stdout); // => o/
 `@crustjs/core/tooling` holds build- and render-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), and formatting. It moves in lockstep with first-party tooling; application authoring and invocation APIs stay at the package root.
 
 ```ts
-import { defineExtensionId } from "@crustjs/core";
 import { buildCommandDocumentation, visibleSectionsFor } from "@crustjs/core/tooling";
 
 const snapshot = await app.snapshot();
 const documentation = buildCommandDocumentation(snapshot);
-const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"));
+const visible = visibleSectionsFor(snapshot, webDocs);
 ```
 
 | Export                                                                             | Role                                                               |
@@ -80,7 +79,7 @@ const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"))
 | `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol |
 | `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot |
 | `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
-| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
+| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension or its id           |
 | `isInstalledCommandName()` / `INSTALLED_COMMAND_NAME_RULE`                         | Checks and describes the installed command name rule               |
 | `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
 | `CommandSnapshot`                                                                  | Same type as the root export, for tooling-only imports             |

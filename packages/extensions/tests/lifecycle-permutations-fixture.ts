@@ -1,4 +1,4 @@
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 // Crust's own writer: Bun leaves fd 1 non-blocking, so a raw `writeSync` throws EAGAIN when the
 // parent drains the pipe slowly, and the markers must stay in order with Crust's output.
 import { writeProcessOutput } from "@crustjs/utils/terminal";
@@ -9,11 +9,11 @@ import { didYouMean, help, noColor, version } from "../src/index.ts";
 // markers on both streams, so the parent compares them byte for byte.
 const argv: string[] = JSON.parse(process.argv[2]!);
 
-const preview = defineExtension(defineExtensionId("acme:preview"))
+const preview = defineExtension("acme:preview")
 	.flags({ preview: { type: "boolean", description: "Show the plan" } })
 	.handle("preview", (ctx) => ctx.stdout("nothing changed"));
 
-const stage = defineExtension(defineExtensionId("acme:stage")).setup(({ defer }) => {
+const stage = defineExtension("acme:stage").setup(({ defer }) => {
 	const previous = process.env.ACME_STAGE;
 	process.env.ACME_STAGE = "staging";
 	defer(() => {
@@ -23,12 +23,12 @@ const stage = defineExtension(defineExtensionId("acme:stage")).setup(({ defer })
 });
 
 // A gate must run before every action, after setups, and never when a handler or fallback takes over.
-const gate = defineExtension(defineExtensionId("acme:gate")).preRun((ctx) => {
+const gate = defineExtension("acme:gate").preRun((ctx) => {
 	if (process.env.ACME_STAGE !== "staging") throw new Error("gate ran before setup");
 	ctx.stderr("[gate] checked");
 });
 
-const wrap = defineExtension(defineExtensionId("acme:wrap")).postRun((ctx, outcome) =>
+const wrap = defineExtension("acme:wrap").postRun((ctx, outcome) =>
 	ctx.stderr(`[wrap] ${outcome.status}`),
 );
 

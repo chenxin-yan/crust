@@ -1,13 +1,9 @@
 import {
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	CrustError,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
-
-const JSON_OUTPUT: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:json");
 
 const jsonFlags = {
 	json: {
@@ -54,7 +50,7 @@ const flushHeld = /* @__PURE__ */ new WeakMap<ExtensionContext, () => void>();
  * @see https://crustjs.com/docs/modules/extensions/json
  */
 export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__ */ defineExtension(
-	JSON_OUTPUT,
+	"crust:json",
 ).factory((extension) =>
 	extension
 		.flags(jsonFlags)

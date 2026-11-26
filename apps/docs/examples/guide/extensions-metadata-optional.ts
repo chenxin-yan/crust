@@ -1,21 +1,15 @@
-import {
-	Crust,
-	defineExtension,
-	defineExtensionId,
-	type Extension,
-	type ExtensionId,
-} from "@crustjs/core";
+import { Crust, defineExtension, type Extension } from "@crustjs/core";
 
 type Stamp<MetaKeys extends "version"> = Extension<{}, [], {}, [], MetaKeys>;
 
 export interface StampFactory {
 	(version: string): Stamp<never>; // an explicit value needs no root metadata
 	(version?: string): Stamp<"version">; // an omitted value requires it
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 // [!code highlight]
-export const stamp: StampFactory = defineExtension(defineExtensionId("acme:stamp")).factory(
+export const stamp: StampFactory = defineExtension("acme:stamp").factory(
 	(extension, version?: string) =>
 		extension.preRun((ctx) => {
 			// The overloads guarantee root `version` whenever `version` is omitted.

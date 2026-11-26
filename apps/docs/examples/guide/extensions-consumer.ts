@@ -1,13 +1,11 @@
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { visibleSectionsFor } from "@crustjs/core/tooling";
 
-const WEB_DOCS = defineExtensionId("acme:web-docs");
-
-export const webDocs = defineExtension(WEB_DOCS).build(({ snapshot }) => {
+export const webDocs = defineExtension("acme:web-docs").build(({ snapshot }) => {
 	// [!code highlight]
-	const lines = visibleSectionsFor(snapshot, WEB_DOCS).flatMap(({ path, sections }) => [
-		//                                                             ^?
-		//                                                                   ^?
+	const lines = visibleSectionsFor(snapshot, webDocs).flatMap(({ path, sections }) => [
+		//                                                            ^?
+		//                                                                  ^?
 		`# ${[snapshot.meta.name, ...path].join(" ")}`,
 		...sections.map((s) => `## ${s.title}\n${s.body}`),
 	]);
