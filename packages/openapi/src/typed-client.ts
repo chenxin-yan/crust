@@ -11,9 +11,9 @@ type ParamValue = Scalar | readonly Scalar[] | { readonly [key: string]: Scalar 
 
 /** What `call()` takes for an operation it has no types for. */
 export interface CallInput {
-	readonly path?: Readonly<Record<string, ParamValue>>;
-	readonly query?: Readonly<Record<string, ParamValue | undefined>>;
-	readonly header?: Readonly<Record<string, ParamValue | undefined>>;
+	readonly path?: Readonly<Record<string, ParamValue>> | undefined;
+	readonly query?: Readonly<Record<string, ParamValue | undefined>> | undefined;
+	readonly header?: Readonly<Record<string, ParamValue | undefined>> | undefined;
 	/** Sent as JSON. */
 	readonly body?: unknown;
 }

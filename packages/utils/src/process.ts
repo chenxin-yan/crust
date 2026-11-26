@@ -4,14 +4,14 @@ import { isErrnoException } from "./error.ts";
 import { isSignalIgnored } from "./signals.ts";
 
 export type RunProcessOptions = {
-	cwd?: string;
-	env?: NodeJS.ProcessEnv;
+	cwd?: string | undefined;
+	env?: NodeJS.ProcessEnv | undefined;
 	/** `"stderr"`: inherit stdin and stderr, and send the child's stdout to this process's stderr. */
-	stdio?: "collect" | "inherit" | "stderr";
+	stdio?: "collect" | "inherit" | "stderr" | undefined;
 	/** Ignore stdout while collecting stderr. */
-	stdout?: "collect" | "ignore";
+	stdout?: "collect" | "ignore" | undefined;
 	/** Run the command through the platform shell. */
-	shell?: boolean;
+	shell?: boolean | undefined;
 	/**
 	 * Milliseconds before process-tree cleanup and rejection. POSIX descendants
 	 * must remain in the child's group; Windows requires a live parent.
@@ -20,7 +20,7 @@ export type RunProcessOptions = {
 	 * listener handles it. A signal this process inherited as ignored (Bun on Linux, such as
 	 * SIGHUP under `nohup`) is left ignored: it neither kills the group nor rejects the call.
 	 */
-	timeout?: number;
+	timeout?: number | undefined;
 	/**
 	 * Aborting it sends `SIGTERM` to the child, then `SIGKILL` if it is still running 5 seconds
 	 * later (timed calls: the whole process group, killed; Windows: `taskkill /T /F` ends the

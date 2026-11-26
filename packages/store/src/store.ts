@@ -83,7 +83,7 @@ function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
 
 /** The message for a value outside `choices`; never quotes the value, which may be a secret. */
 function outsideChoices(
-	def: { array?: true; choices?: readonly string[] },
+	def: { array?: true; choices?: readonly string[] | undefined },
 	value: JsonValue | undefined,
 ): string | undefined {
 	if (def.choices === undefined) return undefined;

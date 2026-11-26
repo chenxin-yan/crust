@@ -13,7 +13,7 @@ import type { RenderedFile, SkillMeta } from "./types.ts";
 /** Options for rendering a skill source. */
 export interface WriteSkillsOptions {
 	/** Application whose command tree is rendered into a generated skill. Omit to write only `extras`. */
-	readonly app?: { snapshot(): Promise<CommandSnapshot> };
+	readonly app?: { snapshot(): Promise<CommandSnapshot> } | undefined;
 	/** `skills` directory that receives one subdirectory per skill. A relative path resolves against the working directory. */
 	readonly outDir: string;
 	/** Version recorded in the generated skill's SKILL.md metadata. Omitted when absent. */

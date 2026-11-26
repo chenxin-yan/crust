@@ -74,9 +74,9 @@ export interface InvocationOptions<Event = unknown> {
 	 */
 	stdin?: string | Uint8Array | undefined;
 	/** Receives each stdout write live, as it was made: `stdout(text)` arrives as `text` and a newline. */
-	stdout?: (chunk: string | Uint8Array) => void;
+	stdout?: ((chunk: string | Uint8Array) => void) | undefined;
 	/** Receives each stderr write live, as it was made. */
-	stderr?: (chunk: string | Uint8Array) => void;
+	stderr?: ((chunk: string | Uint8Array) => void) | undefined;
 	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
 	signal?: AbortSignal | undefined;
 	/**
@@ -84,13 +84,13 @@ export interface InvocationOptions<Event = unknown> {
 	 * after the selected Renderer's `event`. The action resumes once it returns, or once the
 	 * promise it returns resolves. A throw or rejection fails the invocation.
 	 */
-	onEvent?: (event: Event) => unknown;
+	onEvent?: ((event: Event) => unknown) | undefined;
 	/**
 	 * Context instances that replace the same-name Contexts for this invocation, such as test
 	 * doubles from `factory.of(value)`, wherever they are provided: the root, an Extension, or a
 	 * command. A name nothing provides is ignored.
 	 */
-	provide?: readonly AnyContextInstance[];
+	provide?: readonly AnyContextInstance[] | undefined;
 }
 
 /**
@@ -127,29 +127,33 @@ export interface ExecuteOptions {
 	 * descriptor 1 or 2, so patching `process.stdout.write` does not capture them. Windows writes
 	 * through `process.stdout` / `process.stderr`.
 	 */
-	io?: {
-		stdin?: AsyncIterable<string | Uint8Array> & { readonly isTTY?: boolean | undefined };
-		stdout?: OutputSink;
-		stderr?: OutputSink;
-	};
+	io?:
+		| {
+				stdin?:
+					| (AsyncIterable<string | Uint8Array> & { readonly isTTY?: boolean | undefined })
+					| undefined;
+				stdout?: OutputSink | undefined;
+				stderr?: OutputSink | undefined;
+		  }
+		| undefined;
 	/**
 	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`
 	 * with the same reason. If work throws that reason, an `AbortError` exits `130`
 	 * and other errors exit as any failure does. Effect signal interruption instead becomes an
 	 * `AbortError`, regardless of the caller's reason.
 	 */
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 	/**
 	 * Receives each value an async generator Command Action yields, as it is yielded,
 	 * after the selected Renderer's `event`. Core never prints events. The action resumes once it
 	 * returns, or once the promise it returns resolves. A throw or rejection fails the invocation.
 	 */
-	onEvent?: (event: unknown) => unknown;
+	onEvent?: ((event: unknown) => unknown) | undefined;
 	/**
 	 * Context instances that replace the app's same-name Contexts for this invocation, such as
 	 * test doubles from `factory.of(value)`; see {@link InvocationOptions.provide}.
 	 */
-	provide?: readonly AnyContextInstance[];
+	provide?: readonly AnyContextInstance[] | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -189,9 +193,9 @@ type Resolve<T extends ValueType> = {
 /** Inclusive bounds of a `number` or `integer` value, checked wherever a value is supplied; not on `default`. */
 interface NumberRange {
 	/** The smallest value accepted. */
-	min?: number;
+	min?: number | undefined;
 	/** The largest value accepted. */
-	max?: number;
+	max?: number | undefined;
 }
 
 /** `min` and `max` are only for `number` and `integer`. */
@@ -275,7 +279,7 @@ interface ArgDefBase extends ArgExtras {
 	/** The argument name (used as the key in the parsed result and in help text) */
 	name: string;
 	/** Human-readable description for help text */
-	description?: string;
+	description?: string | undefined;
 	/**
 	 * When `true`, the parser throws if the argument is not provided.
 	 *
@@ -343,7 +347,7 @@ interface NumberArgDef extends ArgDefBase, NumberRange {
 	type: "number";
 	choices?: never;
 	/** Default number value when the argument is not provided */
-	default?: number;
+	default?: number | undefined;
 	/** Not supported on number args — use `type: "string"` with `parse`. */
 	parse?: never;
 }
@@ -353,7 +357,7 @@ interface IntegerArgDef extends ArgDefBase, NumberRange {
 	type: "integer";
 	choices?: never;
 	/** Default integer value when the argument is not provided */
-	default?: number;
+	default?: number | undefined;
 	/** Not supported on integer args — use `type: "string"` with `parse`. */
 	parse?: never;
 }
@@ -363,7 +367,7 @@ interface BooleanArgDef extends ArgDefBase, NoRange {
 	type: "boolean";
 	choices?: never;
 	/** Default boolean value when the argument is not provided */
-	default?: boolean;
+	default?: boolean | undefined;
 	/** Not supported on boolean args — use `type: "string"` with `parse`. */
 	parse?: never;
 }
@@ -373,7 +377,7 @@ interface UrlArgDef extends ArgDefBase, NoRange {
 	type: "url";
 	choices?: never;
 	/** Default URL value when the argument is not provided */
-	default?: URL;
+	default?: URL | undefined;
 	/** Not supported on url args — use `type: "string"` with `parse`. */
 	parse?: never;
 }
@@ -383,7 +387,7 @@ interface PathArgDef extends ArgDefBase, NoRange {
 	type: "path";
 	choices?: never;
 	/** Default path string when the argument is not provided */
-	default?: string;
+	default?: string | undefined;
 	/** Not supported on path args — use `type: "string"` with `parse`. */
 	parse?: never;
 }
@@ -412,9 +416,9 @@ interface SchemaArgDef extends NoRange, ArgExtras {
 	/** The argument name (used as the key in the parsed result and in help text) */
 	name: string;
 	/** Human-readable description for help text */
-	description?: string;
+	description?: string | undefined;
 	/** Collects tokens into a `string[]` for the schema; see `ArgDef`'s `variadic` */
-	variadic?: VariadicMode;
+	variadic?: VariadicMode | undefined;
 	/** Standard Schema that owns coercion, defaults, requiredness, and validation */
 	schema: StandardSchema;
 	type?: never;
@@ -459,30 +463,30 @@ export type ArgsDef = readonly ArgDef[];
 /** Shared fields present on every flag definition */
 interface FlagDefBase extends FlagExtras {
 	/** Human-readable description for help text */
-	description?: string;
+	description?: string | undefined;
 	/** Single-character (one code point) short alias (e.g. `"v"` → `-v`) */
-	short?: string;
+	short?: string | undefined;
 	/** Additional aliases (e.g. `["out"]` → `--out`); one-character aliases also accept one dash. */
-	aliases?: readonly string[];
+	aliases?: readonly string[] | undefined;
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true | undefined;
 	/**
 	 * The value's name in documentation, `--memory <bytes>` for `"bytes"`; the value type
 	 * by default. Only flags that take a value have one.
 	 */
-	valueName?: string;
+	valueName?: string | undefined;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
 	/**
 	 * Parsed as usual, but left out of every listing: help, man pages, completion, skills, and
 	 * command input schemas, as for a hidden command.
 	 */
-	hidden?: boolean;
+	hidden?: boolean | undefined;
 	/**
 	 * Why the flag is deprecated, and what to use instead. Giving the flag on the command line
 	 * prints one warning with it on stderr; help marks the flag. Independent of `hidden`.
 	 */
-	deprecated?: string;
+	deprecated?: string | undefined;
 	/**
 	 * Flags of the same `.flags()` record this one needs: given without them, from the command
 	 * line, the environment, or typed input, the invocation is a usage error. A default does
@@ -491,7 +495,7 @@ interface FlagDefBase extends FlagExtras {
 	 * @example
 	 * { jq: { type: "string", requires: ["json"] }, json: { type: "boolean" } }
 	 */
-	requires?: readonly string[];
+	requires?: readonly string[] | undefined;
 	/** Only an exclusive group has members — see {@link ExclusiveFlagDef} */
 	flags?: never;
 }
@@ -506,7 +510,7 @@ export type FlagEnv = string | readonly [string, ...string[]];
 /** Occurrence fields of a single-value flag — `multiple` and `delimiter` must be omitted. */
 interface SingleOccurrenceFields {
 	/** Environment fallback; argv wins over env, which wins over the default. */
-	env?: FlagEnv;
+	env?: FlagEnv | undefined;
 	/** Must be omitted or `undefined` for single-value flags — set to `true` for multi-value */
 	multiple?: undefined;
 	/** Only repeatable flags split values — see {@link RepeatableOccurrenceFields} */
@@ -516,7 +520,7 @@ interface SingleOccurrenceFields {
 /** Occurrence fields of a repeatable flag — `multiple` is required as `true`. */
 interface RepeatableOccurrenceFields {
 	/** Environment fallback; its text is one occurrence unless `delimiter` is set. */
-	env?: FlagEnv;
+	env?: FlagEnv | undefined;
 	/** Collect repeated values into an array */
 	multiple: true;
 	/**
@@ -526,7 +530,7 @@ interface RepeatableOccurrenceFields {
 	 * Boolean argv switches stay booleans. Opt-in with no default; structured `run()`
 	 * arrays are never split.
 	 */
-	delimiter?: string;
+	delimiter?: string | undefined;
 }
 
 // ── Core-value flags ─────────────────────────────────────────────────────
@@ -548,7 +552,7 @@ type StringFlagFields<Default, ParseOutput> = {
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions.
 	 */
-	choices?: readonly string[];
+	choices?: readonly string[] | undefined;
 	/**
 	 * Custom synchronous parser for the raw argv string. For multi-value
 	 * flags it runs once per occurrence. The return type becomes the flag's
@@ -560,15 +564,15 @@ type StringFlagFields<Default, ParseOutput> = {
 
 type TypedFlagFields<T extends Exclude<ValueType, "string">, Default> = {
 	/** Default value, or value array for a multi-value flag. */
-	default?: Default;
+	default?: Default | undefined;
 	choices?: never;
 	/**
 	 * Boolean flags only: also accept `--no-<name>` (and `--no-<alias>`) for `false`, such as
 	 * to override an environment variable. A flag with `default: true` accepts it without
 	 * this, and only such a flag lists it in help.
 	 */
-	negatable?: T extends "boolean" ? true : never;
-	valueName?: T extends "boolean" ? never : string;
+	negatable?: T extends "boolean" ? true | undefined : never;
+	valueName?: T extends "boolean" ? never : string | undefined;
 	/** Use `type: "string"` with `parse` for custom parsing. */
 	parse?: ((raw: string) => unknown) & {
 		readonly FIX_PARSE: '`parse` is for string flags: use type: "string" with parse';
@@ -620,7 +624,7 @@ type SchemaStringFlagDef = SchemaFlagBase & {
 type SchemaBooleanFlagDef = SchemaFlagBase & {
 	type: "boolean";
 	/** Also accept `--no-<name>` (and `--no-<alias>`) for `false`; help does not list it. */
-	negatable?: true;
+	negatable?: true | undefined;
 	valueName?: never;
 } & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
@@ -926,7 +930,7 @@ export type RunInputValue =
 	| URL
 	| JsonValue
 	| readonly RunInputValue[]
-	| { readonly flag: string; readonly value?: RunInputValue };
+	| { readonly flag: string; readonly value?: RunInputValue | undefined };
 
 /** Runtime-erased structured `run()` input bound by `parseStructured`. */
 export interface RunInputPayload {

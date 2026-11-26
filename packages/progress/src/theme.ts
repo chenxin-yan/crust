@@ -33,7 +33,7 @@ export const defaultTheme: ProgressTheme = themeFromStyle({ bold, green, magenta
  * {@link defaultTheme} with color support detected from `sink` rather than stdout, so a spinner
  * never creates `process.stdout` just to pick its colors.
  */
-export function defaultThemeFor(sink: { readonly isTTY?: boolean }): ProgressTheme {
+export function defaultThemeFor(sink: { readonly isTTY?: boolean | undefined }): ProgressTheme {
 	// Env is snapshotted once per spinner here; changing it mid-render is not a real use case.
 	return themeFromStyle(createPlainStyle({ overrides: { isTTY: sink.isTTY } }));
 }

@@ -6,7 +6,7 @@ import type { ApiAuth, AuthAttempt } from "./client.ts";
 export interface BearerCredential {
 	readonly value: string;
 	/** Called once after a 401: the credential to retry with. Leave it out for a token from env or a flag. */
-	readonly refresh?: (options: { signal: AbortSignal }) => Promise<BearerCredential>;
+	readonly refresh?: ((options: { signal: AbortSignal }) => Promise<BearerCredential>) | undefined;
 }
 
 /** What {@link bearerAuth} passes to its resolver. */

@@ -76,7 +76,7 @@ export interface HelpOptions {
 	 * `app db migrate --help` prints. Off by default, because in an application without
 	 * subcommands it would take the root command's first argument.
 	 */
-	readonly command?: boolean;
+	readonly command?: boolean | undefined;
 }
 
 /**

@@ -21,7 +21,7 @@ declare module "@crustjs/core" {
 		 * Live completion values, read only by `completion()`: the generated scripts call the
 		 * CLI's hidden `__complete` command, which calls this with the word being completed.
 		 */
-		complete?: Completer;
+		complete?: Completer | undefined;
 	}
 	interface FlagExtras {
 		/**
@@ -29,7 +29,7 @@ declare module "@crustjs/core" {
 		 * generated scripts call the CLI's hidden `__complete` command, which calls this with
 		 * the word being completed.
 		 */
-		complete?: Completer;
+		complete?: Completer | undefined;
 	}
 }
 

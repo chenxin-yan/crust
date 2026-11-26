@@ -5,14 +5,14 @@ import { isErrnoException } from "./error.ts";
 
 /** A readable stream available to terminal libraries. */
 export type TerminalInput = Readable & {
-	readonly isTTY?: boolean;
-	readonly isRaw?: boolean;
-	setRawMode?: (mode: boolean) => void;
+	readonly isTTY?: boolean | undefined;
+	readonly isRaw?: boolean | undefined;
+	setRawMode?: ((mode: boolean) => void) | undefined;
 };
 
 /** A writable-compatible output available to terminal libraries. */
 export interface TerminalOutput {
-	readonly isTTY?: boolean;
+	readonly isTTY?: boolean | undefined;
 	readonly columns?: number | undefined;
 	write(text: string): void;
 }

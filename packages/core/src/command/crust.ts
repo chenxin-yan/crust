@@ -184,14 +184,14 @@ export interface CrustCommandContext<
 /** Static configuration for a reusable command definition. */
 export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
 	/** Plain-text sections rendered after built-in command documentation. */
-	readonly sections?: readonly CommandSectionInput[];
+	readonly sections?: readonly CommandSectionInput[] | undefined;
 }
 
 /** Static metadata accepted by the root command constructor, including keys packages add through {@link CommandExtras}. */
 export interface RootCommandMeta
 	extends Pick<CommandMeta, "description" | "version" | "usage" | "examples">, CommandExtras {
 	/** Plain-text sections rendered after built-in command documentation. */
-	readonly sections?: readonly CommandSectionInput[];
+	readonly sections?: readonly CommandSectionInput[] | undefined;
 }
 
 export type AnyCommandDefinitionBuilder = Crust<

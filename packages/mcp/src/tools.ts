@@ -26,15 +26,15 @@ export interface McpToolOutputSchema {
  */
 export interface McpToolAnnotations {
 	/** Human-readable title of the tool. */
-	readonly title?: string;
+	readonly title?: string | undefined;
 	/** The tool does not modify its environment. The specification's default is `false`. */
-	readonly readOnlyHint?: boolean;
+	readonly readOnlyHint?: boolean | undefined;
 	/** The tool may destroy or overwrite data; meaningful only when not read-only. Default `true`. */
-	readonly destructiveHint?: boolean;
+	readonly destructiveHint?: boolean | undefined;
 	/** Repeating a call with the same arguments has no further effect; meaningful only when not read-only. Default `false`. */
-	readonly idempotentHint?: boolean;
+	readonly idempotentHint?: boolean | undefined;
 	/** The tool reaches outside entities, such as the web, rather than a closed domain. Default `true`. */
-	readonly openWorldHint?: boolean;
+	readonly openWorldHint?: boolean | undefined;
 }
 
 /** One command exposed as an MCP tool. */
@@ -61,7 +61,7 @@ export interface McpToolsOptions {
 	 * including everything under them; an unknown path or alias throws. A command
 	 * with `mcp: false` stays out, and so does everything under it.
 	 */
-	readonly include?: readonly (readonly string[])[];
+	readonly include?: readonly (readonly string[])[] | undefined;
 }
 
 /** Name of the command `mcp()` contributes; it sets `mcp: false`, so it is never a tool. */

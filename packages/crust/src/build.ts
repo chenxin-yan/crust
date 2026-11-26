@@ -409,7 +409,7 @@ export function resolveBinEntries(cwd: string, pkg: JsonObject): BinEntry[] {
 /** Options of the programmatic {@link build}; `crust build` maps its flags onto them. */
 export type BuildOptions = {
 	/** Project root whose package.json `bin` and `crust` are read. Default: `process.cwd()`. */
-	cwd?: string;
+	cwd?: string | undefined;
 	/**
 	 * `"package"` for a runtime package (a root-only JavaScript bundle that runs
 	 * on the installed runtime) or `"binary"` for standalone executables in
@@ -427,7 +427,7 @@ export type BuildOptions = {
 	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. */
 	envFiles?: readonly string[] | undefined;
 	/** Minify the output. Default: true. */
-	minify?: boolean;
+	minify?: boolean | undefined;
 	/**
 	 * Precompile Bun standalone executables to bytecode for faster startup. Default:
 	 * true for bun binaries; an explicit `true` is rejected for other runtimes and for
@@ -435,12 +435,12 @@ export type BuildOptions = {
 	 */
 	bytecode?: boolean | undefined;
 	/** Materialize Command Snapshots and run Extension build hooks before compiling. Default: true. */
-	validate?: boolean;
+	validate?: boolean | undefined;
 	/**
 	 * Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`.
 	 * A throw rejects `build()`; on the closing summary lines `.crust/` already holds the new build.
 	 */
-	onLog?: (line: string, stream: "stdout" | "stderr") => void;
+	onLog?: ((line: string, stream: "stdout" | "stderr") => void) | undefined;
 };
 
 type PlanOptions = Omit<BuildOptions, "cwd" | "onLog">;

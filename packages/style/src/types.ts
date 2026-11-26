@@ -112,9 +112,9 @@ export interface StyleOptions {
 	 * Color emission mode.
 	 * @default "auto"
 	 */
-	readonly mode?: ColorMode;
+	readonly mode?: ColorMode | undefined;
 	/** Per-field capability inputs: each key present replaces its `process.stdout.isTTY` or `process.env` read, and omitted keys still read the real value. */
-	readonly overrides?: CapabilityOverrides;
+	readonly overrides?: CapabilityOverrides | undefined;
 }
 
 /** Input accepted by style functions. Nullish values become an empty string; others are stringified. */

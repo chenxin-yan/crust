@@ -61,7 +61,7 @@ export interface SchemaOptions {
 	 *
 	 * @default "schema"
 	 */
-	readonly command?: string;
+	readonly command?: string | undefined;
 }
 
 /**

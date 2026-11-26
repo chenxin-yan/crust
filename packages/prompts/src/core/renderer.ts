@@ -118,12 +118,12 @@ export interface PromptConfig<S, T> {
 	 * Called after submit with the final state and submitted value.
 	 * If not provided, the last render output is left on screen.
 	 */
-	readonly renderSubmitted?: (state: S, value: T, theme: PromptTheme) => string;
+	readonly renderSubmitted?: ((state: S, value: T, theme: PromptTheme) => string) | undefined;
 	/**
 	 * Optional: render the cancelled state, after Ctrl+C, Ctrl+D, or an aborted `signal`.
 	 * If not provided, the last render output is left on screen.
 	 */
-	readonly renderCancelled?: (state: S, theme: PromptTheme) => string;
+	readonly renderCancelled?: ((state: S, theme: PromptTheme) => string) | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

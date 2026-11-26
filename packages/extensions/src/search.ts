@@ -80,7 +80,7 @@ export interface SearchOptions {
 	 *
 	 * @default "search"
 	 */
-	readonly command?: string;
+	readonly command?: string | undefined;
 }
 
 /**

@@ -267,8 +267,8 @@ export interface ExtensionContext<
 	 * ```
 	 */
 	readonly bindText: (input: {
-		readonly args?: Readonly<Record<string, string | readonly string[]>>;
-		readonly flags?: Readonly<Record<string, string | readonly string[]>>;
+		readonly args?: Readonly<Record<string, string | readonly string[]>> | undefined;
+		readonly flags?: Readonly<Record<string, string | readonly string[]>> | undefined;
 	}) => void;
 }
 
@@ -353,7 +353,7 @@ export interface ExtensionHandleOptions {
 	 *
 	 * @default false
 	 */
-	readonly eager?: boolean;
+	readonly eager?: boolean | undefined;
 }
 
 /** @internal A flag handler as stored on the Extension record. */
@@ -441,7 +441,7 @@ export interface ExtensionHooks<
  * A flag owned by an Extension. `recursive` (default `true`) contributes the
  * flag to every command in the application; set `false` for a root-only flag.
  */
-export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
+export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean | undefined };
 
 /** Record mapping an Extension's flag names to their definitions. */
 export type ExtensionFlagsDef = Record<string, ExtensionFlagDef>;

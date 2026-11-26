@@ -21,7 +21,7 @@ import { isLocalRef, mergeParameters, rawOperations, refTarget } from "./spec-tr
  * Keys of `paths` not starting with `/`, such as `x-*` extensions, are skipped.
  */
 export interface OpenApiSpec {
-	readonly paths?: Readonly<Record<string, unknown>>;
+	readonly paths?: Readonly<Record<string, unknown>> | undefined;
 	readonly [key: string]: unknown;
 }
 
@@ -31,7 +31,7 @@ export interface OpenApiSpec {
  */
 export interface ApiRequest {
 	readonly path: string;
-	readonly init?: Parameters<ApiClient["fetch"]>[1];
+	readonly init?: Parameters<ApiClient["fetch"]>[1] | undefined;
 }
 
 /** A page request `--paginate` sent, with its method as sent: `paginate` may change a reused `init` afterwards. */

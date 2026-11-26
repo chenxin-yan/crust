@@ -78,7 +78,7 @@ export interface DefineApiOptions<Id extends string = string> {
 	 * The registered spec in `Specs` that types `call()`, needed only when several are registered,
 	 * and the directory `crust build` writes a URL's document to. Default: `"openapi"`.
 	 */
-	readonly id?: Id;
+	readonly id?: Id | undefined;
 	/**
 	 * The next page's request for `--paginate`, or `undefined` after the last page.
 	 * Receives a copy of each successful response, so it may read the body. The next page

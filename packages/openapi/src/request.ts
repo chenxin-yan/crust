@@ -41,7 +41,7 @@ const LOCATIONS = ["path", "query", "header"] as const;
 
 /** What {@link buildRequest} takes: a {@link CallInput}, whose values it checks itself. */
 export type RequestInput = {
-	readonly [Location in (typeof LOCATIONS)[number]]?: Readonly<Record<string, unknown>>;
+	readonly [Location in (typeof LOCATIONS)[number]]?: Readonly<Record<string, unknown>> | undefined;
 } & { readonly body?: unknown };
 
 /** A 2xx status of the spec: `"200"` or a range such as `"2XX"`. */

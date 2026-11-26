@@ -215,7 +215,7 @@ export interface McpServerOptions extends McpToolsOptions {
 	 * describe, and call the same tools, so a large CLI does not fill the
 	 * client's context with every schema up front.
 	 */
-	readonly discovery?: "direct" | "progressive";
+	readonly discovery?: "direct" | "progressive" | undefined;
 }
 
 /** Prepares the tools once; each call of the result builds a new server for them. */
