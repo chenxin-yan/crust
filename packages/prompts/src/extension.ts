@@ -72,20 +72,30 @@ async function ask(
 		const preselected = typeof def.default === "string" ? def.default : undefined;
 		bindText(await select({ message, choices: def.choices, default: preselected }));
 	} else if (!list && def.type !== "count" && def.type !== "exclusive") {
+		// A kept default is bound too, so a later positional argument can follow it. Its text
+		// converts back to the declared value: a `json` default is already parsed, a `url` one is
+		// its href, and core parses a `parse` or `path` default as text.
+		const kept =
+			def.default === undefined
+				? undefined
+				: def.type === "json"
+					? JSON.stringify(def.default)
+					: String(def.default);
 		await input({
 			message,
-			// A kept default is bound too, so a later positional argument can follow it. Its text
-			// converts back to the declared value: a `json` default is already parsed, a `url` one is
-			// its href, and core parses a `parse` or `path` default as text.
-			default:
-				def.default === undefined
-					? undefined
-					: def.type === "json"
-						? JSON.stringify(def.default)
-						: String(def.default),
+			default: kept,
 			validate: (answer) => {
-				if (answer !== "" || def.default === "") bindText(answer);
-				else if (def.required) throw new Error("A value is required");
+				if (answer === "" && def.default !== "") {
+					if (def.required) throw new Error("A value is required");
+					return;
+				}
+				try {
+					bindText(answer);
+				} catch (error) {
+					// `min` and `max` check supplied values, not the default: one they would refuse
+					// stays as declared.
+					if (answer !== kept) throw error;
+				}
 			},
 		});
 	}

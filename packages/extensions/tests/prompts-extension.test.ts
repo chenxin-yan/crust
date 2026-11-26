@@ -145,6 +145,12 @@ const app = new Crust("acme")
 			)
 			.action(({ args, stdout }) => stdout(`rename prefix=${args.prefix} name=${args.name}`)),
 	)
+	.command("work", (c) =>
+		c
+			// The default lies outside `min`: bounds check supplied values, not the default.
+			.flags({ jobs: { type: "integer", min: 1, default: 0, prompt: "Jobs" } })
+			.action(({ flags, stdout }) => stdout(`jobs=${flags.jobs}`)),
+	)
 	.command("label", (c) =>
 		c
 			.flags({
@@ -281,6 +287,23 @@ describe("prompts()", () => {
 			stdout: "rename prefix= name=bee\n",
 			exitCode: 0,
 		});
+	});
+
+	it("keeps a default its own bounds would refuse, and still checks another answer", async () => {
+		expect(await answer(runInteractive(app, ["work"]), [/Jobs/, ""])).toMatchObject({
+			stdout: "jobs=0\n",
+			exitCode: 0,
+		});
+		const run = runInteractive(app, ["work"]);
+		await run.waitFor(/Jobs/);
+		run.keys("backspace");
+		run.type("-2");
+		run.keys("return");
+		await run.waitFor(/at least 1|>= ?1|minimum/i);
+		run.keys("backspace", "backspace");
+		run.type("3");
+		run.keys("return");
+		expect(await run.done).toMatchObject({ stdout: "jobs=3\n", exitCode: 0 });
 	});
 
 	it("asks for no positional after an omitted one", async () => {
