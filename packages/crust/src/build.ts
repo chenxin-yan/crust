@@ -707,11 +707,7 @@ async function prepareEntries(
  * `tsconfig.json`; throws with its output on errors. tsc would otherwise look for
  * a tsconfig.json in parent directories, so the root one is required.
  */
-async function typecheckProject(
-	cwd: string,
-	stdout: LineIO["stdout"],
-	extra: readonly string[],
-): Promise<void> {
+async function typecheckProject(cwd: string, io: LineIO, extra: readonly string[]): Promise<void> {
 	const skip = "pass --no-typecheck to build without type checking";
 	if (!existsSync(join(cwd, "tsconfig.json"))) {
 		throw new Error(
@@ -730,7 +726,9 @@ async function typecheckProject(
 	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 	const tsc = join(dirname(manifestPath), manifest.bin.tsc);
 	const args = ["--noEmit", ...extra];
-	stdout(`${dim("Type check:")} typescript ${manifest.version} ${dim(`(tsc ${args.join(" ")})`)}`);
+	io.stdout(
+		`${dim("Type check:")} typescript ${manifest.version} ${dim(`(tsc ${args.join(" ")})`)}`,
+	);
 	// bin/tsc is a JavaScript launcher (TypeScript 7's starts its native compiler).
 	const runner = resolveBunBuildRunner();
 	const result = await runProcess(runner.command, [tsc, ...args], {
@@ -738,14 +736,17 @@ async function typecheckProject(
 		cwd,
 		stdio: "collect",
 	});
-	const output = processOutput(result);
 	if (result.exitCode !== 0) {
+		const output = processOutput(result);
 		throw new Error(
 			`Type check failed${output ? `:\n${output}` : ""}\n  Fix the errors, or ${skip}.`,
 		);
 	}
-	// Silent unless an argument after `--` asks tsc to print, such as `--listFiles`.
-	if (output) stdout(output);
+	// Silent unless an argument after `--` asks tsc to print, such as `--listFiles`. Each line
+	// goes to the stream tsc wrote it on.
+	const lines = (text: string) => (text.trim() ? text.trimEnd().split(/\r?\n/) : []);
+	for (const line of lines(result.stderr)) io.stderr(line);
+	for (const line of lines(result.stdout)) io.stdout(line);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -821,7 +822,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 			}
 		}
 		const tscArgs = options.tscArgs ?? [];
-		if (options.typecheck ?? true) await typecheckProject(cwd, io.stdout, tscArgs);
+		if (options.typecheck ?? true) await typecheckProject(cwd, io, tscArgs);
 		else if (tscArgs.length > 0) {
 			throw new Error(
 				`Arguments for tsc were given (${tscArgs.join(" ")}), but --no-typecheck skips the type check.\n  Drop --no-typecheck, or drop the arguments after --.`,

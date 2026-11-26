@@ -1039,6 +1039,20 @@ describe("build type check", () => {
 	});
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
+	it("logs what tsc prints on success one line at a time", async () => {
+		const logged: string[] = [];
+		await buildProject({
+			cwd: tmpDir,
+			validate: false,
+			tscArgs: ["--listFiles"],
+			onLog: (line, stream) => stream === "stdout" && logged.push(line),
+		});
+		// The file list arrives as one record per file, not as one block.
+		expect(logged.filter((line) => /src[\\/]cli\.ts/.test(line))).toEqual([
+			expect.not.stringContaining("\n"),
+		]);
+	}, 60_000);
+
 	it("runs the project's tsc before building and keeps the previous stage on errors", async () => {
 		const logged: string[] = [];
 		await buildProject({ cwd: tmpDir, validate: false, onLog: (line) => logged.push(line) });
