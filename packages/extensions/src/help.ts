@@ -13,6 +13,9 @@ import {
 import { withTypedColorFlag } from "./no-color.ts";
 import { textOutput } from "./text-output.ts";
 
+// A constant, not `help.id`: code that only renders must not keep the Extension's definition in a bundle.
+const HELP = "crust:help";
+
 /** Options for {@link renderHelp}. */
 export interface RenderHelpOptions {
 	/** Terminal width that descriptions wrap to; they do not wrap when absent. */
@@ -30,7 +33,7 @@ export async function renderHelp(
 	options?: RenderHelpOptions,
 ): Promise<string> {
 	const { renderHelpText } = await import("./help-render.ts");
-	return renderHelpText(command, path, help.id, options?.columns);
+	return renderHelpText(command, path, HELP, options?.columns);
 }
 
 const helpFlags = {
@@ -96,7 +99,7 @@ const helpFactory: ExtensionFactory<
 	[],
 	typeof helpFlags,
 	readonly HelpCommandDefinition[]
-> = /* @__PURE__ */ defineExtension("crust:help").factory((extension, options = {}) => {
+> = /* @__PURE__ */ defineExtension(HELP).factory((extension, options = {}) => {
 	const shown = extension
 		.flags(helpFlags)
 		.handle("help", showHelp, { eager: true })

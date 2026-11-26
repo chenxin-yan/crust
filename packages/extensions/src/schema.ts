@@ -11,6 +11,9 @@ import type { CommandInputSchema } from "@crustjs/core/tooling";
 
 import { printedOutput } from "./text-output.ts";
 
+// A constant, not `schema.id`: code that only renders must not keep the Extension's definition in a bundle.
+const SCHEMA = "crust:schema";
+
 /** What `schema [path...]` prints for one command, and returns as its result. */
 export interface CommandSchema {
 	/** JSON Schema of the command's arguments and flags as one flat object (`commandInputSchema`). */
@@ -83,7 +86,7 @@ export interface SchemaExtension {
  * without running the app. The renderer loads on the first call.
  */
 export async function renderCommandIndex(root: CommandSnapshot): Promise<string> {
-	return (await import("./schema-render.ts")).renderCommandIndex(root, schema.id);
+	return (await import("./schema-render.ts")).renderCommandIndex(root, SCHEMA);
 }
 
 const schemaFactory: ExtensionFactory<
@@ -92,7 +95,7 @@ const schemaFactory: ExtensionFactory<
 	[],
 	typeof llmsFlags,
 	readonly [SchemaCommandDefinition<string>]
-> = /* @__PURE__ */ defineExtension("crust:schema").factory((extension, options = {}) =>
+> = /* @__PURE__ */ defineExtension(SCHEMA).factory((extension, options = {}) =>
 	extension
 		.flags(llmsFlags)
 		.add(
