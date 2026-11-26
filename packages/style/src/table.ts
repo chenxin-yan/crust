@@ -24,6 +24,13 @@ export interface TableOptions {
 	 * left-aligned.
 	 */
 	align?: readonly ColumnAlignment[];
+	/**
+	 * Draw `|` borders and a separator row under the headers. With `false`, columns are separated
+	 * by two spaces and lines end without padding, like `docker ps`.
+	 *
+	 * @default true
+	 */
+	border?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -92,9 +99,10 @@ function formatSeparator(columnWidths: readonly number[]): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Format tabular data as an aligned, bordered table string.
+ * Format tabular data as an aligned table string.
  *
- * The table includes a header row, a separator row, and data rows.
+ * The table includes a header row, a separator row, and data rows; `border: false` drops the
+ * borders and the separator row.
  * Headers define the column count; row cells beyond the last header are dropped.
  * Column widths are computed from the visible width of all cell content
  * (ANSI escape sequences are excluded from width calculations), so styled
@@ -129,6 +137,17 @@ export function table(
 ): string {
 	const alignments = options?.align ?? [];
 	const columnWidths = computeColumnWidths(headers, rows);
+
+	if (options?.border === false) {
+		return [headers, ...rows]
+			.map((row) =>
+				columnWidths
+					.map((width, col) => alignCell(row[col] ?? "", width, alignments[col] ?? "left"))
+					.join("  ")
+					.trimEnd(),
+			)
+			.join("\n");
+	}
 
 	const lines: string[] = [];
 

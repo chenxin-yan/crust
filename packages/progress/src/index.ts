@@ -4,6 +4,8 @@
 
 export type { ProgressHandle, ProgressOptions } from "./progress.ts";
 export { progress } from "./progress.ts";
+export type { ProgressGroup, ProgressGroupOptions } from "./progress-group.ts";
+export { progressGroup } from "./progress-group.ts";
 export type {
 	SpinnerHandle,
 	SpinnerHandleOptions,

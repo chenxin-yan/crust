@@ -68,6 +68,27 @@ describe("table", () => {
 		expect(lines[3]).toBe("| ok     |");
 	});
 
+	// ── Borderless ─────────────────────────────────────────────────────────
+
+	it("aligns columns without borders or trailing spaces", () => {
+		const result = table(
+			["CONTAINER ID", "IMAGE", "SIZE"],
+			[
+				["a3ed95caeb02", "nginx:latest", "\x1b[2m187MB\x1b[22m"],
+				["6c3374", "postgres:16", "1.2GB"],
+			],
+			{ border: false, align: ["left", "left", "right"] },
+		);
+		expect(result.split("\n")).toEqual([
+			"CONTAINER ID  IMAGE          SIZE",
+			"a3ed95caeb02  nginx:latest  \x1b[2m187MB\x1b[22m",
+			"6c3374        postgres:16   1.2GB",
+		]);
+		expect(table(["NAME", "STATE"], [["web", "up"]], { border: false })).toBe(
+			"NAME  STATE\nweb   up",
+		);
+	});
+
 	// ── Edge Cases ─────────────────────────────────────────────────────────
 
 	it("handles missing cells in rows (fewer than headers)", () => {

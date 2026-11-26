@@ -2,7 +2,7 @@
 title: "Progress"
 ---
 
-`@crustjs/progress` writes progress indicators to stderr by default. It supports task-scoped spinners, imperative handles, determinate progress, themes, injected output, and static non-TTY output.
+`@crustjs/progress` writes progress indicators to stderr by default. It supports task-scoped spinners, imperative handles, determinate progress, groups of concurrent indicators, themes, injected output, and static non-TTY output.
 
 ## Install
 
@@ -22,7 +22,7 @@ npm install @crustjs/progress
 
 ## API
 
-Call `spinner({ task })` for a task-scoped indicator. Call `spinner()` without `task` for a `SpinnerHandle`, or `progress()` for a `ProgressHandle`.
+Call `spinner({ task })` for a task-scoped indicator. Call `spinner()` without `task` for a `SpinnerHandle`, or `progress()` for a `ProgressHandle`. For several indicators at once, add each to a `progressGroup()`.
 
 ### `spinner(options)`
 
@@ -38,7 +38,7 @@ await spinner({ message: "Building", task: async () => build() });
 
 ### Frame layout
 
-Interactive spinners and progress indicators draw the animated frame on one row:
+Interactive spinners and progress indicators outside a [group](#progressgroupoptions) draw the animated frame on one row:
 
 - The frame is cut with `…` at its first line break or before the terminal's last column. The message is cut first, so `progress()` keeps its count; the final `✓`/`✗` line prints the message in full.
 - A line printed through Crust's process writer while the frame is live, such as an action's default `stdout()` or `stderr()` line on the terminal, erases the frame first and redraws it below the line.
@@ -79,6 +79,30 @@ A spinner or progress indicator follows the `signal` option, else the ambient `w
 Calling `advance()` before `start()` changes the count without repainting. The updated count appears after the handle starts or in its final line.
 
 <auto-type-table path="../../../../../packages/progress/src/progress.ts" name="ProgressHandle" />
+
+### `progressGroup(options?)`
+
+One `spinner()` or `progress()` draws on a single row, so two running at once overwrite each other. A group draws one indicator per row instead, like `docker pull`:
+
+<include lang="ts">../../../examples/modules/progress.ts#group</include>
+
+`group.add({ total, message })` returns the same `ProgressHandle` as `progress()`. The group takes the options of `spinner()` without `message`: `spinner`, `theme`, `sigint`, `sink`, and `signal` apply to every indicator in it.
+
+```text
+✓ a3ed95caeb02: Pull complete (3/3)
+⠙ 6c33745f49b4 (1/3)
+```
+
+- Running indicators are redrawn together below everything else, in the order they started. A message with line breaks takes one row per line, each cut to the terminal's width; the count follows the last line.
+- `stop()` prints the indicator's final line above the running ones. After the last one stops, the cursor is shown again.
+- Without a terminal, each indicator prints only its final line, when it stops.
+- When the `signal` aborts, every running indicator stops with `✗`. An indicator started after the abort, for example to show cleanup, ignores it.
+- A line printed through Crust's process writer moves the rows below it, as with a single indicator. Other writes, such as `console.log` or `process.stderr.write`, land on the rows and leave stale text behind, so print through the action's `stdout()` or `stderr()` while a group runs. Keep the running rows fewer than the terminal's height, since the cursor waits on the row below them: rows that scroll off the top are not redrawn.
+
+<auto-type-table
+  path="../../../../../packages/progress/src/progress-group.ts"
+  name="ProgressGroup"
+/>
 
 ### SIGINT policy
 
