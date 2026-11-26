@@ -121,6 +121,18 @@ describe("select — rendering", () => {
 	});
 });
 
+describe("select — cancel", () => {
+	it("draws the cancelled state with the message on Ctrl+C", async () => {
+		const prompt = renderPrompt(select, { message: "Pick a fruit", choices: ["apple", "banana"] });
+
+		await tick();
+		prompt.keys("ctrl+c");
+
+		await expect(prompt.answer).rejects.toMatchObject({ name: "AbortError" });
+		expect(prompt.screen()).toBe("✗ Pick a fruit");
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // Viewport scrolling
 // ────────────────────────────────────────────────────────────────────────────

@@ -2,8 +2,8 @@
 // Utils — Shared utilities for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import { SCROLL_INDICATOR } from "./symbols.ts";
-import type { Choice } from "./types.ts";
+import { PREFIX_CANCELLED, SCROLL_INDICATOR } from "./symbols.ts";
+import type { Choice, PromptTheme } from "./types.ts";
 
 /**
  * Format the submitted line for a prompt.
@@ -22,6 +22,11 @@ export function formatSubmitted(prefix: string, message?: string, value?: string
 	if (message) parts.push(message);
 	if (value) parts.push(value);
 	return parts.join(" ");
+}
+
+/** @internal The cancelled line the built-in prompts draw: the message dimmed after `✗`. */
+export function formatCancelled(theme: PromptTheme, message: string): string {
+	return formatSubmitted(theme.error(PREFIX_CANCELLED), theme.hint(message));
 }
 
 /**

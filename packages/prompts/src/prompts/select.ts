@@ -14,7 +14,7 @@ import type {
 	PromptTheme,
 } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
+import { formatCancelled, formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -198,17 +198,14 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-// Narrowing overloads: a literal non-empty choices tuple narrows the result
-// to the union of its values, and widened `readonly string[]` choices keep
-// `string`. Non-tuple `readonly Choice<T>[]` (e.g. generic wrappers over
-// SelectOptions<T>) matches neither and falls through to the generic
-// overload, so `select(options)` inside a wrapper stays `Promise<T>`.
-// Both fallbacks reject literal tuples, so a `default`/`initial` outside the
-// literal choices is an error instead of silently widening the result.
-export function select<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
-	options: SelectOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: TerminalIO,
-): Promise<ChoiceValue<C>>;
+// Narrowing overloads: widened `readonly string[]` choices keep `string`, and
+// non-tuple `readonly Choice<T>[]` (e.g. generic wrappers over SelectOptions<T>)
+// stays `Promise<T>`. Both reject literal tuples, which fall through to the last
+// overload and narrow the result to the union of their values, so a
+// `default`/`initial` outside the literal choices is an error instead of
+// silently widening the result. TypeScript reports a failed call against the
+// last overload, so the literal one comes last: the error then names the
+// `default` and the allowed values.
 export function select<const C extends readonly string[]>(
 	options: SelectOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
@@ -217,6 +214,10 @@ export function select<T, const C extends readonly Choice<T>[] = readonly Choice
 	options: SelectOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
 ): Promise<T>;
+export function select<const C extends readonly Choice<unknown>[]>(
+	options: SelectOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: TerminalIO,
+): Promise<ChoiceValue<C>>;
 export async function select<T>(options: SelectOptions<T>, io?: TerminalIO): Promise<T> {
 	const setup = await setupListPrompt<T, T>(
 		options,
@@ -234,6 +235,7 @@ export async function select<T>(options: SelectOptions<T>, io?: TerminalIO): Pro
 			theme: options.theme,
 			render: (state, t) => renderSelect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Pick an option"),
 			renderSubmitted: (state, _value, t) => renderSubmitted(state, t, options.message),
 		},
 		promptIO,

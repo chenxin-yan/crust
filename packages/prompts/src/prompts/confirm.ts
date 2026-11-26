@@ -12,7 +12,7 @@ import {
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
-import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
+import { formatCancelled, formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -205,6 +205,7 @@ export async function confirm(options: ConfirmOptions, io?: TerminalIO): Promise
 			theme: options.theme,
 			render: (state, t) => renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
 			handleKey,
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Are you sure?"),
 			renderSubmitted: (_state, value, t) =>
 				renderSubmitted(value, t, options.message, activeLabel, inactiveLabel),
 		},

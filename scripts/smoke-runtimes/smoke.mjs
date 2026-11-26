@@ -14,9 +14,8 @@ import { createMcpServer } from "../../packages/mcp/dist/index.js";
 import { defineApi } from "../../packages/openapi/dist/index.js";
 import * as progress from "../../packages/progress/dist/index.js";
 import {
-	assertTTY,
+	canPrompt,
 	createPrompts,
-	isTTY,
 	NonInteractiveError,
 } from "../../packages/prompts/dist/index.js";
 import { loadPackagedSkills } from "../../packages/skills/dist/index.js";
@@ -133,13 +132,8 @@ await new Crust("ambient-dist")
 	});
 assert.deepEqual(ambientErrors, ["✓ Dist bridge"]);
 
-if (!isTTY()) {
-	try {
-		assertTTY();
-		throw new Error("expected assertTTY to throw");
-	} catch (error) {
-		assert(error instanceof NonInteractiveError, "expected NonInteractiveError");
-	}
+if (!canPrompt()) {
+	await assert.rejects(createPrompts().input({ message: "Name?" }), NonInteractiveError);
 } else {
 	console.log("runtime-smoke: skipping non-TTY assertion in an interactive terminal");
 }

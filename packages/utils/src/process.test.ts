@@ -2,6 +2,7 @@
  * @module-tag windows
  */
 import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import {
 	chmodSync,
 	existsSync,
@@ -19,7 +20,14 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { isErrnoException } from "./error.ts";
-import { getWindowsShimCommand, runProcess, shellQuote, which } from "./process.ts";
+import {
+	getWindowsShimCommand,
+	openUrl,
+	runProcess,
+	shellQuote,
+	urlLauncher,
+	which,
+} from "./process.ts";
 
 describe("shellQuote", () => {
 	it("keeps safe words bare and single-quotes empty, apostrophe, and punctuation words", () => {
@@ -470,5 +478,82 @@ describe("which", () => {
 				process.chdir(originalCwd);
 			}
 		});
+	});
+});
+
+describe("openUrl", () => {
+	const childProcess = process.getBuiltinModule("node:child_process");
+	type FakeChild = EventEmitter & { unref: ReturnType<typeof vi.fn> };
+
+	function fakeLauncher(event: "spawn" | "error"): FakeChild {
+		const fake = Object.assign(new EventEmitter(), { unref: vi.fn() });
+		queueMicrotask(() =>
+			event === "spawn"
+				? fake.emit("spawn")
+				: fake.emit("error", Object.assign(new Error("spawn xdg-open ENOENT"), { code: "ENOENT" })),
+		);
+		return fake;
+	}
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it.each([
+		"file:///etc/passwd",
+		"javascript:alert(1)",
+		"myapp://callback",
+		"https://example.com/a\nX",
+		"https://example.com/\u0085",
+		"not a url",
+	])("refuses %j without spawning", async (url) => {
+		const spawn = vi.spyOn(childProcess, "spawn");
+		expect(await openUrl(url)).toBe(false);
+		expect(spawn).not.toHaveBeenCalled();
+	});
+
+	it("passes an http or https URL as one argv element with no shell", async () => {
+		// SAFETY: openUrl only listens for "spawn"/"error" and calls unref().
+		const spawn = vi
+			.spyOn(childProcess, "spawn")
+			.mockImplementation(() => fakeLauncher("spawn") as never);
+		const url = `https://example.com/a?b=1&calc.exe&c="; touch /tmp/pwn; "`;
+		expect(await openUrl(url)).toBe(true);
+		expect(await openUrl("http://example.com/")).toBe(true);
+		const [command, args, options] = spawn.mock.calls[0]!;
+		expect(args).toContain(new URL(url).href);
+		expect(args).toHaveLength(command === "rundll32" ? 2 : 1);
+		expect(options).toMatchObject({ shell: false, detached: true });
+	});
+
+	it("passes the launcher the URL it checked, not the string as given", async () => {
+		// SAFETY: openUrl only listens for "spawn"/"error" and calls unref().
+		const spawn = vi
+			.spyOn(childProcess, "spawn")
+			.mockImplementation(() => fakeLauncher("spawn") as never);
+		expect(await openUrl(" https://example.com/")).toBe(true);
+		expect(spawn.mock.calls[0]![1]).toContain("https://example.com/");
+	});
+
+	it("resolves false when the launcher is missing or cannot spawn, and detaches when it starts", async () => {
+		const spawn = vi.spyOn(childProcess, "spawn");
+		spawn.mockImplementation(() => fakeLauncher("error") as never);
+		expect(await openUrl("https://example.com/")).toBe(false);
+		const started = fakeLauncher("spawn");
+		spawn.mockImplementation(() => started as never);
+		expect(await openUrl("https://example.com/")).toBe(true);
+		expect(started.unref).toHaveBeenCalled();
+		spawn.mockImplementation(() => {
+			throw new Error("EPERM");
+		});
+		expect(await openUrl("https://example.com/")).toBe(false);
+	});
+
+	it("builds argv launchers for every platform, never cmd /c start", () => {
+		const url = "https://example.com/a?x=1&y=2";
+		expect(urlLauncher(url, "win32")).toEqual(["rundll32", ["url.dll,FileProtocolHandler", url]]);
+		expect(urlLauncher(url, "darwin")).toEqual(["open", [url]]);
+		expect(urlLauncher(url, "linux")).toEqual(["xdg-open", [url]]);
+		expect(urlLauncher(url, "freebsd")).toEqual(["xdg-open", [url]]);
 	});
 });

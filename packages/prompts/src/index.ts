@@ -34,8 +34,7 @@ export type {
 	TerminalOutput,
 } from "./core/renderer.ts";
 export {
-	assertTTY,
-	isTTY,
+	canPrompt,
 	NonInteractiveError,
 	runPrompt,
 	submit,
@@ -50,6 +49,8 @@ export type { CreatePromptsOptions, PromptsInstance } from "./create-prompts.ts"
 export { createPrompts } from "./create-prompts.ts";
 export type { ConfirmOptions } from "./prompts/confirm.ts";
 export { confirm } from "./prompts/confirm.ts";
+export type { EditorOptions } from "./prompts/editor.ts";
+export { editor } from "./prompts/editor.ts";
 export type { FilterOptions } from "./prompts/filter.ts";
 export { filter } from "./prompts/filter.ts";
 export type { InputOptions } from "./prompts/input.ts";
@@ -73,6 +74,7 @@ export {
 	CHECKBOX_CHECKED,
 	CHECKBOX_UNCHECKED,
 	CURSOR_INDICATOR,
+	PREFIX_CANCELLED,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
 	SCROLL_INDICATOR,
@@ -80,3 +82,4 @@ export {
 export type { TextEditResult, TextEditState } from "./core/text-edit.ts";
 export { handleTextEdit, renderTextWithCursor } from "./core/text-edit.ts";
 export { formatPromptLine, formatSubmitted, renderChoiceList } from "./core/utils.ts";
+export { openUrl } from "@crustjs/utils/process";

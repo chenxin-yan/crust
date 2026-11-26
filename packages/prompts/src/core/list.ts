@@ -31,13 +31,21 @@ type ListPromptSetup<T, Answer extends T | readonly T[]> =
 			readonly promptIO: PromptIO;
 	  };
 
-/** @internal Resolve the shared lifecycle and initial viewport for list prompts. */
+/**
+ * @internal Resolve the shared lifecycle and initial viewport for list prompts. `validate`
+ * checks an `initial` or non-interactive `default` answer as Enter would, returning its error.
+ */
 export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	options: ListPromptOptions<T, Answer>,
 	defaults: readonly T[],
 	io?: TerminalIO,
+	validate?: (answer: Answer) => string | null,
 ): Promise<ListPromptSetup<T, Answer>> {
-	const shortCircuit = await resolveShortCircuit(options, io);
+	const shortCircuit = await resolveShortCircuit(options, io, (answer, source) => {
+		const error = validate?.(answer);
+		if (error) throw new Error(`${source} value rejected: ${error}`);
+		return answer;
+	});
 	if (shortCircuit.shortCircuited) return shortCircuit;
 
 	const choices = normalizeChoices(options.choices);

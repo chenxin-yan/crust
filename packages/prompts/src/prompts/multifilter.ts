@@ -24,6 +24,7 @@ import type {
 } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
+	formatCancelled,
 	formatPromptLine,
 	formatSubmitted,
 	renderChoiceList,
@@ -230,10 +231,6 @@ function renderSubmitted<T>(
  * automatically if provided.
  */
 // Narrowing overloads — see `select` for the pattern rationale.
-export function multifilter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
-	options: MultifilterOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: TerminalIO,
-): Promise<ChoiceValue<C>[]>;
 export function multifilter<const C extends readonly string[]>(
 	options: MultifilterOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
@@ -242,11 +239,20 @@ export function multifilter<T, const C extends readonly Choice<T>[] = readonly C
 	options: MultifilterOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
 ): Promise<T[]>;
+export function multifilter<const C extends readonly Choice<unknown>[]>(
+	options: MultifilterOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: TerminalIO,
+): Promise<ChoiceValue<C>[]>;
 export async function multifilter<T>(
 	options: MultifilterOptions<T>,
 	io?: TerminalIO,
 ): Promise<T[]> {
-	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
+	const setup = await setupListPrompt<T, readonly T[]>(
+		options,
+		options.default ?? [],
+		io,
+		(answer) => validateSelection(answer.length, options.required, options.min, options.max),
+	);
 	if (setup.shortCircuited) return [...setup.value];
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;
@@ -270,6 +276,7 @@ export async function multifilter<T>(
 			render: (state, resolvedTheme) =>
 				renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Search and select"),
 			renderSubmitted: (state, _value, resolvedTheme) =>
 				renderSubmitted(state, resolvedTheme, options.message),
 		},

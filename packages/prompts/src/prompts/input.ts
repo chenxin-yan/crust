@@ -16,7 +16,7 @@ import type {
 	SchemaOrValidate,
 	ValidateFn,
 } from "../core/types.ts";
-import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
+import { formatCancelled, formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -188,6 +188,7 @@ export async function input<Output>(
 			render: (state, t) =>
 				renderInput(state, t, options.message, options.placeholder, options.default),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate, options.default),
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Enter a value"),
 			// Show the submitted text: a schema's output may not stringify (e.g. objects).
 			renderSubmitted: (state, _value, t) =>
 				renderSubmitted(

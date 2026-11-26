@@ -1,5 +1,5 @@
 import type { PromptIO, TerminalIO } from "./renderer.ts";
-import { isTTY, resolvePromptIO } from "./renderer.ts";
+import { canPrompt, resolvePromptIO } from "./renderer.ts";
 import type { SchemaOrValidate } from "./types.ts";
 import { validateSubmitValue } from "./validate.ts";
 
@@ -35,8 +35,7 @@ export async function resolveShortCircuit<Input, Answer>(
 	}
 
 	const promptIO = resolvePromptIO(io);
-	// A prompt drawn into a redirected output would hang invisibly, so both streams must be TTYs.
-	if (!(isTTY(promptIO.input) && isTTY(promptIO.output)) && options.default !== undefined) {
+	if (!canPrompt(promptIO) && options.default !== undefined) {
 		return {
 			shortCircuited: true,
 			value: parse ? await parse(options.default, "default") : options.default,

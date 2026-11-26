@@ -6,8 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { tick } from "../prompts/test-helpers.ts";
 import { createPromptIO } from "../testing.ts";
 import {
-	assertTTY,
-	isTTY,
+	canPrompt,
 	NonInteractiveError,
 	type PromptConfig,
 	resolvePromptIO,
@@ -28,7 +27,7 @@ function recordingOutput(isTTY = true) {
 					callback();
 				},
 			}),
-			{ isTTY },
+			{ isTTY, columns: 80 },
 		),
 	};
 	return recorded;
@@ -57,26 +56,39 @@ describe("resolvePromptIO", () => {
 	});
 });
 
-describe("assertTTY", () => {
-	const originalIsTTY = process.stdin.isTTY;
-	const setStdinIsTTY = (value: boolean | undefined) =>
-		Object.defineProperty(process.stdin, "isTTY", { value, writable: true, configurable: true });
+describe("canPrompt", () => {
+	const ttys = [process.stdin, process.stderr].map((stream) => [stream, stream.isTTY] as const);
+	const setProcessTTY = (value: boolean) => {
+		for (const [stream] of ttys) {
+			Object.defineProperty(stream, "isTTY", { value, writable: true, configurable: true });
+		}
+	};
 
-	afterEach(() => setStdinIsTTY(originalIsTTY));
-
-	it("throws NonInteractiveError when stdin is not a TTY", () => {
-		setStdinIsTTY(false);
-
-		expect(() => assertTTY()).toThrow(NonInteractiveError);
+	afterEach(() => {
+		for (const [stream, value] of ttys) {
+			Object.defineProperty(stream, "isTTY", { value, writable: true, configurable: true });
+		}
+		vi.unstubAllEnvs();
 	});
 
-	it("uses the ambient prompt input by default", () => {
-		setStdinIsTTY(true);
-		const harness = createPromptIO({ isTTY: false });
-		withTerminalIO(harness.io, () => {
-			expect(isTTY()).toBe(false);
-			expect(() => assertTTY()).toThrow(NonInteractiveError);
-		});
+	it("needs both the resolved input and output to be TTYs", () => {
+		vi.stubEnv("CI", "");
+		const tty = createPromptIO().io;
+		const piped = createPromptIO({ isTTY: false }).io;
+		expect(canPrompt(tty)).toBe(true);
+		expect(canPrompt({ input: piped.input, output: tty.output })).toBe(false);
+		expect(canPrompt({ input: tty.input, output: piped.output })).toBe(false);
+		withTerminalIO(piped, () => expect(canPrompt()).toBe(false));
+		withTerminalIO(tty, () => expect(canPrompt()).toBe(true));
+	});
+
+	it("refuses the process terminal under CI, but not an injected one", () => {
+		setProcessTTY(true);
+		vi.stubEnv("CI", "");
+		expect(canPrompt()).toBe(true);
+		vi.stubEnv("CI", "true");
+		expect(canPrompt()).toBe(false);
+		withTerminalIO(createPromptIO().io, () => expect(canPrompt()).toBe(true));
 	});
 });
 
@@ -303,6 +315,168 @@ describe("runPrompt", () => {
 		expect(await replacement).toBe("done");
 		expect(submitted).toBe(false);
 		expect(after).toBe(before);
+	});
+
+	it("keeps keys typed ahead in the same chunk for the next prompt", async () => {
+		const harness = createPromptIO();
+		const line: PromptConfig<string, string> = {
+			render: (value) => `? ${value}`,
+			handleKey: (key, value) => (key.name === "return" ? submit(value) : value + key.char),
+			initialState: "",
+		};
+
+		const first = runPrompt(line, harness.io);
+		harness.type("one\rtwo\r");
+		expect(await first).toBe("one");
+		expect(await runPrompt(line, harness.io)).toBe("two");
+	});
+
+	it("drops keys typed ahead of a cancelled prompt", async () => {
+		const harness = createPromptIO();
+		const first = runPrompt(submitOnKey, harness.io);
+		harness.type("\x03x");
+		await expect(first).rejects.toMatchObject({ name: "AbortError" });
+
+		const second = runPrompt({ ...submitOnKey, handleKey: (key) => submit(key.name) }, harness.io);
+		await tick();
+		harness.keys("return");
+		expect(await second).toBe("return");
+	});
+
+	it("hands a Ctrl+D typed after a submit in the same chunk to the next prompt", async () => {
+		const harness = createPromptIO();
+		const line: PromptConfig<string, string> = {
+			render: (value) => `? ${value}`,
+			handleKey: (key, value) => (key.name === "return" ? submit(value) : value + key.char),
+			initialState: "",
+		};
+
+		const first = runPrompt(line, harness.io);
+		harness.type("one\r\x04");
+		expect(await first).toBe("one");
+		await expect(runPrompt(line, harness.io)).rejects.toMatchObject({ name: "AbortError" });
+	});
+
+	it("cancels the next prompt once when Ctrl+C and Ctrl+D follow a submit in the same chunk", async () => {
+		const harness = createPromptIO();
+		const first = runPrompt({ ...submitOnKey, renderSubmitted: () => "first" }, harness.io);
+		harness.type("\r\x03\x04");
+		await first;
+		const second = runPrompt({ ...submitOnKey, renderCancelled: () => "x second" }, harness.io);
+
+		await expect(second).rejects.toMatchObject({ name: "AbortError" });
+		expect(harness.screen()).toBe("first\nx second");
+	});
+
+	it("cancels on a Ctrl+C typed in the same chunk as a key whose handler never settles", async () => {
+		const harness = createPromptIO();
+		const promise = runPrompt(
+			{ ...submitOnKey, handleKey: () => new Promise<undefined>(() => {}) },
+			harness.io,
+		);
+		harness.type("a\x03");
+
+		await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+	});
+
+	it("cancels at once on Ctrl+D while a key handler is still running", async () => {
+		const harness = createPromptIO();
+		const pending = Promise.withResolvers<undefined>();
+		const promise = runPrompt({ ...submitOnKey, handleKey: () => pending.promise }, harness.io);
+		harness.type("ab");
+		await tick();
+		harness.keys("ctrl+d");
+
+		await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+		pending.resolve(undefined);
+	});
+
+	it("counts the frame's rows at the new width after a resize", async () => {
+		const recorded = recordingOutput();
+		const harness = createPromptIO();
+		const promise = runPrompt(
+			{ ...submitOnKey, render: () => `? ${"x".repeat(98)}` },
+			{ input: harness.io.input, output: recorded.output },
+		);
+		recorded.raw = "";
+
+		// 100 columns wrap to 2 rows at 80 and to 3 at 40: the redraw climbs 2 rows, not 1.
+		recorded.output.columns = 40;
+		recorded.output.emit("resize");
+		await tick();
+		expect(recorded.raw).toContain("\x1B[2A");
+
+		harness.keys("return");
+		await promise;
+	});
+
+	it("counts a wide character that does not fit the last column as starting a new row", async () => {
+		const harness = createPromptIO();
+		const promise = runPrompt({ ...submitOnKey, render: () => "界界界" }, harness.io);
+
+		// At 3 columns each two-column character takes a row of its own: 3 rows, not 6 / 3.
+		harness.resize(3, 24);
+		await tick();
+		expect(harness.screen()).toBe("界\n界\n界");
+
+		harness.keys("return");
+		await promise;
+	});
+
+	it("counts an escape sequence's bytes as no columns when wrapping", async () => {
+		const harness = createPromptIO();
+		let written = "";
+		const output = {
+			isTTY: true,
+			columns: 4,
+			write: (chunk: string) => ((written += chunk), true),
+			on: () => output,
+		};
+		// A DCS sequence, then the two visible columns "OK": one row on a 4-column output.
+		const promise = runPrompt(
+			{ ...submitOnKey, render: () => "\x1bP$qm\x1b\\OK", renderSubmitted: () => "OK" },
+			{ input: harness.io.input, output },
+		);
+		await tick();
+		written = "";
+		harness.keys("return");
+		await promise;
+
+		expect(written).not.toContain("\x1b[1A");
+	});
+
+	it("finishes on an output with on() but no removeListener(), and can run again", async () => {
+		const harness = createPromptIO();
+		const output = { isTTY: true, columns: 80, write: () => true, on: () => output };
+		for (let run = 0; run < 2; run++) {
+			const promise = runPrompt(submitOnKey, { input: harness.io.input, output });
+			harness.keys("return");
+			expect(await promise).toBe("done");
+			expect(harness.io.input.isRaw).toBe(false);
+		}
+	});
+
+	it.each(["ctrl+c", "ctrl+d"] as const)("draws the cancelled state on %s", async (key) => {
+		const harness = createPromptIO();
+		const promise = runPrompt({ ...submitOnKey, renderCancelled: () => "✗ cancelled" }, harness.io);
+		harness.keys(key);
+
+		await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+		expect(harness.screen()).toBe("✗ cancelled");
+		expect(harness.io.input.isRaw).toBe(false);
+	});
+
+	it("draws the cancelled state when the signal aborts", async () => {
+		const harness = createPromptIO();
+		const controller = new AbortController();
+		const promise = runPrompt(
+			{ ...submitOnKey, renderCancelled: () => "✗ cancelled" },
+			{ ...harness.io, signal: controller.signal },
+		);
+		controller.abort(new Error("stop"));
+
+		await expect(promise).rejects.toThrow("stop");
+		expect(harness.screen()).toBe("✗ cancelled");
 	});
 
 	it("rejects with an AbortError DOMException on Ctrl+C", async () => {

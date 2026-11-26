@@ -24,6 +24,19 @@ describe("multifilter — non-TTY", () => {
 
 		expect(result).toEqual(["b", "c"]);
 	});
+
+	it("checks required, min and max on the default like Enter would", async () => {
+		const choices = ["a", "b", "c"];
+		await expect(nonTTY<string>({ choices, required: true, default: [] })).rejects.toThrow(
+			"default value rejected: At least one item must be selected",
+		);
+		await expect(nonTTY({ choices, min: 2, default: ["a"] })).rejects.toThrow(
+			"default value rejected: Select at least 2 items",
+		);
+		await expect(nonTTY({ choices, max: 1, initial: ["a", "b"] })).rejects.toThrow(
+			"initial value rejected: Select at most 1 item",
+		);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

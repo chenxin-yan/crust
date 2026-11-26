@@ -53,8 +53,8 @@ export interface InteractiveRun {
 	type(text: string): void;
 	keys(...keys: InteractiveKey[]): void;
 	/**
-	 * Resize the terminal: later output wraps at `columns`, `stderr.columns` reports it, and the
-	 * terminal emits `resize`.
+	 * Resize the terminal: the screen rewraps at `columns`, as most terminal emulators do,
+	 * `stderr.columns` reports it, and the terminal emits `resize`.
 	 */
 	resize(columns: number, rows: number): void;
 	/** Cancel the run as Ctrl-C does: a prompt, or any work that honors `signal`, ends with exit code 130. */

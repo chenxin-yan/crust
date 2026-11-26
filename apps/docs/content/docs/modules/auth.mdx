@@ -216,7 +216,7 @@ On `"refuse"`, nobody is there to read a code, or nobody asked for one that some
 `openBrowser(url, { allowInsecureLoopbackOrigin? })` resolves `true` when a launcher started and `false` otherwise; it never throws. Always print the URL too.
 
 - Only `https` URLs without user info or control characters open, and plain `http` only on the development origin you pass.
-- The URL is one argument to `open` (macOS), `xdg-open`, or on Windows `rundll32 url.dll,FileProtocolHandler`, never through a shell, so `&` in a URL stays part of it. On Windows, CI checks only the launcher arguments; a real browser launch is a manual check on a Windows host.
+- The URL goes to the same launcher as [`openUrl()`](/docs/modules/prompts#opening-a-url) in `@crustjs/prompts`: one argument to `open` (macOS), `xdg-open`, or on Windows `rundll32 url.dll,FileProtocolHandler`, never through a shell, so `&` in a URL stays part of it. On Windows, CI checks only the launcher arguments; a real browser launch is a manual check on a Windows host.
 
 ## Token client
 

@@ -16,7 +16,7 @@ import type {
 	SchemaOrValidate,
 	ValidateFn,
 } from "../core/types.ts";
-import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
+import { formatCancelled, formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -177,6 +177,7 @@ export async function password<Output>(
 			theme: options.theme,
 			render: (state, t) => renderPassword(state, t, options.message, mask),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate),
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Enter a password"),
 			renderSubmitted: (_state, _value, t) => renderSubmitted(t, options.message, mask),
 		},
 		promptIO,

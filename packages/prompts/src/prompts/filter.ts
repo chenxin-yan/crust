@@ -17,7 +17,12 @@ import type {
 	PromptTheme,
 } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { formatPromptLine, formatSubmitted, renderChoiceList } from "../core/utils.ts";
+import {
+	formatCancelled,
+	formatPromptLine,
+	formatSubmitted,
+	renderChoiceList,
+} from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -197,10 +202,6 @@ function renderSubmitted<T>(
  * ```
  */
 // Narrowing overloads — see `select` for the pattern rationale.
-export function filter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
-	options: FilterOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: TerminalIO,
-): Promise<ChoiceValue<C>>;
 export function filter<const C extends readonly string[]>(
 	options: FilterOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
@@ -209,6 +210,10 @@ export function filter<T, const C extends readonly Choice<T>[] = readonly Choice
 	options: FilterOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
 ): Promise<T>;
+export function filter<const C extends readonly Choice<unknown>[]>(
+	options: FilterOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: TerminalIO,
+): Promise<ChoiceValue<C>>;
 export async function filter<T>(options: FilterOptions<T>, io?: TerminalIO): Promise<T> {
 	const setup = await setupListPrompt<T, T>(
 		options,
@@ -234,6 +239,7 @@ export async function filter<T>(options: FilterOptions<T>, io?: TerminalIO): Pro
 			render: (state, resolvedTheme) =>
 				renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Search and select"),
 			renderSubmitted: (state, _value, resolvedTheme) =>
 				renderSubmitted(state, resolvedTheme, options.message),
 		},

@@ -46,9 +46,10 @@ describe("library source", () => {
 		]);
 	});
 
+	// The browser launcher, the one process auth starts, lives in @crustjs/utils (`openUrl`).
 	it("never runs a keyring command, and loads the optional keyring module only on use", () => {
 		expect(filesMatching(/child_process|\bspawn\(|\bexec(File)?\(|secret-tool|"security"/)).toEqual(
-			["browser.ts"],
+			[],
 		);
 		expect(filesMatching(/["']@napi-rs\/keyring["']/)).toEqual(["keyring.ts"]);
 		const keyring = readFileSync(join(srcDir, "keyring.ts"), "utf8");

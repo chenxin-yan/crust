@@ -20,7 +20,13 @@ import type {
 	PromptTheme,
 } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { formatSubmitted, moveCursor, renderChoiceList, validateSelection } from "../core/utils.ts";
+import {
+	formatCancelled,
+	formatSubmitted,
+	moveCursor,
+	renderChoiceList,
+	validateSelection,
+} from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -289,10 +295,6 @@ function renderSubmitted<T>(
  * ```
  */
 // Narrowing overloads — see `select` for the pattern rationale.
-export function multiselect<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
-	options: MultiselectOptions<ChoiceValue<C>> & { readonly choices: C },
-	io?: TerminalIO,
-): Promise<ChoiceValue<C>[]>;
 export function multiselect<const C extends readonly string[]>(
 	options: MultiselectOptions<string> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
@@ -301,11 +303,20 @@ export function multiselect<T, const C extends readonly Choice<T>[] = readonly C
 	options: MultiselectOptions<T> & { readonly choices: C & NotChoiceTuple<C> },
 	io?: TerminalIO,
 ): Promise<T[]>;
+export function multiselect<const C extends readonly Choice<unknown>[]>(
+	options: MultiselectOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: TerminalIO,
+): Promise<ChoiceValue<C>[]>;
 export async function multiselect<T>(
 	options: MultiselectOptions<T>,
 	io?: TerminalIO,
 ): Promise<T[]> {
-	const setup = await setupListPrompt<T, readonly T[]>(options, options.default ?? [], io);
+	const setup = await setupListPrompt<T, readonly T[]>(
+		options,
+		options.default ?? [],
+		io,
+		(answer) => validateSelection(answer.length, options.required, options.min, options.max),
+	);
 	if (setup.shortCircuited) return [...setup.value];
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;
@@ -324,6 +335,7 @@ export async function multiselect<T>(
 			theme: options.theme,
 			render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
+			renderCancelled: (_state, t) => formatCancelled(t, options.message ?? "Pick one or more"),
 			renderSubmitted: (state, _value, t) => renderSubmitted(state, t, options.message),
 		},
 		promptIO,

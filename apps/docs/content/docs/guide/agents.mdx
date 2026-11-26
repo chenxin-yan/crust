@@ -185,7 +185,7 @@ $ my-cli init --name demo < /dev/null
 Created demo in us-east-1
 ```
 
-Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule. [`confirm()`](/docs/modules/extensions/confirm) also refuses under `CI`, as [above](#confirmation).
+Crust doesn't detect agents or add a global `--no-input`: the TTY check is the rule. That rule, [`canPrompt()`](/docs/modules/prompts#non-interactive-environments), also refuses the process terminal under `CI`, for every prompt and [`confirm()`](/docs/modules/extensions/confirm), as [above](#confirmation).
 
 ## MCP
 
