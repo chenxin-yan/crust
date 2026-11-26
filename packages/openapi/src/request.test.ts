@@ -465,9 +465,13 @@ describe("call()", () => {
 		expect(result).toBe("queued");
 	});
 
-	it("rejects a non-2xx response with an ApiResponseError, leaving out the query", async () => {
+	it("rejects a non-2xx response with an ApiResponseError and its headers, leaving out the query", async () => {
 		const error = await withClient(
-			() => Response.json({ message: "not found" }, { status: 404, statusText: "Not Found" }),
+			() =>
+				Response.json(
+					{ message: "not found" },
+					{ status: 404, statusText: "Not Found", headers: { "retry-after": "7" } },
+				),
 			(api) =>
 				api
 					.call("getPost", { path: { id: "1", slug: "s" }, query: { tags: ["secret"] } })
@@ -479,6 +483,7 @@ describe("call()", () => {
 			status: 404,
 			message: "GET /users/1/posts/s: HTTP 404 Not Found",
 		});
+		expect((error as ApiResponseError).headers.get("retry-after")).toBe("7");
 	});
 
 	it("rejects an invalid JSON body with an ApiResponseError that does not repeat it", async () => {

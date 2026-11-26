@@ -97,7 +97,7 @@ describe("generated commands in their consumers", () => {
 			output: unknown;
 		};
 
-		expect(printed.input.properties.body).toEqual(body);
+		expect(printed.input.properties["request-body"]).toEqual(body);
 		expect(printed.input.properties.name).toEqual({ type: "string" });
 		expect(printed.output).toEqual(user);
 	});
@@ -141,12 +141,12 @@ describe("generated commands in their consumers", () => {
 		const create = tools.find((tool) => tool.name === "users_create-user");
 		const result = await client.callTool({
 			name: "users_create-user",
-			arguments: { name: "Ada", body: { profile: { bio: "hi" } } },
+			arguments: { name: "Ada", "request-body": { profile: { bio: "hi" } } },
 		});
 
 		// The `api` command is the Extension's, so it is not a tool; the hidden command is left out.
 		expect(tools.map((tool) => tool.name)).toEqual(["users_create-user"]);
-		expect(create?.inputSchema.properties?.body).toEqual(body);
+		expect(create?.inputSchema.properties?.["request-body"]).toEqual(body);
 		expect(create?.outputSchema).toEqual(user);
 		expect(result.isError).toBeUndefined();
 		expect(result.structuredContent).toEqual({ id: "1", profile: { bio: "hi" } });

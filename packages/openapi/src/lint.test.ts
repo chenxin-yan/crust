@@ -174,7 +174,17 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 				},
 				"/b": {
 					post: op("b", {
-						parameters: [{ name: "body", in: "query", schema: { type: "string" } }],
+						parameters: [{ name: "request_body", in: "query", schema: { type: "string" } }],
+						requestBody: json(object({})),
+					}),
+				},
+				// One `flagName` entry would move both parameters to one new flag.
+				"/c": {
+					post: op("c", {
+						parameters: [
+							{ name: "request_body", in: "query", schema: { type: "string" } },
+							{ name: "request_body", in: "header", schema: { type: "string" } },
+						],
 						requestBody: json(object({})),
 					}),
 				},
@@ -187,7 +197,15 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 					'POST /a: query parameter "notificationUrl" and query parameter "notification_url" share the input name "notification-url"',
 			},
 			{ operationId: "a", message: expect.stringContaining('"max-count"') },
-			{ operationId: "b", message: expect.stringContaining("the request body") },
+			{
+				operationId: "b",
+				message: expect.stringContaining('the request body share the input name "request-body"'),
+				fix: 'Set `flagName` for the query parameter "request_body" in the operation\'s override',
+			},
+			{
+				operationId: "c",
+				fix: "Fill them with one `bind` entry, or set `exclude: true` and write the command with `call()`, or use `api`",
+			},
 		],
 	},
 	"unflaggable-name": {
@@ -315,7 +333,7 @@ const fixtures: Record<Diagnostic["code"], Fixture> = {
 describe("lint", () => {
 	it.each(Object.entries(fixtures))("reports %s", (code, { input, expected }) => {
 		expect(lint(input).filter((diagnostic) => diagnostic.code === code)).toEqual(
-			expected.map((fields) => expect.objectContaining({ ...fields, fix: expect.any(String) })),
+			expected.map((fields) => expect.objectContaining({ fix: expect.any(String), ...fields })),
 		);
 	});
 
@@ -480,7 +498,15 @@ describe("lint", () => {
 		);
 		// "second" repeats the query parameter, which keeps its input; the body field gets none.
 		expect(lint({ spec: twice })).toEqual([]);
-		expect(inputs({ spec: twice })).toEqual(["second", "body", "first", "id"]);
+		expect(inputs({ spec: twice })).toEqual(["second", "request-body", "first", "id"]);
+	});
+
+	it("gives a body field named body its own --body flag beside --request-body", () => {
+		const github = spec({
+			"/a": { post: op("a", { requestBody: json(object({ body: { type: "string" } })) }) },
+		});
+		expect(lint({ spec: github })).toEqual([]);
+		expect(inputs({ spec: github })).toEqual(["request-body", "body"]);
 	});
 
 	it("reads a body field's type through the $ref beside its own keywords", () => {
@@ -497,7 +523,7 @@ describe("lint", () => {
 			},
 			{ schemas: { Name: { type: "string" } } },
 		);
-		expect(inputs({ spec: sibling })).toEqual(["short", "body"]);
+		expect(inputs({ spec: sibling })).toEqual(["short", "request-body"]);
 	});
 
 	it("classifies a schema behind annotated $refs and $ref chains like its inline equivalent", () => {
@@ -537,10 +563,10 @@ describe("lint", () => {
 					{ schemas },
 				),
 			});
-		expect(field(schemas.Strings)).toEqual(["body", "names"]);
-		expect(field(ref("Strings"))).toEqual(["body", "names"]);
-		expect(field(ref("StringsAlias"))).toEqual(["body", "names"]);
-		expect(field(ref("Objects"))).toEqual(["body"]);
+		expect(field(schemas.Strings)).toEqual(["request-body", "names"]);
+		expect(field(ref("Strings"))).toEqual(["request-body", "names"]);
+		expect(field(ref("StringsAlias"))).toEqual(["request-body", "names"]);
+		expect(field(ref("Objects"))).toEqual(["request-body"]);
 
 		// A cycle through `allOf` ends at the search's depth bound, as an untyped (string) parameter.
 		const cyclic = { Loop: { allOf: [{ $ref: "#/components/schemas/Loop", description: "x" }] } };

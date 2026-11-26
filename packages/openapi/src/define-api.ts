@@ -56,8 +56,17 @@ import type { SpecOperationsOf, Specs } from "./typed-client.ts";
 const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
 
 export interface DefineApiOptions<Id extends string = string> {
-	/** URL request paths resolve against, e.g. `https://api.example.com/v1`. */
+	/** The http: or https: URL request paths resolve against, e.g. `https://api.example.com/v1`. */
 	readonly baseUrl: string;
+	/**
+	 * Sends every request instead of the global `fetch`: the first, each redirect and each next page
+	 * separately, with `redirect: "manual"` where the client follows redirects itself, and the
+	 * `.auth()` headers already set, so the app can add
+	 * its own retry, proxy or logging. A 401 is still retried once after `.auth()` refreshes. Send
+	 * credentials through `.auth()`: headers this function adds itself also go to the other origins
+	 * redirects and next pages lead to.
+	 */
+	readonly fetch?: (input: URL, init: RequestInit) => Promise<Response>;
 	/**
 	 * The pinned OpenAPI document: a `file:` URL, such as
 	 * `new URL("./acme.openapi.jsonc", import.meta.url)`, read when a command first needs it, with
@@ -252,6 +261,7 @@ interface ApiBase {
 	readonly id: string;
 	readonly spec: URL | OpenApiSpec;
 	readonly baseUrl: string;
+	readonly fetch?: DefineApiOptions["fetch"];
 	readonly paginate?: DefineApiOptions["paginate"];
 	readonly findOperation: (operationId: string) => Promise<Operation>;
 	/** The spec, read once. */
@@ -277,7 +287,17 @@ export function defineApi<const Id extends string = never>(
 	options: DefineApiOptions<Id>,
 ): Api<SpecOperationsOf<Specs, Id>>;
 export function defineApi(options: DefineApiOptions): Api {
-	const { spec, id = "openapi", paginate, baseUrl } = options;
+	const { spec, id = "openapi", paginate, baseUrl, fetch } = options;
+	if (
+		process.env.CRUST_INTERNAL_BUILD !== "1" &&
+		!/^https?:$/.test(URL.parse(baseUrl)?.protocol ?? "")
+	) {
+		throw new CrustError(
+			"DEFINITION",
+			`defineApi: \`baseUrl\` must be an http: or https: URL, such as "https://api.example.com/v1"; got ${JSON.stringify(baseUrl)}`,
+			{ subject: "extension", name: API, reason: "invalid-base-url" },
+		);
+	}
 	const isUrl = spec instanceof URL;
 	if (
 		process.env.CRUST_INTERNAL_BUILD !== "1" &&
@@ -307,9 +327,9 @@ export function defineApi(options: DefineApiOptions): Api {
 	};
 
 	return createApi(
-		{ id, spec, baseUrl, paginate, findOperation, document, readCommands: new Map() },
+		{ id, spec, baseUrl, fetch, paginate, findOperation, document, readCommands: new Map() },
 		{
-			client: apiClientContext({ baseUrl }, findOperation),
+			client: apiClientContext({ baseUrl, fetch }, findOperation),
 			sources: [],
 			override: {},
 			added: [],
@@ -470,7 +490,7 @@ function createApi(base: ApiBase, state: ApiState): AnyApi {
 			createApi(base, {
 				...state,
 				client: apiClientContext(
-					{ baseUrl: base.baseUrl, auth },
+					{ baseUrl: base.baseUrl, fetch: base.fetch, auth },
 					base.findOperation,
 					// As a Context's `.use()`, the client's takes Context factories only, not Extensions.
 					state.sources.filter((source) => "contextName" in source),

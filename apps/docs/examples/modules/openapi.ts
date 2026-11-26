@@ -1,3 +1,5 @@
+import { setTimeout } from "node:timers/promises";
+
 import { createAuth } from "@crustjs/auth";
 import { type ContextMap, Crust, defineCommand, defineContext } from "@crustjs/core";
 import { confirm } from "@crustjs/extensions";
@@ -85,6 +87,28 @@ export async function userName<AuthDeps extends ContextMap>(
 ): Promise<string> {
 	return (await client.call("getUser", { path: { id: "me" } })).name;
 }
+//#endregion
+
+//#region own-fetch
+// The app's own rule: wait out a 429 that gives `Retry-After` in seconds, up to three tries.
+// Only a request without a body is sent again, since the first try may have read a streamed one.
+const patient = async (input: URL, init: RequestInit): Promise<Response> => {
+	for (let attempt = 1; ; attempt++) {
+		const response = await fetch(input, init);
+		const retryAfter = response.headers.get("retry-after") ?? "";
+		const wait = /^\d+$/.test(retryAfter) ? Number(retryAfter) : Infinity;
+		if (response.status !== 429 || attempt === 3 || init.body != null || wait > 30) return response;
+		await response.body?.cancel();
+		await setTimeout(wait * 1000, undefined, { signal: init.signal ?? undefined });
+	}
+};
+
+export const patientApi = defineApi({
+	spec: new URL("./acme.openapi.jsonc", import.meta.url),
+	baseUrl: "https://api.acme.example/v1",
+	fetch: patient,
+	// Credentials stay in `.auth()`, which keeps them on the API's origin.
+}).auth(() => ({ Authorization: `Bearer ${process.env.ACME_TOKEN}` }));
 //#endregion
 
 //#region unwrap

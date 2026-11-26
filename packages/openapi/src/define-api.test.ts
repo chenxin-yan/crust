@@ -87,6 +87,58 @@ describe("defineApi() chain", () => {
 	});
 });
 
+describe("defineApi() options", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
+	it.each(["api.example.com/v1", "localhost:8080", "ftp://example.com"])(
+		"rejects the baseUrl %j, which is not http(s), naming the option and the value",
+		(baseUrl) => {
+			expect(() => defineApi({ spec, baseUrl })).toThrow(
+				`defineApi: \`baseUrl\` must be an http: or https: URL, such as "https://api.example.com/v1"; got ${JSON.stringify(baseUrl)}`,
+			);
+			// A definition check: built CLIs leave it out, as core's do.
+			vi.stubEnv("CRUST_INTERNAL_BUILD", "1");
+			expect(() => defineApi({ spec, baseUrl })).not.toThrow();
+		},
+	);
+
+	it("sends every request, a redirect's and a 401's replay too, through its own fetch", async () => {
+		vi.stubGlobal("fetch", () => {
+			throw new Error("the global fetch was called");
+		});
+		const sent: string[] = [];
+		const fetch = async (url: URL, init: RequestInit) => {
+			const authorization = new Headers(init.headers).get("authorization");
+			sent.push(`${url.pathname} ${authorization} ${init.redirect}`);
+			if (url.pathname === "/old/1") {
+				return new Response(null, { status: 301, headers: { location: "/users/1" } });
+			}
+			return authorization === "Bearer new"
+				? Response.json({ id: "1" })
+				: new Response(null, { status: 401 });
+		};
+		const acme = defineApi({ spec, baseUrl: "https://api.example.com", fetch }).auth(() => ({
+			headers: { authorization: "Bearer old" },
+			retry: async () => ({ headers: { authorization: "Bearer new" } }),
+		}));
+
+		const { stdout, exitCode } = await captureExecute(new Crust("acme").extend(acme.extension), [
+			"api",
+			"/old/1",
+		]);
+
+		expect({ stdout, exitCode }).toEqual({ stdout: '{"id":"1"}', exitCode: 0 });
+		expect(sent).toEqual([
+			"/old/1 Bearer old manual",
+			"/users/1 Bearer old manual",
+			"/users/1 Bearer new manual",
+		]);
+	});
+});
+
 describe("crust build checks the handle", () => {
 	const build = (handle: Pick<ReturnType<typeof defineApi>, "extension" | "commands">) =>
 		runBuildHooks(new Crust("acme").extend(handle.extension).add(...handle.commands));

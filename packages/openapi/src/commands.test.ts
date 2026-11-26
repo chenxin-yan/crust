@@ -284,7 +284,7 @@ describe("generated commands", () => {
 		});
 	});
 
-	it("merges body field flags over --body and checks the effective body's required fields", async () => {
+	it("merges body field flags over --request-body and checks the effective body's required fields", async () => {
 		const calls = stubFetch();
 		const acme = buildApi();
 		const app = new Crust("acme").extend(acme.extension).add(...acme.commands);
@@ -292,20 +292,25 @@ describe("generated commands", () => {
 		const created = await captureExecute(app, [
 			"users",
 			"create-user",
-			"--body",
+			"--request-body",
 			'{"name":"Bob","profile":{"bio":"hi"}}',
 			"--name",
 			"Ada",
 			"--age",
 			"36",
 		]);
-		const fromBody = await captureExecute(app, ["users", "create-user", "--body", '{"name":"Bo"}']);
+		const fromBody = await captureExecute(app, [
+			"users",
+			"create-user",
+			"--request-body",
+			'{"name":"Bo"}',
+		]);
 		const missing = await captureExecute(app, ["users", "create-user", "--age", "3"]);
-		const notObject = await captureExecute(app, ["users", "create-user", "--body", "[1]"]);
+		const notObject = await captureExecute(app, ["users", "create-user", "--request-body", "[1]"]);
 		const wrongType = await captureExecute(app, [
 			"users",
 			"create-user",
-			"--body",
+			"--request-body",
 			'{"name":"Ada","role":"owner"}',
 		]);
 
@@ -317,7 +322,7 @@ describe("generated commands", () => {
 		expect(JSON.parse(calls[1]!.body!)).toEqual({ name: "Bo" });
 		expect(missing).toMatchObject({ exitCode: 2 });
 		expect(missing.stderr).toContain('missing the body field "name" (--name)');
-		expect(notObject.stderr).toContain("flags.body: must be a JSON object");
+		expect(notObject.stderr).toContain("flags.request-body: must be a JSON object");
 		expect(wrongType.stderr).toContain('the body field "role" must be one of admin, member');
 		expect(calls).toHaveLength(2);
 	});
@@ -330,7 +335,7 @@ describe("generated commands", () => {
 		const get = at(snapshot, "users", "get-user");
 		const remove = at(snapshot, "users", "delete-user");
 
-		expect(create.flags.body?.inputSchema).toEqual({
+		expect(create.flags["request-body"]?.inputSchema).toEqual({
 			type: "object",
 			properties: {
 				name: { type: "string", description: "Display name" },
@@ -361,7 +366,7 @@ describe("generated commands", () => {
 			commandInputSchema(at(snapshot, "users", "create-user"), ["users", "create-user"]),
 		).toMatchObject({
 			properties: {
-				body: { type: "object", properties: { profile: { type: "object" } } },
+				"request-body": { type: "object", properties: { profile: { type: "object" } } },
 				name: { type: "string", description: "Display name" },
 				age: { type: "number" },
 				role: { type: "string", enum: ["admin", "member"] },
@@ -968,7 +973,7 @@ describe("the app's snapshot", () => {
 
 		expect(surface(await app.snapshot())).toEqual([
 			"get-status [] []",
-			"users create-user [] [age,body,name,role] output",
+			"users create-user [] [age,name,request-body,role] output",
 			"users delete-user [id] []",
 			"users get-user [id] [] output",
 			"users list-users [] [limit,paginate,role,tag,x-trace] output",
@@ -1072,7 +1077,7 @@ describe("generated command inputs", () => {
 
 		expect((await captureExecute(app, ["probe", "abc"])).exitCode).toBe(0);
 		expect((await captureExecute(app, ["post-body", "--proto", "abc"])).exitCode).toBe(0);
-		expect(await captureExecute(app, ["post-required", "--body", "{}"])).toMatchObject({
+		expect(await captureExecute(app, ["post-required", "--request-body", "{}"])).toMatchObject({
 			exitCode: 2,
 			stderr: expect.stringContaining('missing the body field "toString"'),
 		});
@@ -1087,7 +1092,7 @@ describe("generated command inputs", () => {
 		]);
 	});
 
-	it("checks a list field given in --body as a list, and accepts null where the schema does", async () => {
+	it("checks a list field given in --request-body as a list, and accepts null where the schema does", async () => {
 		const calls = stubFetch(() => Response.json({}));
 		const fields = {
 			tags: { type: "array", items: { type: "string" } },
@@ -1111,14 +1116,16 @@ describe("generated command inputs", () => {
 			{ openapi: "3.0.3" },
 		);
 
-		expect(await captureExecute(app, ["probe", "--body", '{"tags":"x"}'])).toMatchObject({
+		expect(await captureExecute(app, ["probe", "--request-body", '{"tags":"x"}'])).toMatchObject({
 			exitCode: 2,
 			stderr: expect.stringContaining('the body field "tags" must be a list of string'),
 		});
 		expect(
-			(await captureExecute(app, ["probe", "--body", '{"tags":[],"name":null}'])).exitCode,
+			(await captureExecute(app, ["probe", "--request-body", '{"tags":[],"name":null}'])).exitCode,
 		).toBe(0);
-		expect((await captureExecute(v30.app, ["probe", "--body", '{"name":null}'])).exitCode).toBe(0);
+		expect(
+			(await captureExecute(v30.app, ["probe", "--request-body", '{"name":null}'])).exitCode,
+		).toBe(0);
 		expect(calls).toHaveLength(2);
 	});
 
@@ -1143,7 +1150,7 @@ describe("generated command inputs", () => {
 		const { acme } = appFor({ "/p": { post: { operationId: "probe", ...jsonBody(schema) } } });
 		const bound = acme.override({ probe: { bind: { region: () => "eu" } } });
 		const app = new Crust("acme").extend(bound.extension).add(...bound.commands);
-		const body = at(await app.snapshot(), "probe").flags.body?.inputSchema;
+		const body = at(await app.snapshot(), "probe").flags["request-body"]?.inputSchema;
 
 		expect(body).toEqual({
 			allOf: [
@@ -1529,13 +1536,13 @@ describe("generated command bindings, positionals and confirmation", () => {
 			{ openapi: "3.0.3" },
 		);
 
-		expect((await captureExecute(app, ["probe", "--body", '{"tags":[null,"x"]}'])).exitCode).toBe(
-			0,
-		);
 		expect(
-			(await captureExecute(v30.app, ["probe", "--body", '{"tags":[null,"x"]}'])).exitCode,
+			(await captureExecute(app, ["probe", "--request-body", '{"tags":[null,"x"]}'])).exitCode,
 		).toBe(0);
-		expect(await captureExecute(app, ["probe", "--body", '{"name":null}'])).toMatchObject({
+		expect(
+			(await captureExecute(v30.app, ["probe", "--request-body", '{"tags":[null,"x"]}'])).exitCode,
+		).toBe(0);
+		expect(await captureExecute(app, ["probe", "--request-body", '{"name":null}'])).toMatchObject({
 			exitCode: 2,
 			stderr: expect.stringContaining('the body field "name"'),
 		});

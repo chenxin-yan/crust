@@ -355,6 +355,19 @@ export async function passThroughRequest(
 			url.search = url.search === "" ? query : `${url.search.slice(1)}&${query}`;
 			path = url.href;
 		} else {
+			// A JSON object holds one value per key: a repeated key would silently keep only the last.
+			// The query keeps every value, as a list parameter is sent (`tag=a&tag=b`).
+			const keys = new Set<string>();
+			for (const [key] of fields) {
+				if (keys.has(key)) {
+					throw new CrustError(
+						"PARSE",
+						`Invalid -F value for "${key}": the key is given more than once in a JSON body. Send a list or a nested value as JSON with --body.`,
+						{ flag: "field" },
+					);
+				}
+				keys.add(key);
+			}
 			requestBody = JSON.stringify(Object.fromEntries(fields));
 		}
 	}
@@ -444,6 +457,27 @@ export function createApiCommand(
 				.action(async ({ args, flags, ctx, signal, stdin, stdout, stderr }) => {
 					// Under the json() Extension's `--json`, the result is the output: JSON data on stdout.
 					const json = (flags as { json?: unknown }).json === true;
+					const browse = flags.list ? "list" : flags.spec !== undefined ? "spec" : undefined;
+					if (flags.list && flags.spec !== undefined) {
+						throw new CrustError("PARSE", "Flags --list and --spec cannot be used together", {
+							flag: "spec",
+						});
+					}
+					if (
+						browse !== undefined &&
+						(args.path !== undefined ||
+							flags.method !== undefined ||
+							flags.header !== undefined ||
+							flags.field !== undefined ||
+							flags.body !== undefined ||
+							flags.paginate)
+					) {
+						throw new CrustError(
+							"PARSE",
+							`--${browse} sends no request: leave out the path, -X, -H, -F, --body and --paginate.`,
+							{ flag: browse },
+						);
+					}
 					if (flags.list) {
 						const listed = listOperations(await loadSpec(), unavailable());
 						if (json) return listed;
@@ -490,7 +524,7 @@ export function createApiCommand(
 							yield { response, bytes: new Uint8Array(await response.arrayBuffer()) };
 							if (!response.ok) {
 								throw new ApiResponseError(
-									response.status,
+									response,
 									`${request.method} ${withoutQuery(shown)}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
 								);
 							}
