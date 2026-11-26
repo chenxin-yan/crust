@@ -464,6 +464,15 @@ describe("writeJson", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("withFileLock", () => {
+	it("refuses a relative path before locking anything", async () => {
+		const fn = vi.fn(async () => "ran");
+		await expect(withFileLock("state.json", fn, { operation: "write" })).rejects.toMatchObject({
+			code: "PATH",
+			message: "filePath must be an absolute path",
+		});
+		expect(fn).not.toHaveBeenCalled();
+	});
+
 	// A lock left behind would stall this process's next mutation until it looks stale.
 	it("removes its lock when the first delete is refused", async () => {
 		const tempDir = createTempDir();

@@ -508,6 +508,10 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
  * 10 seconds loses its lock; either costs lost updates, never a corrupt file. A store that
  * cannot accept that sets `strict`, which locks with `withLock` instead.
  *
+ * `filePath` must be absolute, like a store's `dirPath`: a relative one would follow the working
+ * directory while the call waits.
+ *
+ * @throws {CrustStoreError} `PATH` when `filePath` is not absolute.
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or an abandoned one removed.
  */
 export async function withFileLock<T>(
@@ -515,6 +519,9 @@ export async function withFileLock<T>(
 	fn: () => Promise<T>,
 	options: FileLockOptions,
 ): Promise<T> {
+	if (!process.getBuiltinModule("node:path").win32.isAbsolute(filePath)) {
+		throw new CrustStoreError("PATH", "filePath must be an absolute path", { path: filePath });
+	}
 	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	const lockPath = `${filePath}.lock`;
 	const lockError = (err: unknown) =>

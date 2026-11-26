@@ -392,7 +392,15 @@ export function defineConfig<
 		return { value, source: value === undefined ? { kind: "unset" } : { kind: "default" } };
 	};
 
-	const saveNow = async (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
+	// Read when a save is asked for, not when its turn comes: the working directory may have changed.
+	const projectFile = (): string =>
+		nearest(projectName) ?? process.getBuiltinModule("node:path").join(process.cwd(), projectName);
+	// `projectPath` is the project file to save in; without it the user's file is saved.
+	const saveNow = async (
+		values: Record<string, unknown>,
+		projectPath: string | undefined,
+	): Promise<string> => {
+		const inProject = projectPath !== undefined;
 		if (inProject) {
 			const refused = Object.keys(values).filter((key) => !(project ?? []).includes(key as P));
 			if (refused.length > 0) {
@@ -405,10 +413,11 @@ export function defineConfig<
 		const fs = process.getBuiltinModule("node:fs/promises");
 		// A linked user file, such as one from a dotfiles repository, stays a link; a project file
 		// arrives with a clone, and saving in it would copy its target's keys into the working tree.
-		const path = inProject
-			? (nearest(projectName) ??
-				process.getBuiltinModule("node:path").join(process.cwd(), projectName))
-			: await userPath().then((user) => fs.realpath(user).catch(() => user));
+		const linkedUserPath = async (): Promise<string> => {
+			const user = await userPath();
+			return fs.realpath(user).catch(() => user);
+		};
+		const path = projectPath ?? (await linkedUserPath());
 		if (inProject && (await fs.lstat(path).catch(() => undefined))?.isSymbolicLink()) {
 			throw new CrustError(
 				"VALIDATION",
@@ -443,8 +452,10 @@ export function defineConfig<
 		saving = next.catch(() => {});
 		return next;
 	};
-	const save = (values: Record<string, unknown>, inProject: boolean): Promise<string> =>
-		queued(() => saveNow(values, inProject));
+	const save = (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
+		const projectPath = inProject ? projectFile() : undefined;
+		return queued(() => saveNow(values, projectPath));
+	};
 
 	const toStderr = (line: string) => void process.stderr.write(`${line}\n`);
 
@@ -609,6 +620,7 @@ export function defineConfig<
 					Array.isArray(value) ? [...value] : value,
 				]),
 			);
+			const projectPath = target?.project === true ? projectFile() : undefined;
 			await queued(async () => {
 				// A value the setting's rules refuse would fail every command that reads it.
 				for (const [key, value] of Object.entries(patch)) {
@@ -618,7 +630,7 @@ export function defineConfig<
 						await convert(def, { [TEXT]: word }, TEXT, `"${key}"`);
 					}
 				}
-				await saveNow(patch, target?.project === true);
+				await saveNow(patch, projectPath);
 			});
 		},
 		extension: options.command ? extension.add(configCommand()) : extension,

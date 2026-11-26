@@ -434,6 +434,18 @@ describe("get, list and set", () => {
 			{ replicas: 2 },
 		);
 	});
+
+	it("set(values, { project: true }) saves in the project it was called in", async () => {
+		const { config } = acme();
+		const saving = config.set({ replicas: 2 }, { project: true });
+		// The working directory changes before the queued save runs.
+		process.chdir(root);
+		await saving;
+		expect(existsSync(join(root, "acme.config.json"))).toBe(false);
+		expect(JSON.parse(readFileSync(join(root, "repo", "sub", "acme.config.json"), "utf8"))).toEqual(
+			{ replicas: 2 },
+		);
+	});
 });
 
 describe("command: true", () => {
