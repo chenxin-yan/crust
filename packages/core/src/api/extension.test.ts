@@ -285,6 +285,31 @@ describe("Extension Context declarations", () => {
 		await expect(missing.snapshot()).rejects.toThrow('No provider for Context "logger"');
 	});
 
+	it("a hook's ctx enumerates only the Contexts its Extension names, not what those use", async () => {
+		const config = defineContext("config").setup(() => "a string");
+		const db = defineContext("db")
+			.use(config)
+			.setup(async ({ ctx }) => (await ctx.config).length);
+		let keys: string[] = [];
+		let value = 0;
+		const reader = defineExtension(ID)
+			.use(db)
+			.preRun(async ({ ctx }) => {
+				keys = Object.keys(ctx);
+				value = await ctx.db;
+			});
+		await unwrap(
+			new Crust("app")
+				.provide(config(), db())
+				.extend(reader)
+				.action(() => {})
+				.run([]),
+		);
+		// `config` is what `db` uses: the hook's type does not name it, so its bag does not hold it.
+		expect(keys).toEqual(["db"]);
+		expect(value).toBe(8);
+	});
+
 	it("provided Contexts are not exposed to the Extension's own hooks without use", async () => {
 		const metrics = defineContext("metrics").setup(() => "metrics");
 		let keys: string[] = [];

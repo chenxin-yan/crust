@@ -256,14 +256,15 @@ export function createContextResolver(
 				enumerable: true,
 				get: () => makePull(origin)(name),
 			});
-			// Follow the source's own declared graph: a provided .of() double cuts the
-			// *instance* use list, but the bag must match the factory-typed closure so a
-			// transitive read fails loud (missing-context) instead of yielding undefined.
-			for (const dependency of source.use) add(dependency);
+			// A setup reads its dependencies' closure, so its bag follows the source's own declared
+			// graph: a provided .of() double cuts the *instance* use list, and a transitive read must
+			// fail loud (missing-context) instead of yielding undefined. An action or a hook reads
+			// only the Contexts it names, so its bag holds no more than those.
+			if (origin) for (const dependency of source.use) add(dependency);
 		};
 		for (const source of sources) add(source);
 		Object.defineProperty(bag, contextSources, { value: Object.freeze([...sources]) });
-		// SAFETY: the loop defines every name reachable from the source dependency closure inferred as Deps.
+		// SAFETY: the loop defines every name inferred as Deps: the sources, and for a setup their closure.
 		return Object.freeze(bag) as ContextBag<Deps>;
 	};
 

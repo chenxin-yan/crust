@@ -115,7 +115,11 @@ describe("createContextResolver", () => {
 		{
 			await using disposal = new AsyncDisposableStack();
 			const resolver = resolverFor([late(), slow(), fresh()], disposal);
-			const bag = resolver.bag<{ slow: unknown; late: unknown; fresh: string }>([slow, fresh]);
+			const bag = resolver.bag<{ slow: unknown; late: unknown; fresh: string }>([
+				slow,
+				late,
+				fresh,
+			]);
 			const pulled = bag.slow;
 			let settled = false;
 			const draining = resolver.settle().then(() => {
