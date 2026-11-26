@@ -155,8 +155,9 @@ export function readPublishManifest(stageDir: string): PublishManifest {
 /**
  * Rejects a stage built before the project's name or version changed, which
  * would publish the old release, and binaries that are not a release: a
- * binary release ships every target in package.json `crust.targets`, which it
- * requires, while `crust build` stages only this machine's target without it.
+ * binary release ships exactly the targets in package.json `crust.targets`,
+ * which it requires, while `crust build` stages only this machine's target
+ * without it and `--target` stages the ones it names.
  */
 export function assertStageMatchesProject(projectDir: string, manifest: PublishManifest): void {
 	const packageJsonPath = join(projectDir, "package.json");
@@ -186,13 +187,21 @@ export function assertStageMatchesProject(projectDir: string, manifest: PublishM
 		);
 	}
 	const staged = new Set(manifest.packages.map((pkg) => pkg.target));
-	const missing = resolveTargets(table, configured).filter(
-		(target) => !staged.has(table.info[target]!.alias),
-	);
+	const listed = resolveTargets(table, configured);
+	const missing = listed.filter((target) => !staged.has(table.info[target]!.alias));
 	if (missing.length > 0) {
 		throw new Error(
 			`Stage is incomplete: .crust/ holds ${[...staged].join(", ")}, but package.json crust.targets also lists ${missing.join(", ")}.\n` +
 				`  Run \`crust build\`, which stages every target in crust.targets.`,
+		);
+	}
+	// Staged with --target, or before the target left crust.targets.
+	const aliases = new Set(listed.map((target) => table.info[target]!.alias));
+	const unlisted = [...staged].filter((alias) => !aliases.has(alias));
+	if (unlisted.length > 0) {
+		throw new Error(
+			`Stage is stale: .crust/ holds ${unlisted.join(", ")}, which package.json crust.targets does not list.\n` +
+				`  Run \`crust build\`, which stages exactly the targets in crust.targets.`,
 		);
 	}
 }

@@ -201,7 +201,7 @@ npm run release
 ```
 
 - `--dry-run` validates staged metadata and prints the plan **without contacting the registry**.
-- Binaries need [`crust.targets`](#choose-release-targets): without it, it fails and asks you to list your release targets. The stage must hold every listed target, or it fails with `Stage is incomplete`, names the missing ones, and suggests `crust build`.
+- Binaries need [`crust.targets`](#choose-release-targets): without it, it fails and asks you to list your release targets. The stage must hold every listed target, or it fails with `Stage is incomplete`, names the missing ones, and suggests `crust build`. A staged target that `crust.targets` does not list fails with `Stage is stale`.
 - A real publish uses npm, uploads platform packages before the root, and stops on failure.
 - Rerun to resume: existing `name@version` pairs are skipped, never overwritten or re-tagged.
 

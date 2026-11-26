@@ -200,6 +200,11 @@ describe("publish manifest validation", () => {
 		);
 		writeProject({ targets: ["bun-darwin-arm64", "bun-linux-x64"] });
 		expect(() => assertStageMatchesProject(projectDir, manifest)).not.toThrow();
+		// A target staged before it left crust.targets would still be published.
+		writeProject({ targets: ["bun-linux-x64"] });
+		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
+			"Stage is stale: .crust/ holds darwin-arm64, which package.json crust.targets does not list.\n  Run `crust build`, which stages exactly the targets in crust.targets.",
+		);
 		writeProject();
 		expect(() => assertStageMatchesProject(projectDir, manifest)).toThrow(
 			"A binary release ships the targets in package.json crust.targets, which is missing.\n  List your release targets in package.json crust.targets and run `crust build`. Valid Bun targets: bun-linux-x64, bun-linux-arm64, bun-linux-x64-musl, bun-linux-arm64-musl, bun-darwin-x64, bun-darwin-arm64, bun-windows-x64, bun-windows-arm64",
