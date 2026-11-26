@@ -35,7 +35,7 @@ Its chain shapes the generated commands, like `defineCommand` and `defineExtensi
 | `.override({ [operationId]: override })` | Overrides for single operations, whose fields replace the rule's                                                                                        | Appends; an entry for the same operationId replaces the earlier entry's fields one by one |
 | `.add(group, ...definitions)`            | Puts your own commands in a group path, such as `"users"` or `"dns records"` (`""` is the root), creating the group when no operation maps to it        | Appends                                                                                   |
 
-Declare a source with `.use()` before the callbacks that read it. The Contexts of the commands you `.add()` are required from the app too, but the callbacks see only those of `.use()`, which the generated commands use. A command you `.add()` uses the client of an earlier handle after the same `.auth()`, as `whoami` does with `api.client`: see [which client](#the-api-client).
+Declare a source with `.use()` before the callbacks that read it. The Contexts of the commands you `.add()` are required from the app too, but the callbacks see only the Contexts `.use()` names, which the generated commands use, not those their setups use. A command you `.add()` uses the client of an earlier handle after the same `.auth()`, as `whoami` does with `api.client`: see [which client](#the-api-client).
 
 <auto-type-table
   path="../../../../../packages/openapi/src/define-api.ts"
@@ -479,7 +479,7 @@ Unless `init.redirect` is `"manual"` or `"error"`, `fetch()` follows redirects i
 
 - It runs at most once per invocation, on the first request that sends credentials: not when a command only reads the Context, not for `auth: false` requests, and not for `api --list`, `api --spec` or `api preview`.
 - It receives the [Context setup input](/docs/api/types#contextsetup-and-contextbag), including `signal`, `stdout`, and `stderr`, and as its second argument `{ baseUrl }`, the base URL as configured.
-- `input.ctx` holds the Contexts of the Context factories `.use()`d before `.auth()`, set up only when `fn` reads them; every factory a spread array may hold counts. Those `.use()`d after it are for the other callbacks only. An Extension's Contexts, such as `confirm`, are not readable in `fn`, wherever they are `.use()`d: the client is a Context, and a Context's `.use()` takes only factories.
+- `input.ctx` holds the Contexts of the Context factories `.use()`d before `.auth()`, not those their setups use, set up only when `fn` reads them; every factory a spread array may hold counts. Those `.use()`d after it are for the other callbacks only. An Extension's Contexts, such as `confirm`, are not readable in `fn`, wherever they are `.use()`d: the client is a Context, and a Context's `.use()` takes only factories.
 - Besides credentials, it may return any default headers, such as `User-Agent` or an API-version header. All of them are treated as credentials, so they go only to the base URL's origin.
 - It may return an `AuthAttempt` instead of the headers, to have a 401 retried; see [Authentication](#authentication).
 
