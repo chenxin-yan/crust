@@ -65,6 +65,8 @@ npm run build
 
 The build first type-checks the project: it runs the project's own TypeScript, `tsc --noEmit`, on the `tsconfig.json` in the project root, and a type error fails the build before anything is staged. A project without `typescript` installed or without a root `tsconfig.json` fails with a message naming the missing piece; scaffolded projects have both. `--no-typecheck` skips the check, for example when you run `tsc` yourself with other flags. Running from source with `bun` or `node` does not type-check.
 
+The check covers what `tsc --noEmit` covers for the root `tsconfig.json`, so that file must include the CLI's entries. A root file that only points at other projects (`"files": []` with `"references"`) checks nothing and passes: check those projects yourself and skip the build's check, `"build": "tsc -b --noEmit && crust build --no-typecheck"`.
+
 Binaries are built for the platforms [`crust.targets`](#choose-release-targets) lists, or for your machine only without it. Runtime packages have no targets.
 
 Each successful build replaces `.crust/`; a failed build keeps the previous one. Add `.crust/` and `.crust.lock/` to `.gitignore`. On Linux x64 with Bun binaries:
