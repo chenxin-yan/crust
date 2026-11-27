@@ -188,6 +188,7 @@ The `prompts()` Extension from `@crustjs/prompts/extension` asks on a terminal f
 ```
 
 - It asks only under `execute()` where [`canPrompt()`](#non-interactive-environments) is true: never under typed `run()`, MCP, a pipe, or CI. There the command's own errors apply, such as `Error: Missing required argument "<service>"`.
+- A boolean flag with a `prompt` is asked for on every terminal run that does not type it. Give it [`negatable: true`](/docs/guide/arguments-and-flags#aliases-and-negation) so `--no-canary` answers no without a question.
 - It asks nothing for a list without `choices`, a count flag, or an exclusive group. It has no masked question: ask for a secret with [`password()`](#passwordoptions-io) in the action, or take it from `env` or stdin.
 - The key exists in every file of a project that imports `@crustjs/prompts/extension`, so command files need no import. Without `prompts()` in `.extend()`, a `prompt` key is a `DEFINITION` error (`unowned-key`), from source and in `crust build`. See [Own a definition key](/docs/guide/extensions#own-a-definition-key).
 
