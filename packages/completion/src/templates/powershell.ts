@@ -107,9 +107,10 @@ Register-ArgumentCompleter -Native -CommandName ${bin} -ScriptBlock {
 
 	function New-Result($text, $tip, $type = 'ParameterValue') {
 		$item = $text
-		# A word with spaces or PowerShell syntax is inserted as one quoted argument.
+		# A word with spaces or PowerShell syntax is inserted as one quoted argument, and so is
+		# one PowerShell would expand for a native command: a wildcard, or a leading tilde.
 		# PowerShell reads U+2018 to U+201B as single quotes and U+201C to U+201E as double quotes.
-		if ($text -match '[\\s''"\`$&|;,(){}@#<>\\u2018-\\u201E]') { $text = "'" + ($text -replace '[''\\u2018-\\u201B]', '$0$0') + "'" }
+		if ($text -match '[\\s''"\`$&|;,(){}@#<>*?\\[\\]\\u2018-\\u201E]|^~') { $text = "'" + ($text -replace '[''\\u2018-\\u201B]', '$0$0') + "'" }
 		if (-not $tip) { $tip = $item }
 		[System.Management.Automation.CompletionResult]::new($text, $item, $type, $tip)
 	}
@@ -204,8 +205,9 @@ Register-ArgumentCompleter -Native -CommandName ${bin} -ScriptBlock {
 	if ($null -eq $def) { return }
 	$values = @()
 	if ($def.Complete) {
-		# Its errors stay off the terminal; a failing call offers nothing.
-		try { $values = @(& ${bin} '__complete' '--' $def.Complete $word 2>$null) } catch { }
+		# Its errors stay off the terminal; a failing call offers nothing. The word is quoted:
+		# on Unix PowerShell expands a leading tilde in a bare variable passed to a native command.
+		try { $values = @(& ${bin} '__complete' '--' $def.Complete "$word" 2>$null) } catch { }
 	} elseif ($def.Choices) {
 		$values = $def.Choices
 	}

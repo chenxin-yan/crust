@@ -283,9 +283,10 @@ const completionFactory: ExtensionFactory<
  * or recursive flags added by other Extensions are visible by the time we
  * generate the script. The walker projects Core's documentation model to a
  * small completion model; per-shell renderers turn that into a
- * self-contained script. Only an argument or flag with a `complete` function
- * calls back into the CLI: the script runs the hidden `__complete` command,
- * which prints that function's values.
+ * self-contained script. Only an argument or flag with a `complete` function,
+ * or with `choices` the scripts cannot hold as written, calls back into the
+ * CLI: the script runs the hidden `__complete` command, which prints the
+ * function's values or the choices.
  *
  * **Print vs `--output-dir`.**
  * - With no `--output-dir`: print the script for the requested `<shell>`

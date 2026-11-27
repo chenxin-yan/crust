@@ -97,7 +97,7 @@ describe("renderPowerShell", () => {
 			"@{ Spellings = @('-r', '--region'); Value = $true; Desc = ''; Complete = 'mycli deploy --region' }",
 		);
 		expect(complete).toContain("@{ Variadic = ''; Complete = 'mycli deploy service' }");
-		expect(complete).toContain("& 'mycli' '__complete' '--' $def.Complete $word 2>$null");
+		expect(complete).toContain(`& 'mycli' '__complete' '--' $def.Complete "$word" 2>$null`);
 	});
 
 	it("quotes punctuation shorts and typographic apostrophes", () => {
@@ -191,6 +191,25 @@ describeIfPwsh("renderPowerShell · TabExpansion2", { timeout: 60_000 }, () => {
 			"'api’’s'",
 			"api-one",
 			"api-two",
+		]);
+	});
+
+	it("quotes a value PowerShell would expand: a wildcard, or a leading `~`", async () => {
+		expect(await complete(completeScriptPath, "mycli deploy --region *.m")).toEqual([
+			"'*.m-one'",
+			"'*.m-two'",
+			"'*.m’’s'",
+		]);
+		expect(await complete(completeScriptPath, "mycli deploy --region ~/a")).toEqual([
+			"'~/a-one'",
+			"'~/a-two'",
+			"'~/a’’s'",
+		]);
+		// A `~` elsewhere is not expanded.
+		expect(await complete(completeScriptPath, "mycli deploy --region a~")).toEqual([
+			"'a~’’s'",
+			"a~-one",
+			"a~-two",
 		]);
 	});
 
