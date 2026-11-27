@@ -658,8 +658,8 @@ function apiExtension(
 		.onError((error, ctx) => {
 			const failure = base.indexFailure;
 			if (failure === undefined || error === failure) return;
-			ctx.stderr(`Error: ${failure instanceof Error ? failure.message : String(failure)}`);
-			return true;
+			return () =>
+				ctx.stderr(`Error: ${failure instanceof Error ? failure.message : String(failure)}`);
 		});
 	return extension.build(async ({ snapshot }) => {
 		// The app has this handle's generated commands only if it read its `commands`, the one way to

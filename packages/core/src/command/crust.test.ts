@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { lineSink, unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { type ExtensionContext, defineExtension } from "../api/extension.ts";
+import {
+	type ExtensionBuilder,
+	type ExtensionContext,
+	type ExtensionDefaults,
+	defineExtension,
+} from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, FlagsDef, ParsedFlagValue, RunInputPayload } from "../types.ts";
 import { type AnyCrust, Crust, defineCommand } from "./crust.ts";
@@ -701,7 +706,7 @@ describe("Extension application at prepare time", () => {
 			)
 			.onError((error) => {
 				errors.push((error as CrustError).code);
-				return true;
+				return () => {};
 			});
 		const verbose = defineExtension("verbose").flags({
 			verbose: {
@@ -804,6 +809,45 @@ describe("Extension named hooks", () => {
 		expect(outcomes[0]).toHaveProperty("result");
 		expect(outcomes[2]).toHaveProperty("result");
 		expect(Object.isFrozen(outcomes[0])).toBe(true);
+	});
+
+	it("runs the functions preRun hooks return after every preRun, in .extend() order, before validation", async () => {
+		const order: string[] = [];
+		const asking = (id: string) =>
+			defineExtension(id).preRun((ctx) => {
+				order.push(`check ${id}`);
+				return () => {
+					order.push(`after ${id}`);
+					ctx.bindInput({ flags: { name: id } });
+				};
+			});
+		const check = defineExtension("check").preRun(({ sources }) => {
+			order.push(`check name=${String(sources.flags.name)}`);
+		});
+		const stdout: string[] = [];
+		const app = new Crust("cli")
+			.flags({ name: { type: "string", required: true } })
+			.extend(asking("a"), check, asking("b"))
+			.action(({ flags, stdout }) => stdout(flags.name));
+
+		expect(await app.execute({ argv: [], io: { stdout: lineSink(stdout) } })).toBe(0);
+		expect(stdout).toEqual(["b"]);
+		expect(order).toEqual(["check a", "check name=undefined", "check b", "after a", "after b"]);
+	});
+
+	it("runs no returned function when a preRun throws", async () => {
+		const order: string[] = [];
+		const asking = defineExtension("asking").preRun(() => () => void order.push("asked"));
+		const gate = defineExtension("gate").preRun(() => {
+			throw new Error("not logged in");
+		});
+		const app = new Crust("cli").extend(asking, gate).action(() => void order.push("action"));
+
+		expect(await app.run([])).toMatchObject({
+			status: "failed",
+			error: { message: "not logged in" },
+		});
+		expect(order).toEqual([]);
 	});
 
 	describe("bindInput", () => {
@@ -1050,7 +1094,7 @@ describe("Extension named hooks", () => {
 			const renderer = defineExtension("renderer").onError((_error, ctx) => {
 				ctx.bindInput({ flags: { anything: true } });
 				flags = ctx.flags;
-				return true;
+				return () => {};
 			});
 			const app = new Crust("cli")
 				.extend(renderer)
@@ -1220,6 +1264,151 @@ describe("Extension named hooks", () => {
 				exitCode: 2,
 				stderr: "Error: Expected an occurrence array for --tags",
 			});
+		});
+	});
+
+	describe("defaults", () => {
+		/** An app with `extensions`; its action returns what it receives and the sources `preRun` saw. */
+		function defaultsApp(...extensions: ExtensionBuilder[]) {
+			let sources: ExtensionContext["sources"] | undefined;
+			const app = new Crust("cli")
+				.flags({
+					region: { type: "string", env: "DEFAULTS_REGION" },
+					replicas: { type: "number", default: 1 },
+					force: { type: "boolean" },
+					tags: { type: "string", multiple: true },
+					label: { type: "string" },
+				})
+				.args({ name: "service", type: "string" })
+				.extend(
+					...extensions,
+					defineExtension("sources").preRun((ctx) => void (sources = ctx.sources)),
+				)
+				.action(({ args, flags }) => ({ args, flags, sources }));
+			async function execute(argv: string[]) {
+				const stderr: string[] = [];
+				const stdout: string[] = [];
+				const exitCode = await app.execute({
+					argv,
+					io: { stdout: lineSink(stdout), stderr: lineSink(stderr) },
+				});
+				return { exitCode, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+			}
+			return { app, execute };
+		}
+		const supplying = (id: string, defaults: ExtensionDefaults) =>
+			defineExtension(id).defaults(() => defaults);
+
+		it("supplies values by name as text: a number or boolean as its text, a list for a repeatable flag", async () => {
+			const { app } = defaultsApp(
+				supplying("last-used", {
+					args: { service: "api" },
+					flags: { region: "eu", replicas: 3, force: true, tags: ["a", "b"], label: undefined },
+				}),
+			);
+			expect(await app.run([])).toMatchObject({
+				status: "completed",
+				result: {
+					args: { service: "api" },
+					flags: { region: "eu", replicas: 3, force: true, tags: ["a", "b"], label: undefined },
+					sources: {
+						args: { service: "bound" },
+						flags: { region: "bound", replicas: "bound", force: "bound", tags: "bound" },
+					},
+				},
+			});
+		});
+
+		it("keeps only what the command takes and the run left without a value or with its default", async () => {
+			const { execute, app } = defaultsApp(
+				supplying("stored", {
+					args: { service: "api", other: "x" },
+					// Bad values for flags the run gives: dropped before conversion, so they cannot fail.
+					flags: { region: "", replicas: "many", force: "maybe", unknown: "x" },
+				}),
+			);
+			vi.stubEnv("DEFAULTS_REGION", "us");
+			try {
+				expect(await execute(["web", "--replicas", "2", "--force"])).toMatchObject({
+					exitCode: 0,
+					stderr: "",
+				});
+			} finally {
+				vi.unstubAllEnvs();
+			}
+			// A default is no value given: the stored value replaces it.
+			const typed = { args: { service: "web" }, flags: { region: "us", force: false } };
+			expect(await app.run([], typed)).toMatchObject({
+				status: "failed",
+				error: { code: "PARSE", message: "Expected a number for --replicas." },
+			});
+			expect(
+				await app.run([], {
+					args: { service: "web" },
+					flags: { region: "us", replicas: 2, force: false },
+				}),
+			).toMatchObject({
+				result: {
+					args: { service: "web" },
+					flags: { region: "us", replicas: 2, force: false },
+					sources: { args: { service: "run" }, flags: { region: "run", replicas: "run" } },
+				},
+			});
+		});
+
+		it("fails a bad value with the command line's own usage error", async () => {
+			const { execute } = defaultsApp(supplying("stored", { flags: { replicas: "many" } }));
+			expect(await execute([])).toEqual({
+				exitCode: 2,
+				stdout: "",
+				stderr: "Error: Expected a number for --replicas.",
+			});
+		});
+
+		it("runs once per Extension, after every setup and before every preRun, only when the action will", async () => {
+			const order: string[] = [];
+			const gate = defineExtension("gate").preRun(() => void order.push("preRun"));
+			const source = (id: string) =>
+				defineExtension(id).defaults(() => void order.push(`defaults ${id}`));
+			const configure = defineExtension("configure")
+				.flags({ info: { type: "boolean" } })
+				.handle("info", () => void order.push("info"))
+				.setup(() => void order.push("setup"));
+			const app = new Crust("cli")
+				.extend(gate, source("a"), configure, source("b"))
+				.action(() => void order.push("action"));
+			await unwrap(app.run([]));
+			expect(order).toEqual(["setup", "defaults a", "defaults b", "preRun", "action"]);
+
+			order.length = 0;
+			await unwrap(app.run([], { flags: { info: true } }));
+			expect(order).toEqual(["setup", "info"]);
+
+			order.length = 0;
+			const fallback = defineExtension("fallback").noAction(() => void order.push("noAction"));
+			await unwrap(new Crust("cli").extend(source("a"), fallback).run([]));
+			expect(order).toEqual(["noAction"]);
+		});
+
+		it("keeps the first listed of two Extensions that supply one value", async () => {
+			const profile = supplying("profile", { flags: { region: "eu", label: "profile" } });
+			const lastUsed = supplying("last-used", { flags: { region: "ap", replicas: 5 } });
+			expect(await defaultsApp(profile, lastUsed).app.run([])).toMatchObject({
+				result: { flags: { region: "eu", label: "profile", replicas: 5 } },
+			});
+			expect(await defaultsApp(lastUsed, profile).app.run([])).toMatchObject({
+				result: { flags: { region: "ap", label: "profile", replicas: 5 } },
+			});
+		});
+
+		it("lets a value bound in setup win, whatever the .extend() order", async () => {
+			const input = defineExtension("input").setup((ctx) =>
+				ctx.bindInput({ flags: { region: "us" } }),
+			);
+			const stored = supplying("stored", { flags: { region: "eu", label: "stored" } });
+			const expected = { result: { flags: { region: "us", label: "stored" } } };
+			expect(await defaultsApp(input, stored).app.run([])).toMatchObject(expected);
+			expect(await defaultsApp(stored, input).app.run([])).toMatchObject(expected);
 		});
 	});
 
@@ -2127,14 +2316,17 @@ describe("Extension renderer", () => {
 		expect(lines).toEqual(["selected", "text:logger:setup", "preRun", 'result:{"ok":true}']);
 	});
 
-	it("calls error once after onError hooks decline or throw, never when one claims the failure", async () => {
+	it("calls error once when no onError hook prints the failure, or the hook or its printer throws", async () => {
 		const lines: string[] = [];
-		let claim: boolean | "throw" = false;
+		let claim: boolean | "throw" | "throw-printing" = false;
 		const presenter = defineExtension("presenter").onError((error, ctx) => {
 			if (claim === "throw") throw new Error("hook broke");
-			if (!claim) return false;
-			ctx.stderr(`claimed:${(error as Error).message}`);
-			return true;
+			if (claim === "throw-printing")
+				return () => {
+					throw new Error("printer broke");
+				};
+			if (!claim) return;
+			return () => ctx.stderr(`claimed:${(error as Error).message}`);
 		});
 		const render = defineExtension("render").renderer(() => tagging(lines));
 		const app = new Crust("cli").extend(presenter, render).action(() => {
@@ -2145,6 +2337,10 @@ describe("Extension renderer", () => {
 		expect(lines).toEqual(["error:boom"]);
 		lines.length = 0;
 		claim = "throw";
+		expect(await execute(app, [], lines)).toBe(1);
+		expect(lines).toEqual(["error:boom"]);
+		lines.length = 0;
+		claim = "throw-printing";
 		expect(await execute(app, [], lines)).toBe(1);
 		expect(lines).toEqual(["error:boom"]);
 		lines.length = 0;
@@ -2317,20 +2513,24 @@ describe("Extension onError hooks", () => {
 			throw new Error("boom");
 		});
 
-	it("stops at the first truthy result and retains the nonzero exit status", async () => {
+	it("calls every hook, then the first function returned, and retains the nonzero exit status", async () => {
 		const order: string[] = [];
-		const first = defineExtension("first").onError(() => (order.push("first"), undefined));
+		const first = defineExtension("first").onError(() => void order.push("first"));
 		const presenter = defineExtension("presenter").onError((error, ctx) => {
 			order.push("presenter");
-			ctx.stderr(`pretty: ${(error as Error).message}`);
-			return true;
+			return () => {
+				order.push("presenter prints");
+				ctx.stderr(`pretty: ${(error as Error).message}`);
+			};
 		});
-		const never = defineExtension("never").onError(() => {
-			order.push("never");
+		const later = defineExtension("later").onError((error, ctx) => {
+			order.push("later");
+			return () => ctx.stderr(`later: ${(error as Error).message}`);
 		});
 
-		await failing().extend(first, presenter, never).execute({ argv: [] });
-		expect(order).toEqual(["first", "presenter"]);
+		await failing().extend(first, presenter, later).execute({ argv: [] });
+		expect(order).toEqual(["first", "presenter", "later", "presenter prints"]);
+		expect(stderrChunks.join("\n")).not.toContain("later: boom");
 		expect(stderrChunks.join("\n")).toContain("pretty: boom");
 		expect(stderrChunks.join("\n")).not.toContain("Error: boom");
 		expect(process.exitCode).toBe(1);
@@ -2349,7 +2549,7 @@ describe("Extension onError hooks", () => {
 			.onError(async (_error, ctx) => {
 				await ctx.ctx.resource;
 				pulled = true;
-				return true;
+				return () => {};
 			});
 		const app = new Crust("cli")
 			.provide(resource())
@@ -2373,7 +2573,7 @@ describe("Extension onError hooks", () => {
 			})
 			.onError((_error, ctx) => {
 				onErrorContext = ctx;
-				return true;
+				return () => {};
 			});
 
 		expect(await failing().extend(observer).execute({ argv: [] })).toBe(1);
@@ -2386,7 +2586,7 @@ describe("Extension onError hooks", () => {
 		const unhandled: unknown[] = [];
 		const presenterId = "presenter";
 		const presenter = defineExtension(presenterId)
-			.onError(() => true)
+			.onError(() => () => {})
 			.postRun((_ctx, outcome) => void handled.push(outcome));
 		const observer = defineExtension("observer").postRun(
 			(_ctx, outcome) => void unhandled.push(outcome),
@@ -2410,12 +2610,28 @@ describe("Extension onError hooks", () => {
 			.postRun((_ctx, outcome) => void outcomes.push(outcome));
 		const later = defineExtension("later").onError(() => {
 			laterRan = true;
-			return true;
+			return () => {};
 		});
 
 		await failing().extend(thrower, later).execute({ argv: [] });
 		expect(laterRan).toBe(false);
 		expect(stderrChunks.join("\n")).toContain("Error: boom");
+		expect(outcomes[0]).toMatchObject({ status: "failed" });
+		expect(outcomes[0]).not.toHaveProperty("by");
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("falls through to Core's renderer without attribution when the returned function throws", async () => {
+		const outcomes: unknown[] = [];
+		const printer = defineExtension("printer")
+			.onError(() => () => {
+				throw new Error("printer broke");
+			})
+			.postRun((_ctx, outcome) => void outcomes.push(outcome));
+
+		await failing().extend(printer).execute({ argv: [] });
+		expect(stderrChunks.join("\n")).toContain("Error: boom");
+		expect(stderrChunks.join("\n")).not.toContain("printer broke");
 		expect(outcomes[0]).toMatchObject({ status: "failed" });
 		expect(outcomes[0]).not.toHaveProperty("by");
 		expect(process.exitCode).toBe(1);
@@ -2548,8 +2764,7 @@ describe("Crust .execute()", () => {
 		const seen: unknown[] = [];
 		const cancelRenderer = defineExtension("cancel-renderer").onError((error, ctx) => {
 			seen.push(error);
-			ctx.stderr("Operation cancelled");
-			return true;
+			return () => ctx.stderr("Operation cancelled");
 		});
 
 		const app = new Crust("test").extend(cancelRenderer).action(() => {
@@ -2781,8 +2996,7 @@ describe("Crust .execute()", () => {
 		const recordingOnError = (seen: unknown[], claim = false) =>
 			defineExtension("errors").onError((error, ctx) => {
 				seen.push(error);
-				if (claim) ctx.stderr(`pretty: ${String(error)}`);
-				return claim;
+				if (claim) return () => ctx.stderr(`pretty: ${String(error)}`);
 			});
 
 		it("renders the cleanup failure after the rendered action failure without re-running onError", async () => {

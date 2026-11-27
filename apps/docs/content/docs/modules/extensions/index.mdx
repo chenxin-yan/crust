@@ -18,7 +18,7 @@ npm install @crustjs/extensions
 
 Register Extensions on the root builder, in any order: the built-ins behave the same whatever the `.extend()` order.
 
-- Ordered hooks such as `preRun` and `onError` follow registration order (see [Hooks](/docs/guide/extensions#hooks)), and so do [contributed sections](/docs/api/types#extensionsectioncontribution).
+- Hooks of one kind, such as `preRun` and `onError`, run in registration order (see [Hooks](/docs/guide/extensions#hooks)), and so do [contributed sections](/docs/api/types#extensionsectioncontribution).
 - Types and naming constraints are part of the [Extension contract](/docs/api/types#extension-types).
 
 ## Exports

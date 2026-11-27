@@ -1,7 +1,7 @@
 // `prompts()` from `@crustjs/prompts/extension`, driven through `execute()`. It lives here, not in
 // `@crustjs/prompts`: `@crustjs/testing` and `jsonInput()` depend on prompts, so prompts cannot
 // depend on them for its own tests.
-import { Crust } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { withTerminalIO } from "@crustjs/prompts";
 import { prompts } from "@crustjs/prompts/extension";
 import { createPromptIO } from "@crustjs/prompts/testing";
@@ -416,6 +416,15 @@ describe("prompts()", () => {
 			stderr: 'Error: Missing required flag "--key"\n',
 			exitCode: 2,
 		});
+	});
+
+	it("asks nothing when a preRun check listed after it refuses the run", async () => {
+		const gate = defineExtension("acme:login").preRun(() => {
+			throw new Error("not logged in");
+		});
+		const run = runInteractive(new Crust("acme").extend(prompts(), gate).add(deploy), ["deploy"]);
+		expect(await run.done).toEqual({ stdout: "", stderr: "Error: not logged in\n", exitCode: 1 });
+		expect(run.screen()).not.toContain("Service");
 	});
 
 	it("never asks under typed run(), even inside a terminal scope", async () => {

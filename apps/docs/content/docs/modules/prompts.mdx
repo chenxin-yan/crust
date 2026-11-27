@@ -176,7 +176,8 @@ The `prompts()` Extension from `@crustjs/prompts/extension` asks on a terminal f
 | `choices` with `multiple: true` or `variadic` | Several of them, [`multiselect()`](#multiselectoptions-io)                                                        |
 | Anything else                                 | Text, [`input()`](#inputoptions-io), converted as the same word on the command line: its `type` or custom `parse` |
 
-- A value from argv, an environment variable, or another Extension, such as [`--input`](/docs/modules/extensions/json-input), is never asked for. A value that only has its `default` is asked for, with the default preselected; Enter keeps it.
+- A value from argv, an environment variable, or another Extension, such as [`--input`](/docs/modules/extensions/json-input) or a [`.defaults()`](/docs/guide/extensions#supply-stored-values) hook, is never asked for. A value that only has its `default` is asked for, with the default preselected; Enter keeps it.
+- It asks after every Extension's [`preRun`](/docs/guide/extensions#hooks) check passed, whatever the `.extend()` order, so a login check refuses the run before anything is asked. A check therefore never sees an answer; validation and the action do.
 - An empty answer to a text question without a default leaves an optional value unset; a required one shows `A value is required` and stays open, as an empty pick does for a required list.
 - An empty pick for an optional list binds an empty list, even where the list has a default: deselecting every default gives the action `[]`.
 - A positional argument after one that is still omitted is not asked for: the command line could not take it either. A list taken after `--` is still asked for.

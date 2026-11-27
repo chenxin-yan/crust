@@ -39,7 +39,7 @@ const flushHeld = /* @__PURE__ */ new WeakMap<ExtensionContext, () => void>();
  * streams NDJSON on stdout instead: one `{"type":"event","data":…}` line per
  * yield, then one `{"type":"result","data":…}` or `{"type":"error","error":…}`
  * line. A cancelled invocation (exit code 130, 143 after SIGTERM, or 141 after a
- * closed stdout), or a failure another Extension's `onError` hook claims, ends
+ * closed stdout), or a failure another Extension's `onError` hook prints, ends
  * the stream without that final line, so consumers should check the exit status. Cleanup that fails after a failure
  * was rendered, or while a cancellation unwinds, is written to stderr as one
  * `{"type":"cleanup","error":…}` line. A `PARSE` error that stops the invocation
@@ -107,7 +107,7 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 					dropped = true;
 				}
 			};
-			// Cancellations, `run()` failures and claimed errors never reach `result` or `error`.
+			// Cancellations, `run()` failures and errors an `onError` hook prints never reach `result` or `error`.
 			flushHeld.set(ctx, flush);
 			return {
 				text(chunk) {
@@ -155,7 +155,6 @@ export const json: ExtensionFactory<[], {}, [], typeof jsonFlags> = /* @__PURE__
 			const end = ctx.argv.indexOf("--");
 			const words = end === -1 ? ctx.argv : ctx.argv.slice(0, end);
 			if (!words.includes("--json")) return;
-			ctx.stderr(JSON.stringify(error.toJSON()));
-			return true;
+			return () => ctx.stderr(JSON.stringify(error.toJSON()));
 		}),
 );

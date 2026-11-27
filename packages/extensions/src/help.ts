@@ -104,13 +104,12 @@ const helpFactory: ExtensionFactory<
 		.flags(helpFlags)
 		.handle("help", showHelp, { eager: true })
 		.noAction(showHelp)
-		.onError(async (error, context) => {
+		.onError((error, context) => {
 			if (!(error instanceof CrustError) || error.code !== "PARSE") return;
 			const end = context.argv.indexOf("--");
 			const words = end === -1 ? context.argv : context.argv.slice(0, end);
 			if (!words.includes("-h") && !words.includes("--help")) return;
-			await withTypedColorFlag(context, () => showHelp(context));
-			return true;
+			return () => withTypedColorFlag(context, () => showHelp(context));
 		});
 	if (options.command !== true) return shown;
 	return shown.add(

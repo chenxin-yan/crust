@@ -50,7 +50,8 @@ import {
  * return value (`undefined` without an action). For an async generator action, the
  * result is its `return` value, and `completed` and `failed` carry the values it
  * yielded as `events` (`[]` when it yielded none); `events` is absent otherwise. `by` is the
- * id of the Extension that handled the invocation or, on `failed`, whose `onError` claimed it.
+ * id of the Extension that handled the invocation or, on `failed`, whose `onError` returned the
+ * function that printed the failure.
  */
 export type InvocationOutcome =
 	| {
@@ -99,8 +100,8 @@ export interface BuildReport {
  */
 export interface ExtensionBuildContext<MetaKeys extends RootMetaKey = never> {
 	/**
-	 * Frozen snapshot prepared before this hook starts. It does not include this hook's own
-	 * outputs; later-registered hooks receive refreshed snapshots.
+	 * Frozen snapshot prepared once, before the first build hook starts; every hook receives the
+	 * same one, so its sections never reflect files a build hook writes.
 	 */
 	readonly snapshot: RootCommandSnapshot<MetaKeys>;
 }
@@ -273,6 +274,18 @@ export interface ExtensionContext<
 	}) => void;
 }
 
+type DefaultValue = string | number | boolean | readonly (string | number | boolean)[] | undefined;
+
+/**
+ * What {@link ExtensionHooks.defaults} returns: values by argument and flag name, as text typed on
+ * the command line. A number or boolean is taken as its text, a list is for a variadic argument or
+ * repeatable flag, and `undefined` is no value.
+ */
+export interface ExtensionDefaults {
+	readonly args?: Readonly<Record<string, DefaultValue>> | undefined;
+	readonly flags?: Readonly<Record<string, DefaultValue>> | undefined;
+}
+
 /** What {@link ExtensionContext.parseCommandArgv} returns: the values the Command Action would receive. */
 export interface ParsedCommandArgv {
 	/** The command's canonical path, in the form of {@link ExtensionContext.commandPath}, also when `path` used an alias. */
@@ -328,15 +341,15 @@ export interface Renderer {
 	 */
 	event?(value: unknown): void;
 	/**
-	 * A failure, in `execute()` only, at most once per invocation, after every `onError` hook
-	 * declined it; never for a cancellation, which Core does not render (cleanup failures that
+	 * A failure, in `execute()` only, at most once per invocation, when no `onError` hook
+	 * returned a function that printed it; never for a cancellation, which Core does not render (cleanup failures that
 	 * accompany one go to `cleanup`). If it throws, Core
 	 * renders the original failure. Default: Core's `Error: <message>` lines on stderr.
 	 */
 	error?(error: unknown): void;
 	/**
 	 * A cleanup failure, in `execute()` only: a Context disposal or deferred cleanup that failed
-	 * after a failure was already rendered (or claimed by `onError`), or cleanup that failed
+	 * after a failure was already rendered, or cleanup that failed
 	 * while a cancellation unwound, once per failure: several cleanups that fail together, which
 	 * arrive as a `SuppressedError` chain or an `AggregateError`, are passed one by one. The exit
 	 * code is unchanged. If it throws, Core renders that cleanup failure itself. Default: Core's `Cleanup failed: <message>` lines
@@ -402,12 +415,30 @@ export interface ExtensionHooks<
 	 */
 	readonly noAction?: ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>) | undefined;
 	/**
-	 * Runs only when the Command Action will: after setups, when no flag handler took the
-	 * invocation, before validation, in `.extend()` order. For checks and preparation that
+	 * Supplies values from somewhere other than this run, such as a config file or the last run.
+	 * Runs only when the Command Action will: after every setup, when no flag handler took the
+	 * invocation, before every `preRun`, in `.extend()` order. Of what it returns, Core keeps only
+	 * the names the command takes that have no value yet or only their default: the command line,
+	 * an environment variable, typed `run()` input, a value bound in `setup`, and an earlier
+	 * Extension's `defaults` all win. It converts the rest as {@link ExtensionContext.bindText}
+	 * does, so a bad value is the `PARSE` error the same word fails with on the command line, and
+	 * a dropped value is never converted. Kept values report `bound` in `ctx.sources`.
+	 */
+	readonly defaults?:
+		| ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<ExtensionDefaults | void>)
+		| undefined;
+	/**
+	 * Runs only when the Command Action will: after every `defaults`, when no flag handler took
+	 * the invocation, before validation, in `.extend()` order. For checks and preparation that
 	 * must precede every action but never `--help` or `--version`, such as a login check or
 	 * a deprecation warning. Throw to fail the invocation; it cannot end it successfully.
+	 * Return a function for work that must wait until every check passed, such as asking a
+	 * question: once every `preRun` returned without throwing, Core calls the returned functions
+	 * in `.extend()` order, still before validation. So a check never sees an answer.
 	 */
-	readonly preRun?: ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<void>) | undefined;
+	readonly preRun?:
+		| ((ctx: ExtensionContext<F, Deps, MetaKeys>) => Awaitable<(() => Awaitable<void>) | void>)
+		| undefined;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects. A `completed` outcome
@@ -419,11 +450,13 @@ export interface ExtensionHooks<
 		| ((ctx: ExtensionContext<F, Deps, MetaKeys>, outcome: InvocationOutcome) => Awaitable<void>)
 		| undefined;
 	/**
-	 * Renders a failure in `execute()` only. Return true when rendered to stop the
-	 * chain; falsy values delegate to the next Extension and then the selected
-	 * {@link Renderer}'s `error`, or Core's default rendering without one. A hook that
-	 * throws ends the chain: remaining hooks are skipped and the original failure
-	 * reaches that same `error` or default rendering.
+	 * Sees a failure in `execute()` only, and may return the function that prints it. Core calls
+	 * every Extension's `onError` in `.extend()` order, so each sees the error and may add to it
+	 * (an error is an object), then calls the first function returned; that Extension is the
+	 * outcome's `by`. Without one, the selected {@link Renderer}'s `error` prints the failure, or
+	 * Core's default rendering without one. A hook that throws ends the chain: remaining hooks are
+	 * skipped and the failure reaches that same `error` or default rendering, as it does when the
+	 * returned function throws.
 	 *
 	 * Every flag is optional here: routing or syntax-parse failures render with a fallback
 	 * context whose `flags` are empty.
@@ -434,7 +467,7 @@ export interface ExtensionHooks<
 				ctx: ExtensionContext<{}, Deps, MetaKeys> & {
 					readonly flags: Readonly<Partial<InferExtensionFlags<F>>>;
 				},
-		  ) => Awaitable<boolean | void>)
+		  ) => Awaitable<(() => Awaitable<void>) | void>)
 		| undefined;
 }
 
@@ -709,7 +742,7 @@ type ExtensionFactoryOf<Args extends readonly unknown[], E> =
 		: never;
 
 /** Hooks that run before flag validation, where pulling a Context that owns flags rejects. */
-type PreValidationHook = "setup" | "renderer" | "preRun";
+type PreValidationHook = "setup" | "renderer" | "defaults" | "preRun";
 
 /**
  * The used Contexts a hook that runs before validation can read: those that own no flags,
@@ -746,7 +779,7 @@ type ExtensionHook<
 /**
  * Immutable fluent Extension authoring handle returned by {@link defineExtension}.
  * Every method returns a new handle. Collection methods (`use`, `provide`,
- * `flags`, `add`) append; lifecycle setters (`setup`, `renderer`, `preRun`, `noAction`,
+ * `flags`, `add`) append; lifecycle setters (`setup`, `renderer`, `defaults`, `preRun`, `noAction`,
  * `postRun`, `onError`, `sections`, `build`, and `handle` per flag) replace the previous callback.
  * Callbacks are typed by the declarations made before them.
  */
@@ -832,6 +865,10 @@ export interface ExtensionBuilder<
 	/** See {@link ExtensionHooks.renderer}. */
 	renderer(
 		select: ExtensionHook<"renderer", Use, OF, MetaKeys>,
+	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
+	/** See {@link ExtensionHooks.defaults}. */
+	defaults(
+		hook: ExtensionHook<"defaults", Use, OF, MetaKeys>,
 	): ExtensionBuilder<Use, Provide, OF, Commands, MetaKeys, Id>;
 	/** See {@link ExtensionHooks.preRun}. */
 	preRun(
@@ -933,6 +970,8 @@ function createExtension(state: ExtensionState): ErasedExtensionBuilder {
 		setup: (setup: ExtensionHooks["setup"]) => next({ hooks: { ...state.hooks, setup } }),
 		renderer: (renderer: ExtensionHooks["renderer"]) =>
 			next({ hooks: { ...state.hooks, renderer } }),
+		defaults: (defaults: ExtensionHooks["defaults"]) =>
+			next({ hooks: { ...state.hooks, defaults } }),
 		preRun: (preRun: ExtensionHooks["preRun"]) => next({ hooks: { ...state.hooks, preRun } }),
 		handle: (flag: string, run: ExtensionHandler["run"], options: ExtensionHandleOptions = {}) => {
 			// A dynamic flag record hides its names from the types.

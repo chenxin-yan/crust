@@ -13,6 +13,7 @@ import {
 } from "../api/context.ts";
 import type {
 	ExtensionData,
+	ExtensionDefaults,
 	ExtensionHandler,
 	ExtensionHooks,
 	ExtensionSetupContext,
@@ -1166,7 +1167,24 @@ async function dispatch(
 			} else {
 				// Gates such as login checks precede only an action, never `--help` or a fallback.
 				if (resolvedNode.run) {
-					for (const extension of extensions) await extension.hooks.preRun?.(extensionContext);
+					for (const extension of extensions) {
+						const defaults = await extension.hooks.defaults?.(extensionContext);
+						if (defaults) {
+							bound = bindStructuredInput(
+								resolvedNode,
+								bound,
+								unsetDefaults(resolvedNode, bound, defaults),
+								true,
+							);
+						}
+					}
+					// Every check passes before what a hook left for afterwards, such as a question.
+					const afterChecks: (() => unknown)[] = [];
+					for (const extension of extensions) {
+						const after = await extension.hooks.preRun?.(extensionContext);
+						if (typeof after === "function") afterChecks.push(after);
+					}
+					for (const after of afterChecks) await after();
 				}
 				const result = await terminal();
 				outcome = { status: "completed", result, ...eventsOf(stream) };
@@ -1211,6 +1229,43 @@ async function dispatch(
 				exitCode: actionExitCode,
 				...eventsOf(stream),
 			};
+}
+
+/**
+ * The values a `defaults` hook returned that the command takes and that have no value yet or only
+ * their default, as text: anything the run gave, or an earlier hook bound, wins.
+ */
+function unsetDefaults(
+	command: CommandNode,
+	parsed: ArgvParseResult,
+	defaults: ExtensionDefaults,
+): RunInputPayload {
+	const unset = (
+		values: ExtensionDefaults["args"],
+		takes: (name: string) => boolean,
+		sources: Readonly<Record<string, string>>,
+	) =>
+		Object.fromEntries(
+			Object.entries(values ?? {}).flatMap(([name, value]) =>
+				value !== undefined &&
+				takes(name) &&
+				(sources[name] === undefined || sources[name] === "default")
+					? [[name, Array.isArray(value) ? value.map(String) : String(value)]]
+					: [],
+			),
+		);
+	return {
+		args: unset(
+			defaults.args,
+			(name) => command.args.some((arg) => arg.name === name),
+			parsed.sources.args,
+		),
+		flags: unset(
+			defaults.flags,
+			(name) => Object.hasOwn(command.effectiveFlags, name),
+			parsed.sources.flags,
+		),
+	};
 }
 
 /** `events` only after a generator action started: its presence is what marks one. */
@@ -1292,13 +1347,20 @@ async function renderFailure(
 	}
 
 	try {
+		// Every hook sees the error before anything prints it; the first function returned prints.
+		let print: { by: string; run: () => unknown } | undefined;
 		for (const extension of prepared.extensions) {
-			if (await extension.hooks?.onError?.(error, context)) return extension.id;
+			const run = await extension.hooks?.onError?.(error, context);
+			if (typeof run === "function") print ??= { by: extension.id, run };
+		}
+		if (print) {
+			await print.run();
+			return print.by;
 		}
 	} catch {
 		// Rendering must not hide the original invocation failure.
 	}
-	// A user abort is not an error to report unless an onError hook claims it. Cleanup
+	// A user abort is not an error to report unless an onError hook prints it. Cleanup
 	// that failed while unwinding it goes to the Renderer's `cleanup`: its `error` never
 	// receives a cancellation.
 	const cleanupFailures = cancellationCleanupFailures(error);

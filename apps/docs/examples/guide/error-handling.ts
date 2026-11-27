@@ -90,19 +90,21 @@ import { defineExtension } from "@crustjs/core";
 
 export const debug = defineExtension("acme:debug")
 	.flags({ debug: { type: "boolean", description: "Print errors with their stack and causes" } })
-	// [!code highlight:12]
+	// [!code highlight:13]
 	.onError((error, { flags, stderr }) => {
 		// A cancellation is not a bug: leave it to Crust.
 		if (flags.debug !== true || (error instanceof Error && error.name === "AbortError")) return;
 		// Stacks and messages only: other fields, such as a request's headers, can hold secrets.
-		const printed = new Set<unknown>();
-		for (let current: unknown = error; current !== undefined && !printed.has(current);) {
-			const text = current instanceof Error ? (current.stack ?? current.message) : String(current);
-			stderr(printed.size === 0 ? text : `Caused by: ${text}`);
-			printed.add(current);
-			current = current instanceof Error ? current.cause : undefined;
-		}
-		return true;
+		return () => {
+			const printed = new Set<unknown>();
+			for (let current: unknown = error; current !== undefined && !printed.has(current);) {
+				const text =
+					current instanceof Error ? (current.stack ?? current.message) : String(current);
+				stderr(printed.size === 0 ? text : `Caused by: ${text}`);
+				printed.add(current);
+				current = current instanceof Error ? current.cause : undefined;
+			}
+		};
 	});
 
 const traced = new Crust("app").extend(debug).action(async () => {

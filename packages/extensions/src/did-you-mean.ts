@@ -29,9 +29,10 @@ export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> =
 			if (error.is("COMMAND_NOT_FOUND")) {
 				// The suggestion search and help renderer load only on this error path.
 				const { reportUnknownCommand } = await import("./did-you-mean-report.ts");
-				return reportUnknownCommand(error, context, mode, (...args) =>
-					withTypedColorFlag(context, () => renderHelp(...args)),
-				);
+				return () =>
+					reportUnknownCommand(error, context, mode, (...args) =>
+						withTypedColorFlag(context, () => renderHelp(...args)),
+					);
 			}
 			if (error.is("PARSE") && error.details?.reason === "unknown-flag") {
 				const { suggestFlag } = await import("./did-you-mean-report.ts");

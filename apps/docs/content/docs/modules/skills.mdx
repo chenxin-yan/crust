@@ -46,7 +46,7 @@ The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninsta
 
 - A custom `command` name replaces the default command, without the alias. Pass it as a string literal so `app.run()` keeps type-checking command paths and flags; a `command` typed as `string` leaves the command tree unchecked.
 - A command name that collides with an app command fails with a `DEFINITION` error when the app prepares.
-- It adds an `Agent skills` section to the root command's documentation, such as help and man pages, listing each packaged skill and its source directory. It uses `except: [skills]`, so generated skills leave it out.
+- It adds an `Agent skills` section to the root command's documentation, such as help and man pages, listing each packaged skill and its source directory. It uses `except: [skills]`, so generated skills leave it out. During `crust build`, the section lists the skills the build hook is about to write, so man pages list them whatever the `.extend()` order.
 
 During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. A bundle that `crust build` produces does not register the hook, so the CLI it ships does not carry the renderer. At runtime the commands read them from [`artifactPath("skills")`](/docs/api/crust#artifactpathpath), so run `crust build` before using them; until then help shows a note instead of failing.
 

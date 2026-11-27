@@ -100,15 +100,16 @@ async function ask(
 
 /**
  * Asks on a terminal for each argument and flag with a `prompt` question that has no value
- * or only its default, before the Command Action runs. A value from argv, an environment
- * variable, or another Extension (such as `--input`) is never asked for. Asks only under
+ * or only its default, before the Command Action runs and after every Extension's `preRun`
+ * check passed. A value from argv, an environment variable, or another Extension (such as
+ * `--input`) is never asked for, and a `preRun` check never sees an answer. Asks only under
  * `execute()` where {@link canPrompt} is true, never under typed `run()`; elsewhere the
  * command's own errors, such as a missing required flag, apply.
  */
 export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension("crust:prompts")
 	.owns("prompt")
 	.factory((extension) =>
-		extension.preRun(async (ctx) => {
+		extension.preRun((ctx) => async () => {
 			// Typed `run()` captures stderr, so it is never a terminal there.
 			if (!ctx.stderr.isTTY || !canPrompt()) return;
 			const missing = (source: string | undefined) => source === undefined || source === "default";

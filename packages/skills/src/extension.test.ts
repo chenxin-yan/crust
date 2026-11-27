@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { type AnyCrust, Crust } from "@crustjs/core";
+import { type AnyCrust, Crust, defineExtension } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
@@ -244,6 +244,27 @@ describe("skills extension packaged directory", () => {
 		expect(artifacts.has(join("skills", "gyst", "SKILL.md"))).toBe(true);
 		expect(artifacts.get(join("skills", "gyst-reference", "SKILL.md"))).toContain(
 			"description: Generated command reference",
+		);
+	});
+
+	it("lists the skills the build writes to a build hook listed before it", async () => {
+		const authored = join(tempRoot, "authored", "guide");
+		await mkdir(authored, { recursive: true });
+		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
+		let body: string | undefined;
+		const reader = defineExtension("reader").build(({ snapshot }) => {
+			body = snapshot.meta.sections?.find((section) => section.title === "Agent skills")?.body;
+			return [];
+		});
+		const app = new Crust("demo", { description: "Demo" }).extend(
+			reader,
+			skills({ extras: [authored] }),
+		);
+
+		await buildArtifacts(app);
+
+		expect(body).toMatch(
+			/^demo — Demo\n {2}Source: .*skills[\\/]demo\n\nguide — Guide\n {2}Source: .*skills[\\/]guide$/,
 		);
 	});
 

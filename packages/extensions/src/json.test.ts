@@ -584,11 +584,10 @@ describe("json", () => {
 			});
 		});
 
-		it("writes held text to stderr after a failure another Extension claims", async () => {
-			const claimer = defineExtension("claimer").onError((_error, ctx) => {
-				ctx.stderr("claimed");
-				return true;
-			});
+		it("writes held text to stderr after a failure another Extension prints", async () => {
+			const claimer = defineExtension("claimer").onError(
+				(_error, ctx) => () => ctx.stderr("claimed"),
+			);
 			const app = new Crust("app")
 				.extend(json(), claimer)
 				.output(anything)
