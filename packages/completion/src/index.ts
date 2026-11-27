@@ -264,14 +264,38 @@ const completionFactory: ExtensionFactory<
 					}),
 		);
 
-		return extension.add(completionCommand, completeCommand).build(async ({ snapshot }) =>
-			(await loadRenderer())
-				.renderCompletionFiles(snapshot, options, SUPPORTED_SHELLS)
-				.map((file) => ({
-					...file,
-					path: `completions/${file.path}`,
-				})),
-		);
+		return extension
+			.add(completionCommand, completeCommand)
+			.sections((snapshot) => {
+				// The line a user adds for each shell, as kubectl's and cobra's completion help print it.
+				const run = `${snapshot.meta.name} ${subcommandName}`;
+				return [
+					{
+						command: [subcommandName],
+						title: "Setup",
+						// Lines to copy: only help prints a body line by line.
+						only: [defineExtensionId("crust:help")],
+						body: [
+							"# bash, in ~/.bashrc",
+							`source <(${run} bash)`,
+							"# zsh, in ~/.zshrc after compinit",
+							`source <(${run} zsh)`,
+							"# fish, in ~/.config/fish/config.fish",
+							`${run} fish | source`,
+							"# PowerShell, in $PROFILE",
+							`${run} powershell | Out-String | Invoke-Expression`,
+						].join("\n"),
+					},
+				];
+			})
+			.build(async ({ snapshot }) =>
+				(await loadRenderer())
+					.renderCompletionFiles(snapshot, options, SUPPORTED_SHELLS)
+					.map((file) => ({
+						...file,
+						path: `completions/${file.path}`,
+					})),
+			);
 	});
 
 /**

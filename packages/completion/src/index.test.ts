@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { json } from "@crustjs/extensions";
+import { help, json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
@@ -48,6 +48,29 @@ function buildCli(options?: CompletionOptions) {
 }
 
 describe("completion", () => {
+	it("shows the line to add for each shell in its help only, with the app's own names", async () => {
+		const app = new Crust("mycli", { version: "1.0.0" })
+			.extend(help(), completion({ command: "shell-completion" }))
+			.action(() => {});
+		const { stdout } = await captureExecute(app, ["shell-completion", "--help"]);
+		expect(stdout).toContain(
+			[
+				"Setup:",
+				"  # bash, in ~/.bashrc",
+				"  source <(mycli shell-completion bash)",
+				"  # zsh, in ~/.zshrc after compinit",
+				"  source <(mycli shell-completion zsh)",
+				"  # fish, in ~/.config/fish/config.fish",
+				"  mycli shell-completion fish | source",
+				"  # PowerShell, in $PROFILE",
+				"  mycli shell-completion powershell | Out-String | Invoke-Expression",
+			].join("\n"),
+		);
+		// A man page and generated skills reflow a body, which would run the lines together.
+		const [section] = (await app.snapshot()).subCommands["shell-completion"]!.meta.sections ?? [];
+		expect(section?.only).toEqual(["crust:help"]);
+	});
+
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli", { version: "1.0.0" })
 			.extend(completion({ command: "shell-completion" }))

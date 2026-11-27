@@ -38,7 +38,7 @@ status --is-interactive; and my-cli completion fish | source
 my-cli completion powershell | Out-String | Invoke-Expression
 ```
 
-Here, `my-cli` is the installed application executable. Source output only from a CLI you trust, and use one loading method per shell.
+Here, `my-cli` is the installed application executable. Source output only from a CLI you trust, and use one loading method per shell. `my-cli completion --help` prints these lines with your CLI's name in a `Setup` section, so users find them without the docs; the section is for [`help`](/docs/modules/extensions/help) only.
 
 New shells generate completion from the installed CLI at startup. Open a new shell after updating the CLI to refresh the definitions.
 
