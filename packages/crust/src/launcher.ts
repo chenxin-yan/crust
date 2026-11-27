@@ -74,7 +74,7 @@ if (!target) {
 }
 
 const candidates = [
-\t// In Node's own order, so another version beside this package never wins over this one's.
+\t// Nested before hoisted, so another version beside this package never wins over this one's.
 \t// Nested install: the platform package under this package's node_modules.
 \tresolve(dir, "..", "node_modules", target.packageName, "bin", target.binaryFilename),
 \t// Hoisted install: the platform package beside this one in node_modules.

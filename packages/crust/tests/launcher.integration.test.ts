@@ -9,6 +9,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -308,7 +309,8 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 
 describe.skipIf(process.platform === "win32")("generated npm launcher platform package", () => {
 	it("starts the root package's own nested platform package before a hoisted one, and names itself to it", () => {
-		const dir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+		// Real path: the launcher reports its own, and a temporary directory may be reached through a link.
+		const dir = realpathSync(mkdtempSync(join(tmpdir(), "crust-launcher-test-")));
 		tmpDir = dir;
 		const bunTarget = hostTarget();
 		if (!bunTarget) throw new Error("No Bun target matches this machine.");
