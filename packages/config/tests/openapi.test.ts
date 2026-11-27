@@ -41,10 +41,9 @@ afterEach(() => {
 
 const config = defineConfig({
 	name: "acme",
-	settings: {
+	both: {
 		account: { type: "string", description: "Account ID", env: "ACME_ACCOUNT", required: true },
 	},
-	project: ["account"],
 });
 
 const api = defineApi({

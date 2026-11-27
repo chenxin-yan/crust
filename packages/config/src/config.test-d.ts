@@ -8,15 +8,17 @@ type Expect<T extends true> = T;
 
 const config = defineConfig({
 	name: "acme",
-	settings: {
+	user: {
 		org: { type: "string", env: "ACME_ORG", required: true },
-		region: { type: "string", choices: ["us", "eu"], default: "us" },
-		port: { type: "number", min: 1 },
 		timeout: { type: "string", parse: (raw) => Number(raw), default: "30" },
 		tags: { type: "string", multiple: true, delimiter: "," },
 		yes: { type: "boolean" },
 	},
-	project: ["region", "port"],
+	project: { entry: { type: "string" } },
+	both: {
+		region: { type: "string", choices: ["us", "eu"], default: "us" },
+		port: { type: "number", min: 1 },
+	},
 	command: true,
 });
 
@@ -47,13 +49,18 @@ void (async () => {
 	}
 	const listed = await config.list();
 	type _Listed = Expect<
-		Equal<(typeof listed)[number]["key"], "org" | "region" | "port" | "timeout" | "tags" | "yes">
+		Equal<
+			(typeof listed)[number]["key"],
+			"org" | "region" | "port" | "timeout" | "tags" | "yes" | "entry"
+		>
 	>;
 })();
 
-// set(): keys and values as a file holds them; the project form takes only the project's keys.
+// set(): keys and values as a file holds them; each file takes only the settings it may hold.
 void config.set({ region: "eu", timeout: "45", tags: ["a"], org: undefined });
-void config.set({ region: "eu", port: 8080 }, { project: true });
+void config.set({ region: "eu", port: 8080, entry: "src/main.ts" }, { project: true });
+// @ts-expect-error -- only the project file may set entry
+void config.set({ entry: "src/main.ts" });
 // @ts-expect-error -- outside choices
 void config.set({ region: "mars" });
 // @ts-expect-error -- a parse setting holds what the user types
@@ -62,9 +69,13 @@ void config.set({ timeout: 30 });
 void config.set({ regoin: "eu" });
 // @ts-expect-error -- the project file may not set org
 void config.set({ org: "acme" }, { project: true });
-const userOnly = defineConfig({ name: "acme", settings: { pager: { type: "string" } } });
-// @ts-expect-error -- no project list, so no project file to save in
+const userOnly = defineConfig({ name: "acme", user: { pager: { type: "string" } } });
+// @ts-expect-error -- no setting of a project file, so no project file to save in
 void userOnly.set({ pager: "less" }, { project: true });
+const projectOnly = defineConfig({ name: "acme", project: { entry: { type: "string" } } });
+void projectOnly.set({ entry: "src/main.ts" }, { project: true });
+// @ts-expect-error -- no setting of the user's file, so no user's file to save in
+void projectOnly.set({ entry: "src/main.ts" });
 
 // flag(): the setting's definition, with its key in `config`, under any flag name.
 const deploy = defineCommand("deploy", (command) =>
@@ -94,37 +105,38 @@ void defineCommand("x", (command) => command.flags({ org: { type: "string", conf
 defineConfig({
 	name: "acme",
 	// @ts-expect-error -- no such property
-	settings: { org: { type: "string", flag: false } },
+	user: { org: { type: "string", flag: false } },
 });
 defineConfig({
 	name: "acme",
 	// @ts-expect-error -- a config file holds no url
-	settings: { site: { type: "url" } },
+	project: { site: { type: "url" } },
 });
 defineConfig({
 	name: "acme",
 	// @ts-expect-error -- default outside choices
-	settings: { region: { type: "string", choices: ["us", "eu"], default: "mars" } },
+	both: { region: { type: "string", choices: ["us", "eu"], default: "mars" } },
 });
 defineConfig({
 	name: "acme",
 	// @ts-expect-error -- $schema is a file's pointer to its schema
-	settings: { $schema: { type: "string" } },
+	user: { $schema: { type: "string" } },
 });
+const twice = defineConfig({
+	name: "acme",
+	user: { region: { type: "string" } },
+	both: { region: { type: "string" } },
+});
+type _Twice = Expect<Equal<typeof twice, { readonly FIX_SETTING_IN_TWO_GROUPS: "region" }>>;
+// @ts-expect-error -- a setting is in one group, so this is no config
+twice.flag("region");
 defineConfig({
 	name: "acme",
-	settings: { region: { type: "string" } },
-	// @ts-expect-error -- the project list names settings
-	project: ["regoin"],
-});
-defineConfig({
-	name: "acme",
-	settings: {},
 	// @ts-expect-error -- a format reads and writes: parse and stringify go together
-	files: { parse: (text: string) => JSON.parse(text) },
+	format: { extension: "toml", parse: (text: string) => JSON.parse(text) },
 });
 defineConfig({
 	name: "acme",
-	settings: {},
-	files: { user: "acmerc", project: ".acmerc", parse: () => ({}), stringify: () => "" },
+	files: { user: "settings", project: "acme" },
+	format: { extension: "toml", parse: () => ({}), stringify: () => "" },
 });

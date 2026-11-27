@@ -50,19 +50,20 @@ function write(path: string, content: unknown) {
 	writeFileSync(path, typeof content === "string" ? content : JSON.stringify(content));
 }
 
-function acme(options: { files?: Parameters<typeof defineConfig>[0]["files"] } = {}) {
+function acme(options: Pick<Parameters<typeof defineConfig>[0], "files" | "format"> = {}) {
 	const config = defineConfig({
 		name: "acme",
-		settings: {
+		both: {
 			region: { type: "string", choices: ["us", "eu"], default: "us", env: "ACME_REGION" },
 			// "value" is the name a file's text is converted under: an alias of it must still work.
 			replicas: { type: "number", min: 1, aliases: ["value"] },
-			timeout: { type: "string", parse: (raw) => Number(raw) * 1000, default: "30" },
 			tags: { type: "string", multiple: true, delimiter: "," },
+		},
+		user: {
+			timeout: { type: "string", parse: (raw) => Number(raw) * 1000, default: "30" },
 			pager: { type: "string" },
 			psFormat: { type: "string", choices: ["table", "json"], default: "table" },
 		},
-		project: ["region", "replicas", "tags"],
 		command: true,
 		...options,
 	});
@@ -152,8 +153,8 @@ describe("flags take the files' values", () => {
 	});
 
 	it("keeps two configs' same-named settings apart", async () => {
-		const a = defineConfig({ name: "aaa", settings: { region: { type: "string" } } });
-		const b = defineConfig({ name: "bbb", settings: { region: { type: "string" } } });
+		const a = defineConfig({ name: "aaa", user: { region: { type: "string" } } });
+		const b = defineConfig({ name: "bbb", user: { region: { type: "string" } } });
 		write(join(root, "xdg", "aaa", "config.json"), { region: "from-a" });
 		write(join(root, "xdg", "bbb", "config.json"), { region: "from-b" });
 		const app = new Crust("x")
@@ -220,7 +221,7 @@ describe("the project file", () => {
 		expect((await deploy()).flags.replicas).toBe(3);
 	});
 
-	it("sets only the settings in the project list, and warns for the others naming both files", async () => {
+	it("sets only the settings it may hold, and warns for the others naming both files", async () => {
 		write(projectFile(), { pager: "touch PWNED", region: "eu", unknown: 1 });
 		const { flags, stderr } = await deploy();
 		expect(flags).toMatchObject({ region: "eu" });
@@ -233,10 +234,97 @@ describe("the project file", () => {
 		expect((await captureExecute(app, ["deploy"])).stderr).toBe(warning);
 	});
 
-	it("is not read without a project list", async () => {
-		const config = defineConfig({ name: "acme", settings: { pager: { type: "string" } } });
-		write(projectFile(), { pager: "less" });
+	it("is not looked for when no setting may be in it", async () => {
+		const config = defineConfig({ name: "acme", user: { pager: { type: "string" } } });
+		write(projectFile(), "{ broken");
 		expect(await config.get("pager")).toBeUndefined();
+	});
+
+	it("warns once in a run, however often the run reads the files", async () => {
+		write(projectFile(), { pager: "less" });
+		const { config } = acme();
+		const app = new Crust("acme").extend(config.extension).command("show", (command) =>
+			command.flags({ region: config.flag("region") }).action(async ({ stdout }) => {
+				stdout(String(await config.get("pager")));
+				await config.list();
+			}),
+		);
+		const direct = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+		try {
+			const warning = `Warning: ${projectFile()} sets "pager", which only ${userFile()} may set; ignored.\n`;
+			expect(await captureExecute(app, ["show"])).toMatchObject({ stderr: warning });
+			expect(direct).not.toHaveBeenCalled();
+			// The next run warns again.
+			expect((await captureExecute(app, ["show"])).stderr).toBe(warning);
+		} finally {
+			direct.mockRestore();
+		}
+	});
+});
+
+describe("a setting only the project file may hold", () => {
+	const tool = () => {
+		const config = defineConfig({
+			name: "acme",
+			user: { pager: { type: "string" } },
+			project: { entry: { type: "string" } },
+			both: { region: { type: "string" } },
+			command: true,
+		});
+		return { config, app: new Crust("acme").extend(config.extension) };
+	};
+
+	it("is read from the project file, and ignored in the user's file with a warning", async () => {
+		const { config } = tool();
+		write(userFile(), { entry: "from-user.ts", region: "eu" });
+		const warn = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+		try {
+			expect(await config.get("entry")).toBeUndefined();
+			expect(warn).toHaveBeenCalledWith(
+				`Warning: ${userFile()} sets "entry", which only acme.config.json may set; ignored.\n`,
+			);
+		} finally {
+			warn.mockRestore();
+		}
+		write(projectFile(), { entry: "src/main.ts" });
+		expect(await config.get("entry")).toBe("src/main.ts");
+		expect(await config.get("region")).toBe("eu");
+	});
+
+	it("is saved only in the project file", async () => {
+		const { config, app } = tool();
+		await config.set({ entry: "src/main.ts" }, { project: true });
+		expect(await config.get("entry")).toBe("src/main.ts");
+		// SAFETY: the compile error is covered in config.test-d.ts; this is the same rule at run time.
+		await expect(config.set({ entry: "x" } as never)).rejects.toThrow(
+			'config.json cannot set "entry"; it may set only: region, pager',
+		);
+		expect(await captureExecute(app, ["config", "set", "entry", "x"])).toMatchObject({
+			exitCode: 2,
+			stderr: 'Error: "entry" is a setting of acme.config.json: pass --project\n',
+		});
+		expect(await captureExecute(app, ["config", "set", "--project", "entry", "x"])).toMatchObject({
+			exitCode: 0,
+		});
+		expect(await config.get("entry")).toBe("x");
+	});
+
+	it("makes a config with no other kind: the user's file is never read, and saves need no flag", async () => {
+		const config = defineConfig({
+			name: "acme",
+			project: { entry: { type: "string" } },
+			command: true,
+		});
+		const app = new Crust("acme").extend(config.extension);
+		write(userFile(), "{ broken");
+		expect(await captureExecute(app, ["config", "set", "entry", "src/main.ts"])).toMatchObject({
+			exitCode: 0,
+			stdout: `Saved entry in ${join(root, "repo", "sub", "acme.config.json")}\n`,
+		});
+		expect(await config.get("entry")).toBe("src/main.ts");
+		expect((await captureExecute(app, ["config", "set", "--project", "entry", "x"])).exitCode).toBe(
+			2,
+		);
 	});
 });
 
@@ -255,15 +343,21 @@ describe("files", () => {
 				.join(""),
 	};
 
-	it("takes the files' names and format", async () => {
-		const files = { user: "acmerc", project: ".acmerc", ...ini };
-		write(userFile("acmerc"), "region = eu\n");
-		write(projectFile(".acmerc"), "replicas = 3\n");
-		const { app, config } = acme({ files });
+	it("takes the files' format, and their names without the extension", async () => {
+		write(userFile("config.ini"), "region = eu\n");
+		write(projectFile("acme.config.ini"), "replicas = 3\n");
+		const format = { extension: "ini", ...ini };
+		const { app, config } = acme({ format });
 		const { stdout } = await captureExecute(app, ["deploy"]);
 		expect(JSON.parse(stdout)).toMatchObject({ region: "eu", replicas: 3 });
 		await config.set({ pager: "less" });
-		expect(readFileSync(userFile("acmerc"), "utf8")).toBe("region=eu\npager=less\n");
+		expect(readFileSync(userFile("config.ini"), "utf8")).toBe("region=eu\npager=less\n");
+
+		write(userFile("settings.ini"), "region = eu\n");
+		write(projectFile("acme.ini"), "replicas = 4\n");
+		const named = acme({ format, files: { user: "settings", project: "acme" } });
+		expect(await named.config.get("replicas")).toBe(4);
+		expect(await named.config.get("region")).toBe("eu");
 	});
 
 	it("names a file that cannot be read", async () => {
@@ -285,7 +379,7 @@ describe("files", () => {
 	it("names a file that does not hold an object", async () => {
 		write(userFile(), "[1]");
 		await expect(acme().config.get("pager")).rejects.toThrow(
-			`Config file ${userFile()} must hold an object of settings`,
+			`Malformed config file: ${userFile()}`,
 		);
 	});
 });
@@ -305,7 +399,7 @@ describe("get, list and set", () => {
 	it("get() takes the first variable that is set, as the flag does, though it converts to nothing", async () => {
 		const config = defineConfig({
 			name: "acme",
-			settings: {
+			user: {
 				tags: { type: "string", multiple: true, delimiter: ",", env: ["A", "B"], default: ["d"] },
 			},
 		});
@@ -320,7 +414,7 @@ describe("get, list and set", () => {
 	it("get() throws for a required setting that nothing gives", async () => {
 		const config = defineConfig({
 			name: "acme",
-			settings: { org: { type: "string", env: "ACME_ORG", required: true } },
+			user: { org: { type: "string", env: "ACME_ORG", required: true } },
 		});
 		await expect(config.get("org")).rejects.toThrow(
 			`Missing setting "org" of acme: set $ACME_ORG or "org" in ${userFile()}.`,
@@ -334,8 +428,8 @@ describe("get, list and set", () => {
 			expect(await acme().config.list()).toEqual([
 				{ key: "region", value: "eu", source: { kind: "env", name: "ACME_REGION" } },
 				{ key: "replicas", value: 2, source: { kind: "file", path: userFile() } },
-				{ key: "timeout", value: 30_000, source: { kind: "default" } },
 				{ key: "tags", value: ["a"], source: { kind: "file", path: projectFile() } },
+				{ key: "timeout", value: 30_000, source: { kind: "default" } },
 				{ key: "pager", value: undefined, source: { kind: "unset" } },
 				{ key: "psFormat", value: "table", source: { kind: "default" } },
 			]);
@@ -409,7 +503,7 @@ describe("get, list and set", () => {
 		write(userFile(), { pager: "keep" });
 		const { config } = acme();
 		await expect(config.set({ tags: ["x".repeat(16 * 1024 * 1024)] })).rejects.toThrow(
-			`${userFile()} would exceed 16 MiB; nothing was saved`,
+			`Cannot save ${userFile()}: the file would be larger than 16 MiB`,
 		);
 		expect(await config.get("pager")).toBe("keep");
 	});
@@ -424,6 +518,19 @@ describe("get, list and set", () => {
 		);
 		expect(existsSync(userFile())).toBe(false);
 	});
+
+	it.skipIf(process.platform === "win32")(
+		"set() saves the file a linked user's file points to, and keeps the link",
+		async () => {
+			const target = join(root, "dotfiles", "config.json");
+			write(target, { pager: "less" });
+			mkdirSync(dirname(userFile()), { recursive: true });
+			symlinkSync(target, userFile());
+			await acme().config.set({ region: "eu" });
+			expect(lstatSync(userFile()).isSymbolicLink()).toBe(true);
+			expect(JSON.parse(readFileSync(target, "utf8"))).toEqual({ pager: "less", region: "eu" });
+		},
+	);
 
 	it.skipIf(process.platform === "win32")(
 		"set(values, { project: true }) refuses a linked project file",
@@ -500,8 +607,8 @@ describe("command: true", () => {
 			[
 				"region    us     default",
 				`replicas  2      ${userFile()}`,
-				"timeout   30000  default",
 				"tags             unset",
+				"timeout   30000  default",
 				"pager            unset",
 				"psFormat  table  default",
 				"",
@@ -514,8 +621,11 @@ it("documents the files and the settings in the root's help", async () => {
 	const { stdout } = await captureExecute(acme().app, ["--help"]);
 	expect(stdout).toContain("Configuration:");
 	expect(stdout).toContain(
-		"acme.config.json (the nearest from the working directory up; only region, replicas, tags)",
+		"then acme.config.json (the nearest from the working directory up), then config.json in the configuration directory of acme, then its default.",
 	);
+	// A setting one file may hold says which.
+	expect(stdout).toMatch(/^ {2}pager +\(config\.json only\)$/m);
+	expect(stdout).toMatch(/^ {2}tags$/m);
 });
 
 it("runs as if started in another folder with a -C Extension listed first", async () => {
@@ -552,12 +662,19 @@ it("describes a JSON file in its JSON Schema", () => {
 		},
 		additionalProperties: false,
 	});
+	// The project file's schema holds the settings that file may hold.
+	expect(Object.keys(config.jsonSchema({ project: true }).properties as object)).toEqual([
+		"$schema",
+		"region",
+		"replicas",
+		"tags",
+	]);
 });
 
 it("leaves out a bound that is not finite from the JSON Schema", () => {
 	const config = defineConfig({
 		name: "acme",
-		settings: { a: { type: "number", min: Number.NaN, max: Number.POSITIVE_INFINITY } },
+		user: { a: { type: "number", min: Number.NaN, max: Number.POSITIVE_INFINITY } },
 	});
 	expect(config.jsonSchema().properties).toEqual({
 		$schema: { type: "string" },

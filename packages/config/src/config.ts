@@ -11,6 +11,8 @@ import {
 	type ValidatedInput,
 } from "@crustjs/core";
 import { formatDescription, type LocalValueBrand, parseFlagValues } from "@crustjs/core/tooling";
+// Types only: the store loads when a command first reads the files, never at start-up.
+import type { StoreFormat } from "@crustjs/store";
 
 declare const settingKey: unique symbol;
 
@@ -107,43 +109,47 @@ export type ConfigEntry<S extends ConfigSettings> = {
 /** The `config` command that `command: true` adds. */
 export type ConfigCommandDefinition = CommandDefinition<"config">;
 
-/** The files of {@link defineConfig}: their names and their format. */
-export type ConfigFiles = {
-	/** The user's own file, in the app's configuration directory. @default "config.json" */
+/** The names of the files of {@link defineConfig}, without their extension. */
+export interface ConfigFiles {
+	/** The user's own file, in the app's configuration directory. @default "config" */
 	readonly user?: string;
-	/** The project file, the nearest from the working directory up. @default "<name>.config.json" */
+	/** The project file, the nearest from the working directory up. @default "<name>.config" */
 	readonly project?: string;
-} & (
-	| { readonly parse?: never; readonly stringify?: never }
-	| {
-			/** Reads a file's text into an object of settings, such as an INI, TOML or YAML parser. */
-			readonly parse: (text: string) => unknown;
-			/** Writes an object of settings as a file's text, the reverse of `parse`. */
-			readonly stringify: (values: Record<string, unknown>) => string;
-	  }
-);
+}
 
-/** The options of {@link defineConfig}. */
-export interface ConfigOptions<S extends ConfigSettings, P extends keyof S & string> {
+/** The options of {@link defineConfig}: its settings in three groups, by the file that may hold them. */
+export interface ConfigOptions<
+	U extends ConfigSettings,
+	P extends ConfigSettings,
+	B extends ConfigSettings,
+> {
 	/** The app's name: the user's file is in its configuration directory, `configDir(name)`. */
 	readonly name: string;
-	/** Every setting, each the definition of a string, number or boolean flag. */
-	readonly settings: S;
 	/**
-	 * Turns on the project file and lists the settings it may set. A project file arrives with a
-	 * cloned repository, so any other setting it sets is ignored with a warning.
+	 * Settings only the user's own file may hold: anything a repository must not choose, such as
+	 * what the app runs as a command. Each is the definition of a string, number or boolean flag.
 	 */
-	readonly project?: readonly P[];
-	/** The files' names and format; JSON by default. */
+	readonly user?: U;
+	/** Settings only the project file may hold, such as what describes the project itself. */
+	readonly project?: P;
+	/** Settings either file may hold; the project file's value wins. */
+	readonly both?: B;
+	/** The files' format, as a store's `format`. @default JSON */
+	readonly format?: StoreFormat;
+	/** The files' names. */
 	readonly files?: ConfigFiles;
 	/** Adds `config get`, `set`, `unset` and `list`. @default false */
 	readonly command?: boolean;
 }
 
-/** What {@link defineConfig} returns for the settings `S` and the project list `P`. */
+/**
+ * What {@link defineConfig} returns for the settings `S`, of which the user's file may hold `UK`
+ * and the project file `PK`.
+ */
 export interface Config<
 	S extends ConfigSettings,
-	P extends keyof S & string,
+	UK extends keyof S & string,
+	PK extends keyof S & string,
 	Commands extends readonly ConfigCommandDefinition[],
 > {
 	/**
@@ -162,21 +168,32 @@ export interface Config<
 	 * Save settings in the user's file; `undefined` removes one. Throws for a value the setting's
 	 * rules refuse or a file that would exceed 16 MiB, before anything is saved.
 	 */
-	set(values: ConfigValues<S, keyof S>): Promise<void>;
+	set(values: [UK] extends [never] ? never : ConfigValues<S, UK>): Promise<void>;
 	/**
 	 * Save settings in the project file, the nearest, or a new one in the working directory. Throws
 	 * for a value the setting's rules refuse, a linked project file or a file that would exceed
 	 * 16 MiB, before anything is saved.
 	 */
 	set(
-		values: [P] extends [never] ? never : ConfigValues<S, P>,
-		options: { readonly project: true },
+		values: [PK] extends [never] ? never : ConfigValues<S, PK>,
+		target: { readonly project: true },
 	): Promise<void>;
 	/** Binds the files' values into the flags `config.flag()` gave: `.extend(config.extension)`. */
 	readonly extension: Extension<{}, [], {}, Commands>;
-	/** The JSON Schema (draft 2020-12) of a JSON config file. */
-	jsonSchema(): Record<string, unknown>;
+	/**
+	 * The JSON Schema (draft 2020-12) of the user's JSON config file, or with `{ project: true }`
+	 * of the project file: the settings that file may hold.
+	 */
+	jsonSchema(target?: { readonly project: true }): Record<string, unknown>;
 }
+
+/** Same value brands as defineFlag (default within choices, synchronous parse), per setting. */
+type CheckedSettings<G> = {
+	readonly [K in keyof G]: LocalValueBrand<G[K]> & KnownPropertiesBrand<G[K]>;
+} & ReservedNameBrand<G>;
+
+/** The settings that are in two groups. */
+type InTwoGroups<U, P, B> = (keyof U & keyof P) | (keyof U & keyof B) | (keyof P & keyof B);
 
 /** The variable name the files' text is converted under, as the text of an environment variable. */
 const TEXT = "CRUST_CONFIG_TEXT";
@@ -220,65 +237,30 @@ function fileWords(key: string, def: ConfigSetting, value: unknown, path: string
 	);
 }
 
-/** The largest config file read, and so the largest saved. */
-const MAX_FILE_BYTES = 16 * 1024 * 1024;
+/** A store field that holds whatever the file holds: core converts a setting's value. */
+const ANY_VALUE = {
+	schema: {
+		"~standard": { version: 1, vendor: "crust", validate: (value: unknown) => ({ value }) },
+	},
+};
 
-/** Reads `path` into an object of settings; a missing file holds none. */
-async function readValues(path: string, parse: (text: string) => unknown): Promise<FileValues> {
-	let text: string;
-	try {
-		const fs = process.getBuiltinModule("node:fs/promises");
-		// A device or a FIFO, which a project file can link to, would never finish reading.
-		const stats = await fs.stat(path);
-		if (!stats.isFile() || stats.size > MAX_FILE_BYTES) {
-			throw new Error("not a regular file of at most 16 MiB");
-		}
-		text = await fs.readFile(path, "utf8");
-	} catch (error) {
-		const code = (error as { code?: unknown }).code;
-		if (code === "ENOENT" || code === "ENOTDIR") return {};
-		throw new CrustError("PARSE", `Cannot read config file: ${path}`).withCause(error);
-	}
-	let values: unknown;
-	try {
-		values = parse(text.replace(/^\uFEFF/u, ""));
-	} catch (cause) {
+/** A store's failure as the config file's: the store's own message names a "store file". */
+function fileError(error: unknown, path: string, action: "read" | "save"): unknown {
+	const { code, details } = error as {
+		code?: unknown;
+		details?: { issues?: readonly { message: string }[] };
+	};
+	if (code === "PARSE") {
 		// Not the parser's message: it may repeat the file's text.
-		throw new CrustError("PARSE", `Malformed config file: ${path}`).withCause(cause);
+		return new CrustError("PARSE", `Malformed config file: ${path}`).withCause(error);
 	}
-	if (typeof values !== "object" || values === null || Array.isArray(values)) {
-		throw new CrustError("PARSE", `Config file ${path} must hold an object of settings`);
+	if (code === "VALIDATION" && details?.issues !== undefined) {
+		const reasons = details.issues.map((issue) => issue.message).join("; ");
+		return new CrustError("VALIDATION", `Cannot save ${path}: ${reasons}`).withCause(error);
 	}
-	return values as FileValues;
-}
-
-/**
- * Replaces `path` with `text` in one step, so a failed write leaves the old file whole; the file
- * keeps its mode and its owner.
- */
-async function writeFile(path: string, text: string): Promise<void> {
-	const fs = process.getBuiltinModule("node:fs/promises");
-	await fs.mkdir(process.getBuiltinModule("node:path").dirname(path), { recursive: true });
-	const existing = await fs.stat(path).catch(() => undefined);
-	const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-	try {
-		await fs.writeFile(temporary, text, {
-			flag: "wx",
-			mode: existing === undefined ? undefined : existing.mode & 0o7777,
-		});
-		if (existing !== undefined) {
-			// An elevated save must not take a user's file away. Before the chmod: chown clears the
-			// setuid and setgid bits. Only root can give a file away, so only root's failure counts.
-			await fs.chown(temporary, existing.uid, existing.gid).catch((error: unknown) => {
-				if (process.getuid?.() === 0) throw error;
-			});
-			await fs.chmod(temporary, existing.mode & 0o7777);
-		}
-		await fs.rename(temporary, path);
-	} catch (error) {
-		await fs.rm(temporary, { force: true });
-		throw error;
-	}
+	return action === "read"
+		? new CrustError("PARSE", `Cannot read config file: ${path}`).withCause(error)
+		: error;
 }
 
 /** The nearest `file` from the working directory up. */
@@ -297,58 +279,106 @@ function shown(value: unknown, separator: string): string {
 }
 
 /**
- * A CLI's settings, each defined once: `defineConfig({ name, settings, project?, files?, command? })`.
- * A command takes a setting as a flag with `config.flag(key)`, and `config.extension` binds the
- * files' value into it when the run gives none, so the action reads the final value from `flags`:
- * argv or input, then the flag's `env`, then the project file, then the user's file, then
- * `default`. `get`, `list` and `set` read and save settings from anywhere.
+ * A CLI's settings, each defined once: `defineConfig({ name, user?, project?, both?, format?, files?, command? })`.
+ * The group says which file may hold a setting: the user's own, the project's, or both. A command
+ * takes a setting as a flag with `config.flag(key)`, and `config.extension` binds the files' value
+ * into it when the run gives none, so the action reads the final value from `flags`: argv or
+ * input, then the flag's `env`, then the project file, then the user's file, then `default`.
+ * `get`, `list` and `set` read and save settings from anywhere.
  */
 export function defineConfig<
-	const S extends ConfigSettings,
-	const P extends keyof S & string = never,
+	const U extends ConfigSettings = {},
+	const P extends ConfigSettings = {},
+	const B extends ConfigSettings = {},
 	const C extends boolean = false,
 >(
-	options: ConfigOptions<S, P> & {
-		// Same value brands as defineFlag (default within choices, synchronous parse), per setting.
-		readonly settings: {
-			readonly [K in keyof S]: LocalValueBrand<S[K]> & KnownPropertiesBrand<S[K]>;
-		} & ReservedNameBrand<S>;
+	options: ConfigOptions<U, P, B> & {
+		readonly user?: CheckedSettings<U>;
+		readonly project?: CheckedSettings<P>;
+		readonly both?: CheckedSettings<B>;
 		readonly command?: C;
 	},
-): Config<S, P, C extends true ? readonly [ConfigCommandDefinition] : []> {
-	const { name, settings, project } = options;
-	const fileOptions = options.files ?? {};
-	const parse = fileOptions.parse ?? JSON.parse;
-	const stringify =
-		fileOptions.stringify ??
-		((values: Record<string, unknown>) => `${JSON.stringify(values, null, 2)}\n`);
-	const projectName = fileOptions.project ?? `${name}.config.json`;
-	const userName = fileOptions.user ?? "config.json";
+	// A setting is in one group. Said by the result, not by a brand on `options`: a type there that
+	// names two groups stops TypeScript inferring a group that holds a `parse` function.
+): [InTwoGroups<U, P, B>] extends [never]
+	? Config<
+			U & P & B,
+			keyof (U & B) & string,
+			keyof (P & B) & string,
+			C extends true ? readonly [ConfigCommandDefinition] : []
+		>
+	: { readonly FIX_SETTING_IN_TWO_GROUPS: InTwoGroups<U, P, B> } {
+	const { name, format } = options;
+	const groups: Record<"user" | "project" | "both", ConfigSettings> = {
+		user: options.user ?? {},
+		project: options.project ?? {},
+		both: options.both ?? {},
+	};
+	// `config list` and help show them in this order.
+	const settings: ConfigSettings = { ...groups.both, ...groups.user, ...groups.project };
+	const fileExtension = format?.extension ?? "json";
+	const userName = `${options.files?.user ?? "config"}.${fileExtension}`;
+	const projectName = `${options.files?.project ?? `${name}.config`}.${fileExtension}`;
 	const keys = Object.keys(settings);
-	const isKey = (key: string) => Object.hasOwn(settings, key);
+	const inUser = (key: string) =>
+		Object.hasOwn(groups.user, key) || Object.hasOwn(groups.both, key);
+	const inProject = (key: string) =>
+		Object.hasOwn(groups.project, key) || Object.hasOwn(groups.both, key);
+	const userKeys = keys.filter(inUser);
+	const projectKeys = keys.filter(inProject);
+	// A file exists only when a group names it.
+	const hasUser = userKeys.length > 0;
+	const hasProject = projectKeys.length > 0;
 	// A flag's `config` is `<name>:<key>`, so two configs with a same-named setting stay apart.
 	const prefix = `${name}:`;
+	const isKey = (key: string) => Object.hasOwn(settings, key);
 	// The store loads when a command first reads the files, never at start-up.
 	const userPath = async () =>
 		process
 			.getBuiltinModule("node:path")
 			.join((await import("@crustjs/store")).configDir(name), userName);
+	const fields = Object.fromEntries(keys.map((key) => [key, ANY_VALUE]));
+	/** The store of the config file at `path`: it reads, locks and replaces the file. */
+	const storeAt = async (path: string) => {
+		const { createStore } = await import("@crustjs/store");
+		const { basename, dirname } = process.getBuiltinModule("node:path");
+		return createStore({
+			dirPath: dirname(path),
+			name: basename(path, `.${fileExtension}`),
+			// SAFETY: a setting's value is checked by core when it is converted, not by the store.
+			fields: fields as never,
+			format,
+		}) as unknown as { read(): Promise<FileValues>; patch(values: FileValues): Promise<unknown> };
+	};
+	/** The settings the file at `path` holds; a missing file holds none. */
+	const readValues = async (path: string): Promise<FileValues> => {
+		const values = await (await storeAt(path)).read().catch((error: unknown) => {
+			throw fileError(error, path, "read");
+		});
+		return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+	};
 
-	/** The files in the order they apply: the project file's allowed settings, then the user's file. */
+	// A warning is printed once in a run, however often the run reads the files.
+	const warned = new Set<string>();
+	/** The files in the order they apply: the project file, then the user's file. */
 	const readFiles = async (warn: (line: string) => void): Promise<ConfigFile[]> => {
 		const user = await userPath();
-		const found = project === undefined ? undefined : nearest(projectName);
 		const read: ConfigFile[] = [];
-		if (found !== undefined) {
-			const values = { ...(await readValues(found, parse)) };
+		/** A file's values without the settings only the `other` file may set. */
+		const add = async (path: string, may: (key: string) => boolean, other: string) => {
+			const values = { ...(await readValues(path)) };
 			for (const key of Object.keys(values)) {
-				if (!isKey(key) || project!.includes(key as P)) continue;
+				if (may(key)) continue;
 				delete values[key];
-				warn(`Warning: ${found} sets "${key}", which only ${user} may set; ignored.`);
+				const line = `Warning: ${path} sets "${key}", which only ${other} may set; ignored.`;
+				if (!warned.has(line)) warn(line);
+				warned.add(line);
 			}
-			read.push({ path: found, values });
-		}
-		read.push({ path: user, values: await readValues(user, parse) });
+			read.push({ path, values });
+		};
+		const found = hasProject ? nearest(projectName) : undefined;
+		if (found !== undefined) await add(found, inProject, user);
+		if (hasUser) await add(user, inUser, projectName);
 		return read;
 	};
 
@@ -407,50 +437,37 @@ export function defineConfig<
 		values: Record<string, unknown>,
 		projectPath: string | undefined,
 	): Promise<string> => {
-		const inProject = projectPath !== undefined;
-		if (inProject) {
-			const refused = Object.keys(values).filter((key) => !(project ?? []).includes(key as P));
-			if (refused.length > 0) {
-				throw new CrustError(
-					"VALIDATION",
-					`${projectName} cannot set ${refused.map((key) => `"${key}"`).join(", ")}; it may set only: ${(project ?? []).join(", ")}`,
-				);
-			}
+		const toProject = projectPath !== undefined;
+		const refused = Object.keys(values).filter((key) => !(toProject ? inProject : inUser)(key));
+		if (refused.length > 0) {
+			throw new CrustError(
+				"VALIDATION",
+				`${toProject ? projectName : userName} cannot set ${refused.map((key) => `"${key}"`).join(", ")}; it may set only: ${(toProject ? projectKeys : userKeys).join(", ")}`,
+			);
 		}
 		const fs = process.getBuiltinModule("node:fs/promises");
-		// A linked user file, such as one from a dotfiles repository, stays a link; a project file
-		// arrives with a clone, and saving in it would copy its target's keys into the working tree.
-		const linkedUserPath = async (): Promise<string> => {
+		let path = projectPath;
+		if (path === undefined) {
+			// A linked user file, such as one from a dotfiles repository, stays a link: the file it
+			// points to is saved, when it has the format's extension as the store's file must.
 			const user = await userPath();
-			return fs.realpath(user).catch(() => user);
-		};
-		const path = projectPath ?? (await linkedUserPath());
-		if (inProject && (await fs.lstat(path).catch(() => undefined))?.isSymbolicLink()) {
+			const linked = await fs.realpath(user).catch(() => user);
+			path = linked.endsWith(`.${fileExtension}`) ? linked : user;
+		} else if ((await fs.lstat(path).catch(() => undefined))?.isSymbolicLink()) {
+			// A project file arrives with a clone, and saving in it would copy its target's keys into
+			// the working tree.
 			throw new CrustError(
 				"VALIDATION",
 				`${path} is a symbolic link; replace it with a file to save in it`,
 			);
 		}
-		// The store's lock keeps the key another config or process saves at the same time.
-		const { withFileLock } = await import("@crustjs/store");
-		return withFileLock(
-			path,
-			async () => {
-				const next: Record<string, unknown> = { ...(await readValues(path, parse)) };
-				for (const [key, value] of Object.entries(values)) {
-					if (value === undefined) delete next[key];
-					else next[key] = value;
-				}
-				const text = stringify(next);
-				// A larger file could not be read again, not even to remove the setting.
-				if (Buffer.byteLength(text) > MAX_FILE_BYTES) {
-					throw new CrustError("VALIDATION", `${path} would exceed 16 MiB; nothing was saved`);
-				}
-				await writeFile(path, text);
-				return path;
-			},
-			{ operation: "write" },
-		);
+		// The store keeps the file's other keys, holds its lock, so another config or process saving
+		// at the same time keeps its key, and replaces the file in one step.
+		const saved = path;
+		await (await storeAt(saved)).patch(values).catch((error: unknown) => {
+			throw fileError(error, saved, "save");
+		});
+		return saved;
 	};
 	// One save of this config at a time, in call order; the lock alone would let a later call go first.
 	let saving: Promise<unknown> = Promise.resolve();
@@ -459,8 +476,8 @@ export function defineConfig<
 		saving = next.catch(() => {});
 		return next;
 	};
-	const save = (values: Record<string, unknown>, inProject: boolean): Promise<string> => {
-		const projectPath = inProject ? projectFile() : undefined;
+	const save = (values: Record<string, unknown>, toProject: boolean): Promise<string> => {
+		const projectPath = toProject ? projectFile() : undefined;
 		return queued(() => saveNow(values, projectPath));
 	};
 
@@ -490,17 +507,20 @@ export function defineConfig<
 	// invalid environment value.
 	const failures = new WeakMap<object, unknown>();
 	const where = [
-		...(project === undefined
-			? []
-			: [
-					`${projectName} (the nearest from the working directory up; only ${project.join(", ") || "no settings"})`,
-				]),
-		`${userName} in the configuration directory of ${name}`,
+		...(hasProject ? [`${projectName} (the nearest from the working directory up)`] : []),
+		...(hasUser ? [`${userName} in the configuration directory of ${name}`] : []),
 	];
+	/** The one file that may hold `key`, when the config has two. */
+	const only = (key: string) =>
+		!hasUser || !hasProject || (inUser(key) && inProject(key))
+			? ""
+			: ` (${inUser(key) ? userName : projectName} only)`;
 	const width = Math.max(0, ...keys.map((key) => key.length));
 	const extension = defineExtension(defineExtensionId(`crust:config:${name}`))
 		.owns("config")
 		.setup(async (ctx) => {
+			// A new run warns again.
+			warned.clear();
 			try {
 				await bindFiles(ctx);
 			} catch (error) {
@@ -520,7 +540,7 @@ export function defineConfig<
 						.filter((key) => !settings[key]!.hidden)
 						.map((key) => {
 							const def = settings[key]!;
-							return `${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}`.trimEnd();
+							return `${key.padEnd(width)}  ${formatDescription(def.description, def.default, def.choices, undefined, def.env)}${only(key)}`.trimEnd();
 						}),
 				].join("\n"),
 			},
@@ -535,12 +555,22 @@ export function defineConfig<
 			required: true,
 			description: "A setting",
 		} as const;
-		// `--project` exists only with a project file; the actions read it as optional.
-		const inProject: {} =
-			project === undefined
-				? {}
-				: { project: { type: "boolean", description: `Use ${projectName}, not your own file` } };
-		const toProject = (flags: object) => (flags as { project?: boolean }).project === true;
+		// `--project` exists only when there are two files to choose from; the actions read it as
+		// optional, and a config with one file saves in it.
+		const inProjectFlag: {} =
+			hasUser && hasProject
+				? { project: { type: "boolean", description: `Use ${projectName}, not your own file` } }
+				: {};
+		const toProject = (setting: string, flags: object) => {
+			const project = !hasUser || (flags as { project?: boolean }).project === true;
+			if (!project && !inUser(setting)) {
+				throw new CrustError(
+					"VALIDATION",
+					`"${setting}" is a setting of ${projectName}: pass --project`,
+				);
+			}
+			return project;
+		};
 		const origin = (source: ConfigSource) =>
 			source.kind === "env"
 				? `$${source.name}`
@@ -578,22 +608,22 @@ export function defineConfig<
 				.command("set", { description: "Save a setting" }, (set) =>
 					set
 						.args(key, { name: "value", type: "string", required: true, description: "Its value" })
-						.flags(inProject)
+						.flags(inProjectFlag)
 						.action(async ({ args, flags, stdout }) => {
 							const def = settings[args.key]!;
 							const value = await convert(def, { [TEXT]: args.value }, TEXT, `"${args.key}"`);
 							// A `parse` setting keeps what the user typed, as a file holds it.
 							const saved = def.parse === undefined ? value : args.value;
-							const path = await save({ [args.key]: saved }, toProject(flags));
+							const path = await save({ [args.key]: saved }, toProject(args.key, flags));
 							stdout(`Saved ${args.key} in ${path}`);
 						}),
 				)
 				.command("unset", { description: "Remove a setting from a file" }, (unset) =>
 					unset
 						.args(key)
-						.flags(inProject)
+						.flags(inProjectFlag)
 						.action(async ({ args, flags, stdout }) => {
-							const path = await save({ [args.key]: undefined }, toProject(flags));
+							const path = await save({ [args.key]: undefined }, toProject(args.key, flags));
 							stdout(`Removed ${args.key} from ${path}`);
 						}),
 				),
@@ -609,7 +639,7 @@ export function defineConfig<
 				const variables = [def.env ?? []].flat().map((variable) => `$${variable}`);
 				throw new CrustError(
 					"VALIDATION",
-					`Missing setting "${key}" of ${name}: set ${[...variables, `"${key}" in ${await userPath()}`].join(" or ")}.`,
+					`Missing setting "${key}" of ${name}: set ${[...variables, `"${key}" in ${inUser(key) ? await userPath() : projectName}`].join(" or ")}.`,
 				);
 			}
 			return value;
@@ -641,7 +671,13 @@ export function defineConfig<
 			});
 		},
 		extension: options.command ? extension.add(configCommand()) : extension,
-		jsonSchema: () => jsonSchema(name, settings),
+		jsonSchema: (target?: { readonly project: true }) =>
+			jsonSchema(
+				name,
+				Object.fromEntries(
+					(target?.project === true ? projectKeys : userKeys).map((key) => [key, settings[key]!]),
+				),
+			),
 	};
 	// SAFETY: each member matches `Config`'s; the types of keys and values are erased here.
 	return Object.freeze(config) as never;

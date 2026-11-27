@@ -20,7 +20,7 @@ npm install @crustjs/config
 
 <include lang="ts">../../../examples/modules/config.ts#app</include>
 
-`defineConfig({ name, settings, project?, files?, command? })` returns:
+`defineConfig({ name, user?, project?, both?, format?, files?, command? })` takes the settings in three groups, by the file that may hold them, and returns:
 
 - `flag(key)`: the flag definition for a setting, to put in a command's `.flags({...})`.
 - `extension`: binds the files' values into those flags (`.extend(config.extension)`).
@@ -33,8 +33,8 @@ A flag from `config.flag()` is the first of:
 
 1. the command line (`--region`), or its key in [`--input`](/docs/modules/extensions/json-input) or in typed [`run()`](/docs/api/crust#runpath-input-options) input;
 2. its environment variable (`$ACME_ORG`);
-3. the project file, `acme.config.json`, the nearest one from the working directory up, for the settings in `project`;
-4. the user's file, `config.json` in the [configuration directory](/docs/modules/store#storage-paths) of the app (`~/.config/acme` on Linux and macOS, `%APPDATA%\acme` on Windows);
+3. the project file, `acme.config.json`, the nearest one from the working directory up, for a setting in `project` or `both`;
+4. the user's file, `config.json` in the [configuration directory](/docs/modules/store#storage-paths) of the app (`~/.config/acme` on Linux and macOS, `%APPDATA%\acme` on Windows), for a setting in `user` or `both`;
 5. its `default`.
 
 ```sh
@@ -68,16 +68,23 @@ A setting is the [flag definition](/docs/api/types#flagdef) of a string, number 
 - A command that uses a flag from `config.flag()` needs `config.extension` in the app. Without it, the `config` key is a `DEFINITION` error (`unowned-key`), from source and in `crust build`.
 - A setting no command takes as a flag is still read by `get()`, `list()` and the `config` command.
 
-## The files
+## The groups
 
-- The user's file is always read. Its name is `config.json` in `configDir(name)`.
-- `project: [...]` turns on the project file, `<name>.config.json`, and lists the settings it may set, checked against `settings` at compile time. The project file is the first one found in the working directory, then in each parent up to the root.
-- `files: { user, project }` changes the names: the user's file is joined to the configuration directory, and the project file is searched for as written.
-- A missing file holds no values, and reading creates nothing. A value that converts to nothing, an empty list or empty text, is no value either: the next file, then the default, applies. Keys that are not settings, such as `"$schema"`, are ignored.
+The group a setting is in says which file may hold it:
+
+| Group     | The user's file | The project file | For                                                               |
+| --------- | --------------- | ---------------- | ----------------------------------------------------------------- |
+| `both`    | Yes             | Yes, and it wins | What a person sets once and a repository may choose for itself    |
+| `user`    | Yes             | No               | What a repository must not choose, such as a command the app runs |
+| `project` | No              | Yes              | What describes the project itself, such as its entry file or name |
+
+- A setting is in one group: its key in two is a compile error where the config is used (`FIX_SETTING_IN_TWO_GROUPS`).
+- A file exists only when a group names it. A config with only `user` settings never looks for a project file, and one with only `project` settings never reads the user's file.
+- A setting found in a file that may not hold it is ignored with a warning naming the key and both files, once in a run.
 
 ### Why the project file is limited
 
-A project file arrives with a cloned repository, so whoever can commit to it sets its values for everyone who runs your CLI there. A setting the project file is not allowed to set is ignored with a warning naming the key and both files:
+A project file arrives with a cloned repository, so whoever can commit to it sets its values for everyone who runs your CLI there:
 
 ```sh
 $ cat ../acme.config.json
@@ -87,11 +94,18 @@ Warning: /home/me/repo/acme.config.json sets "pager", which only /home/me/.confi
 deploying acme-corp to eu
 ```
 
-List only settings that are safe for a repository to choose. Keep out anything run as a command (`pager`, `editor`, `browser`), anything that says where data or credentials are sent, and secrets. Secrets do not belong in settings at all: take them from the environment or a [login](/docs/modules/auth).
+Put in `both` or `project` only what is safe for a repository to choose. Keep in `user` anything run as a command (`pager`, `editor`, `browser`) and anything that says where data or credentials are sent. Secrets do not belong in settings at all: take them from the environment or a [login](/docs/modules/auth).
+
+## The files
+
+- The user's file is `config.json` in `configDir(name)`. The project file is `<name>.config.json`, the first one found in the working directory, then in each parent up to the root.
+- `files: { user, project }` changes the names, written without their extension: `files: { user: "settings", project: "acme" }` reads `settings.json` and `acme.json`.
+- A missing file holds no values, and reading creates nothing. A value that converts to nothing, an empty list or empty text, is no value either: the next file, then the default, applies. Keys that are not settings, such as `"$schema"`, are ignored.
+- The files are read and saved through [`@crustjs/store`](/docs/modules/store), loaded when a command first needs a file: a regular file of at most 16 MiB, replaced in one step under the store's lock.
 
 ### Formats
 
-JSON is the default. `files: { parse, stringify }` reads and writes another format; Crust adds no parser of its own. Both go together, and the names usually change with them:
+JSON is the default. `format` reads and writes another format with a parser package of your choice, as a store's [`format`](/docs/modules/store#formats) does; Crust adds no parser of its own. Its `extension` ends both files' names:
 
 ```ts
 import { defineConfig } from "@crustjs/config";
@@ -99,9 +113,8 @@ import { parse, stringify } from "smol-toml";
 
 export const config = defineConfig({
   name: "acme",
-  settings: { region: { type: "string", choices: ["us", "eu"], default: "us" } },
-  project: ["region"],
-  files: { user: "config.toml", project: "acme.toml", parse, stringify },
+  both: { region: { type: "string", choices: ["us", "eu"], default: "us" } },
+  format: { extension: "toml", parse, stringify }, // config.toml and acme.config.toml
 });
 ```
 
@@ -118,7 +131,7 @@ $ acme deploy                                   # acme.config.json is not JSON
 Error: Malformed config file: /home/me/repo/acme.config.json
 ```
 
-- A file that cannot be read, such as a folder of that name, a device, a file above 16 MiB or one without read permission, fails with `Cannot read config file: <path>` and exit code 2.
+- A file that cannot be read, such as a folder of that name, a device, a file above 16 MiB or one without read permission, fails with `Cannot read config file: <path>` and exit code 2. One that does not parse, or does not hold an object, fails with `Malformed config file: <path>`.
 - A value that does not convert fails as an invalid environment value does, naming the setting and the file, with exit code 2. The built-in conversions never repeat the value; a setting's own `parse` error is shown as on the command line.
 - A file is read only for the settings a command takes and its run did not give: `acme serve --listen 8080` works whatever the files hold.
 - `--help` works whatever the files hold.
@@ -129,9 +142,9 @@ Error: Malformed config file: /home/me/repo/acme.config.json
 
 - `await config.get(key)` reads a setting as a flag would get it, without the command line: its variable, the project file, the user's file, its default. It throws a `VALIDATION` `CrustError` for a `required` setting that none of them gives.
 - `await config.list()` returns every setting with its value and source: `{ key, value, source }`, where `source` is `{ kind: "env", name }`, `{ kind: "file", path }`, `{ kind: "default" }` or `{ kind: "unset" }`.
-- `await config.set(values)` saves settings in the user's file; `config.set(values, { project: true })` saves them in the nearest project file, or a new one in the working directory. A value is what a file holds (the text of a `parse` setting), and `undefined` removes a setting. The keys and values are checked at compile time, a value the setting's rules refuse (`min`, `choices`, `parse`) throws before anything is saved, and the project form takes only the keys in `project`.
-- Saving keeps the other keys and the mode of the file, creates the folder when needed, and replaces the file in one step; a save that would make the file larger than 16 MiB is refused. Saves of one config run one at a time, in the order they were called, and every save holds the store's lock file `<file>.lock` next to the file (see [`withFileLock`](/docs/modules/store#concurrency)), so another config or process saving at the same time keeps its keys too. A linked user file stays a link; saving in a linked project file is refused.
-- `get()` and `list()` print the project file's warnings on the process's stderr.
+- `await config.set(values)` saves settings in the user's file; `config.set(values, { project: true })` saves them in the nearest project file, or a new one in the working directory. A value is what a file holds (the text of a `parse` setting), and `undefined` removes a setting. The keys and values are checked at compile time: each form takes only the settings its file may hold, so `config.set({ entry })` without `{ project: true }` does not compile. A value the setting's rules refuse (`min`, `choices`, `parse`) throws before anything is saved.
+- Saving keeps the other keys and the mode of the file, creates the folder when needed, and replaces the file in one step; a save that would make the file larger than 16 MiB is refused (`Cannot save <path>: the file would be larger than 16 MiB`). Saves of one config run one at a time, in the order they were called, and every save holds the store's lock file `<file>.lock` next to the file (see [Concurrency](/docs/modules/store#concurrency)), so another config or process saving at the same time keeps its keys too. A linked user file stays a link when the file it points to has the same extension; saving in a linked project file is refused.
+- `get()` and `list()` print a file's warnings on the process's stderr.
 
 ## The `config` command
 
@@ -143,20 +156,26 @@ Saved org in /home/me/.config/acme/config.json
 $ acme config set region mars
 Error: Invalid value for "region". Expected one of: us, eu
 $ acme config set --project pager less
-Error: acme.config.json cannot set "pager"; it may set only: org, region
+Error: acme.config.json cannot set "pager"; it may set only: org, region, entry
+$ acme config set entry src/main.ts
+Error: "entry" is a setting of acme.config.json: pass --project
+$ acme config set --project entry src/main.ts
+Saved entry in /home/me/repo/acme.config.json
 $ acme config get region
 eu
 $ acme config list
-org     acme-corp  /home/me/.config/acme/config.json
-region  eu         /home/me/repo/acme.config.json
-port               unset
-pager              unset
+org     acme-corp    /home/me/.config/acme/config.json
+region  eu           /home/me/repo/acme.config.json
+port                 unset
+pager                unset
+entry   src/main.ts  /home/me/repo/acme.config.json
 $ acme config unset org
 Removed org from /home/me/.config/acme/config.json
 ```
 
 - `set` converts the text as the setting's environment variable would and saves the value, or the text for a `parse` setting.
-- `--project`, on `set` and `unset` when the config has a project file, writes the project file, and refuses settings outside `project`.
+- `--project`, on `set` and `unset` when the config has both files, writes the project file, and refuses a `user` setting. Without it, a `project` setting is refused with a message naming the flag. A config with one file saves in it and has no such flag.
+- `list` shows the `both` settings first, then `user`, then `project`.
 - `get` prints nothing for a setting with no value, and a list one item per line.
 - Typed `run()` does not know the subcommands of `config`: run them through argv, as with `captureExecute(app, ["config", "list"])`.
 - Without `command: true`, write the commands your CLI needs with `get()`, `list()` and `set()`.
@@ -174,7 +193,7 @@ eu
 
 ## JSON Schema
 
-`config.jsonSchema()` returns the JSON Schema (draft 2020-12) of a JSON config file: one property per setting, as the user writes it (a `choices` setting is an `enum`, a `multiple` one an array, a `parse` one a string, `min` and `max` as `minimum` and `maximum`), plus `"$schema"`, and no other property. Point a file's `"$schema"` at it for completion and checks in editors. To write it at `crust build`, add a small [build Extension](/docs/guide/extensions):
+`config.jsonSchema()` returns the JSON Schema (draft 2020-12) of the user's JSON config file, and `config.jsonSchema({ project: true })` that of the project file: one property per setting the file may hold, as the user writes it (a `choices` setting is an `enum`, a `multiple` one an array, a `parse` one a string, `min` and `max` as `minimum` and `maximum`), plus `"$schema"`, and no other property. Point a file's `"$schema"` at it for completion and checks in editors. To write it at `crust build`, add a small [build Extension](/docs/guide/extensions):
 
 <include lang="ts">../../../examples/modules/config.ts#schema</include>
 
@@ -192,11 +211,12 @@ A [`bind`](/docs/modules/openapi#overrides) reads a setting with `config.get()`:
 
 ```text
 Configuration:
-  A flag for a setting that the run does not give takes its environment variable, then acme.config.json (the nearest from the working directory up; only org, region), then config.json in the configuration directory of acme, then its default.
+  A flag for a setting that the run does not give takes its environment variable, then acme.config.json (the nearest from the working directory up), then config.json in the configuration directory of acme, then its default.
   org     Organization [env: ACME_ORG]
   region  Region [default: "us"] [choices: us, eu]
-  port    Port
-  pager   Pager for long output
+  port    Port (config.json only)
+  pager   Pager for long output (config.json only)
+  entry   The project's entry file (acme.config.json only)
 ```
 
 ## Testing

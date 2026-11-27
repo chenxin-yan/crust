@@ -4,15 +4,21 @@ import { defineCommand } from "@crustjs/core";
 
 export const config = defineConfig({
 	name: "acme",
-	// Each setting is a flag definition, as in a command's .flags({...}).
-	settings: {
+	// Each setting is a flag definition, as in a command's .flags({...}). Its group says which
+	// file may hold it. `both`: the user's own file and a repository's acme.config.json.
+	both: {
 		org: { type: "string", description: "Organization", env: "ACME_ORG", required: true },
 		region: { type: "string", choices: ["us", "eu"], default: "us", description: "Region" },
+	},
+	// Only the user's own file: nothing a cloned repository should choose.
+	user: {
 		port: { type: "number", description: "Port" },
 		pager: { type: "string", description: "Pager for long output" },
 	},
-	// A repository's acme.config.json may set only these.
-	project: ["org", "region"],
+	// Only acme.config.json: what describes the project itself.
+	project: {
+		entry: { type: "string", description: "The project's entry file" },
+	},
 	// Adds `acme config get|set|unset|list`.
 	command: true,
 });

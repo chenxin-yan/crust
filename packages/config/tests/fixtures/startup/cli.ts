@@ -4,8 +4,7 @@ import { defineConfig } from "../../../src/index.ts";
 
 const config = defineConfig({
 	name: "acme",
-	settings: { org: { type: "string", env: "ACME_ORG" } },
-	project: ["org"],
+	both: { org: { type: "string", env: "ACME_ORG" } },
 });
 
 await new Crust("acme")
