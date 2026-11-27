@@ -61,7 +61,7 @@ describe("completion", () => {
 				"  # zsh, in ~/.zshrc after compinit",
 				"  source <(mycli shell-completion zsh)",
 				"  # fish, in ~/.config/fish/config.fish",
-				"  mycli shell-completion fish | source",
+				"  status --is-interactive; and mycli shell-completion fish | source",
 				"  # PowerShell, in $PROFILE",
 				"  mycli shell-completion powershell | Out-String | Invoke-Expression",
 			].join("\n"),

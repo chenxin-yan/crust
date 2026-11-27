@@ -280,8 +280,9 @@ const completionFactory: ExtensionFactory<
 							`source <(${run} bash)`,
 							"# zsh, in ~/.zshrc after compinit",
 							`source <(${run} zsh)`,
+							// fish reads config.fish for `fish -c` too; only an interactive shell completes.
 							"# fish, in ~/.config/fish/config.fish",
-							`${run} fish | source`,
+							`status --is-interactive; and ${run} fish | source`,
 							"# PowerShell, in $PROFILE",
 							`${run} powershell | Out-String | Invoke-Expression`,
 						].join("\n"),
