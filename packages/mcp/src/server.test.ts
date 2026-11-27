@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { completion } from "@crustjs/completion";
 import {
 	type AnyCrust,
 	Crust,
@@ -12,7 +13,7 @@ import {
 	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
-import { completion, json, nextSteps } from "@crustjs/extensions";
+import { json, nextSteps } from "@crustjs/extensions";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 

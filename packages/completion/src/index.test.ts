@@ -3,19 +3,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
+import { help, json } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { runBuildHooks } from "../../../crust/tests/build-hooks.ts";
+import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import {
 	completion,
 	type CompletionOptions,
 	type CompletionRenderOptions,
 	renderBashCompletion,
 	renderFishCompletion,
+	renderPowerShellCompletion,
 	renderZshCompletion,
-} from "../index.ts";
-import { json } from "../json.ts";
+} from "./index.ts";
 
 function buildCli(options?: CompletionOptions) {
 	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
@@ -47,6 +48,29 @@ function buildCli(options?: CompletionOptions) {
 }
 
 describe("completion", () => {
+	it("shows the line to add for each shell in its help only, with the app's own names", async () => {
+		const app = new Crust("mycli", { version: "1.0.0" })
+			.extend(help(), completion({ command: "shell-completion" }))
+			.action(() => {});
+		const { stdout } = await captureExecute(app, ["shell-completion", "--help"]);
+		expect(stdout).toContain(
+			[
+				"Setup:",
+				"  # bash, in ~/.bashrc",
+				"  source <(mycli shell-completion bash)",
+				"  # zsh, in ~/.zshrc after compinit",
+				"  source <(mycli shell-completion zsh)",
+				"  # fish, in ~/.config/fish/config.fish",
+				"  status --is-interactive; and mycli shell-completion fish | source",
+				"  # PowerShell, in $PROFILE",
+				"  mycli shell-completion powershell | Out-String | Invoke-Expression",
+			].join("\n"),
+		);
+		// A man page and generated skills reflow a body, which would run the lines together.
+		const [section] = (await app.snapshot()).subCommands["shell-completion"]!.meta.sections ?? [];
+		expect(section?.only).toEqual(["crust:help"]);
+	});
+
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli", { version: "1.0.0" })
 			.extend(completion({ command: "shell-completion" }))
@@ -106,10 +130,11 @@ describe("completion build hook", () => {
 			new Crust("mycli", { version: "1.0.0" }).extend(completion({ command: "completions" })),
 		);
 
-		const [bash, zsh, fish] = files.values();
+		const [bash, zsh, fish, powershell] = files.values();
 		expect(bash).toContain("regenerate with: mycli completions bash\n");
 		expect(zsh).toContain("regenerate with: mycli completions zsh\n");
 		expect(fish).toContain("regenerate with: mycli completions fish\n");
+		expect(powershell).toContain("regenerate with: mycli completions powershell\n");
 	});
 
 	it("pure renderers match build and runtime files byte-for-byte", async () => {
@@ -125,6 +150,7 @@ describe("completion build hook", () => {
 				["mycli", renderBashCompletion],
 				["_mycli", renderZshCompletion],
 				["mycli.fish", renderFishCompletion],
+				["mycli.ps1", renderPowerShellCompletion],
 			] as const) {
 				const script = await render(snapshot, options);
 				expect(files.get(`completions/${filename}`)).toBe(script);
@@ -149,10 +175,113 @@ describe("completion renderers", () => {
 	it("validates names, requires a version, and sanitizes header text", async () => {
 		const snapshot = await new Crust("mycli").snapshot();
 		const unsafe = await new Crust("../pwn").snapshot();
-		for (const render of [renderBashCompletion, renderZshCompletion, renderFishCompletion]) {
+		for (const render of [
+			renderBashCompletion,
+			renderZshCompletion,
+			renderFishCompletion,
+			renderPowerShellCompletion,
+		]) {
 			await expect(render(unsafe, { version: "1" })).rejects.toThrow(/invalid root command name/);
 			await expect(render(snapshot)).rejects.toThrow("completion extension requires a version");
 			expect(await render(snapshot, { version: "1\ninjected" })).not.toContain("\ninjected");
 		}
+	});
+});
+
+describe("complete", () => {
+	const regions = ["us-east", "us-west", "eu-central"];
+	const app = new Crust("mycli", { version: "1.0.0" }).extend(completion()).add(
+		defineCommand("deploy", (cmd) =>
+			cmd
+				.args({
+					name: "service",
+					type: "string",
+					complete: async (typed) => [`${typed}-api`, `${typed}-web`],
+				})
+				.flags({
+					region: {
+						type: "string",
+						complete: (typed) => regions.filter((region) => region.startsWith(typed)),
+					},
+					scope: {
+						type: "exclusive",
+						flags: {
+							team: { type: "string", complete: () => ["core", "line\nbreak", "tab\there"] },
+						},
+					},
+				})
+				.action(() => {}),
+		),
+	);
+
+	it("prints a flag's values for the word, one per line", async () => {
+		expect(await captureExecute(app, ["__complete", "--", "mycli deploy --region", "us"])).toEqual({
+			stdout: "us-east\nus-west\n",
+			stderr: "",
+			exitCode: 0,
+		});
+	});
+
+	it("reads a missing word as empty, as a shell that drops an empty argument sends it", async () => {
+		const { stdout } = await captureExecute(app, ["__complete", "--", "mycli deploy --region"]);
+		expect(stdout).toBe(`${regions.join("\n")}\n`);
+	});
+
+	it("awaits an argument's values and reaches an exclusive group's member", async () => {
+		expect(
+			(await captureExecute(app, ["__complete", "--", "mycli deploy service", "x"])).stdout,
+		).toBe("x-api\nx-web\n");
+		// A value with a line break or a tab cannot be read back as one value, so it is left out.
+		expect((await captureExecute(app, ["__complete", "--", "mycli deploy --team"])).stdout).toBe(
+			"core\n",
+		);
+	});
+
+	it("prints the choices of a definition whose choices the scripts cannot hold", async () => {
+		const plans = new Crust("mycli", { version: "1.0.0" })
+			.extend(completion())
+			.flags({
+				plan: { type: "string", choices: ["free tier", "pro"] },
+				size: { type: "string", choices: ["s", "m"] },
+				scope: { type: "exclusive", flags: { team: { type: "string", choices: ["a b"] } } },
+			})
+			.args({ name: "target", type: "string", choices: ["-1", "$(x)"] })
+			.action(() => {});
+		const values = async (address: string) =>
+			(await captureExecute(plans, ["__complete", "--", address, "f"])).stdout;
+		// Every choice: the shell keeps those that start with the word.
+		expect(await values("mycli --plan")).toBe("free tier\npro\n");
+		expect(await values("mycli --team")).toBe("a b\n");
+		expect(await values("mycli target")).toBe("-1\n$(x)\n");
+		// Choices the scripts hold are not asked for.
+		expect(await values("mycli --size")).toBe("");
+	});
+
+	it("prints nothing for an address without a complete function", async () => {
+		for (const address of [
+			"mycli deploy --scope",
+			"mycli nope --region",
+			"mycli service",
+			"mycli __proto__ service",
+			"mycli constructor service",
+		]) {
+			expect(await captureExecute(app, ["__complete", "--", address, "x"])).toEqual({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			});
+		}
+	});
+
+	it("keeps __complete out of listings", async () => {
+		const root = await app.snapshot();
+		expect(root.subCommands.__complete?.meta.hidden).toBe(true);
+	});
+
+	it("owns the key: without completion(), a complete function is an unowned key", async () => {
+		const bare = new Crust("mycli").flags({ region: { type: "string", complete: () => [] } });
+		await expect(bare.snapshot()).rejects.toThrow(
+			/sets "complete", which no installed Extension owns/,
+		);
 	});
 });

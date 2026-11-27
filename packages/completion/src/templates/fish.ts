@@ -2,13 +2,14 @@ import { fishSingleQuote, toShellIdent } from "../escape.ts";
 import type { CompletionCommand } from "../spec.ts";
 
 /**
- * Pure-static fish completion script renderer.
+ * Static fish completion script renderer.
  *
  * Strategy: emit declarative `complete -c <bin>` rules — one per
  * subcommand candidate, one per flag of every reachable command. Fish
  * accumulates rules into an in-memory table at `source` time and consults
- * them on every TAB; there's no entry-point function, no subprocess, and
- * no shell state to manage.
+ * them on every TAB; there's no entry-point function and no shell state to
+ * manage, and the only subprocess is `<bin> __complete` for a `complete`
+ * function's values.
  *
  * **Subcommand routing.** We emit a single routing helper per script —
  * `__<ident>_path_at_arg` — that walks `commandline -opc` left-to-right,
@@ -88,6 +89,16 @@ function renderRule(binName: string, parts: RuleParts): string {
 		segments.push(`-d ${fishSingleQuote(parts.description)}`);
 	}
 	return segments.join(" ");
+}
+
+/**
+ * The fish command substitution that prints a `complete` function's values for `word`
+ * (fish code). Fish drops an empty substitution, so `__complete` reads a missing word as
+ * empty; the call's errors stay off the terminal. The address holds validated names
+ * joined with spaces, so double quotes keep it one word.
+ */
+function completeCall(binName: string, address: string, word: string): string {
+	return `(command ${fishSingleQuote(binName)} __complete -- "${address}" ${word} 2>/dev/null)`;
 }
 
 /**
@@ -180,12 +191,25 @@ function emitRules(
 		const desc = flag.description ?? "";
 
 		// Emit a single value-taking rule for `flag`. Branches:
+		//   - a `complete` function         → `<bin> __complete`'s lines
 		//   - choices                       → one rule per literal candidate
 		//   - valueCompletion === "files"   → require parameter + `(__fish_complete_path)`
 		//   - otherwise (url/json/free-form) → require parameter only; the
 		//                                      script's leading `complete -c <bin> -f`
 		//                                      keeps file completion off
 		const emitValueRule = (rule: RuleParts) => {
+			if (flag.complete !== undefined) {
+				// The current token of `--name=value` holds the flag too.
+				const word = "(commandline -ct | string replace -r -- '^--[^=]*=' '')";
+				out.push(
+					renderRule(binName, {
+						...rule,
+						exclusive: true,
+						arguments: fishSingleQuote(completeCall(binName, flag.complete, word)),
+					}),
+				);
+				return;
+			}
 			if (flag.choices !== undefined) {
 				emitChoiceFlag(rule, flag.choices);
 				return;
@@ -242,6 +266,17 @@ function emitRules(
 			arg.variadic === "afterDoubleDash"
 				? ">*0"
 				: `${split ? "<" : lastVariadic === "passthrough" ? "=" : ""}${arg.variadic ? "*" : ""}${idx}`;
+		if (arg.complete !== undefined) {
+			out.push(
+				renderRule(binName, {
+					condition: posPredicate(ident, path, current, posSpec),
+					arguments: fishSingleQuote(completeCall(binName, arg.complete, "(commandline -ct)")),
+					description: arg.description ?? "",
+					noFiles: true,
+				}),
+			);
+			return;
+		}
 		if (arg.choices !== undefined) {
 			const posCondition = posPredicate(ident, path, current, posSpec);
 			for (const choice of arg.choices) {

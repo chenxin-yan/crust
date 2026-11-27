@@ -2,7 +2,7 @@
 title: Extensions
 ---
 
-`@crustjs/extensions` exports the official Extensions, plus standalone renderers for help, completion, and the `--llms` index.
+`@crustjs/extensions` exports the official Extensions that own no definition keys, plus standalone renderers for help and the `--llms` index. Shell completion is its own package, [`@crustjs/completion`](/docs/modules/completion).
 
 ## Install
 
@@ -23,17 +23,13 @@ Register Extensions on the root builder, in any order: the built-ins behave the 
 
 ## Exports
 
-A curated list of the runtime exports; the [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/extensions/src/index.ts) also exports each option type. Registering an Extension adds little startup cost: renderers, completion scripts, update checks, and typo suggestions load the first time they run.
+A curated list of the runtime exports; the [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/extensions/src/index.ts) also exports each option type. Registering an Extension adds little startup cost: renderers, update checks, and typo suggestions load the first time they run.
 
 | Export                                                                        | Contribution                                          |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
 | [`help(options?)`](/docs/modules/extensions/help)                             | Recursive `--help` / `-h` flag and help rendering     |
 | [`renderHelp(command, path?, options?)`](/docs/modules/extensions/help)       | Resolve help text for a Command Snapshot              |
 | [`version(value?, options?)`](/docs/modules/extensions/version)               | Root-only `--version` / `-v` flag (`-V` or none)      |
-| [`completion(options?)`](/docs/modules/extensions/completion)                 | Shell completion command and build artifacts          |
-| [`renderBashCompletion(root, options?)`](/docs/modules/extensions/completion) | Resolve bash completion for a Command Snapshot        |
-| [`renderZshCompletion(root, options?)`](/docs/modules/extensions/completion)  | Resolve zsh completion for a Command Snapshot         |
-| [`renderFishCompletion(root, options?)`](/docs/modules/extensions/completion) | Resolve fish completion for a Command Snapshot        |
 | [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)               | Suggestions for unknown commands and flags            |
 | [`noColor()`](/docs/modules/extensions/no-color)                              | Recursive `--color` / `--no-color` flag               |
 | [`updateNotifier(options)`](/docs/modules/extensions/update-notifier)         | Post-action npm update notice                         |

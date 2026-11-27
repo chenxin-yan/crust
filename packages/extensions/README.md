@@ -1,6 +1,6 @@
 # @crustjs/extensions
 
-Official Crust Extensions for help, version, completion, typo hints, color, and updates
+Official Crust Extensions for help, version, typo hints, color, and updates
 
 ## Install
 

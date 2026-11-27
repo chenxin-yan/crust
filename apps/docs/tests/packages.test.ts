@@ -79,7 +79,7 @@ describe("remarkPackageTable", () => {
 			description: descriptions[`@crustjs/${slug}`],
 		});
 		expect(Object.fromEntries(groups.map((group, index) => [group, rows[index]]))).toEqual({
-			spine: ["core", "extensions", "crust", "man", "skills"].map(expectedRow),
+			spine: ["core", "extensions", "completion", "crust", "man", "skills"].map(expectedRow),
 			"add-on": ["effect", "env", "config", "mcp", "openapi", "testing"].map(expectedRow),
 			standalone: ["auth", "create", "progress", "prompts", "store", "style", "tui"].map(
 				expectedRow,

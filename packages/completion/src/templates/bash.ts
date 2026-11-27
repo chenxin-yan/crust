@@ -1,12 +1,13 @@
-import { bashDoubleQuoteInner, bashSingleQuote, toShellIdent } from "../escape.ts";
-import type { CompletionCommand } from "../spec.ts";
+import { bashCompgenWord, bashDoubleQuoteInner, bashSingleQuote, toShellIdent } from "../escape.ts";
+import { type CompletionCommand, hasComplete } from "../spec.ts";
 
 /**
- * Pure-static bash completion script renderer.
+ * Static bash completion script renderer.
  *
  * Strategy: at generation time we walk the command tree and emit a
  * self-contained bash function that performs the full completion logic
- * locally — no `__complete` subprocess shell-out, no runtime callbacks.
+ * locally, except that a `complete` function's values come from
+ * `<bin> __complete`.
  *
  * The generated script:
  *
@@ -58,9 +59,12 @@ function subcmdWordlist(node: CompletionCommand): string {
 	return words.join(" ");
 }
 
-/** Render the wordlist of flag candidates for a single command: every spelling, negations included. */
+/**
+ * Render the `compgen -W` wordlist of flag candidates for a single command: every spelling,
+ * negations included, escaped because `compgen` expands each word (a short may be `-$`).
+ */
 function flagWordlist(node: CompletionCommand): string {
-	return node.flags.flatMap((flag) => flag.spellings).join(" ");
+	return node.flags.flatMap((flag) => flag.spellings.map(bashCompgenWord)).join(" ");
 }
 
 /** `cmd_path` of `name` under `parentPath`; the root path is `""`. */
@@ -134,6 +138,8 @@ function collectPathCases(parentPath: string, parent: CompletionCommand, out: Ba
  *                       via the line-preserving `__<bin>_file_candidates`.
  * - `kind: "suppress"` — disable the `complete -o default` file fallback
  *                       so url/json flags don't get filenames offered.
+ * - `kind: "complete"` — offer what `<bin> __complete` prints for the flag's
+ *                       `complete` function.
  */
 type FlagValueCase = {
 	/** `<cmd_path>|<flag-spelling>` (long, short, or alias). */
@@ -146,7 +152,8 @@ type FlagValueMode =
 			/** Space-joined value list; choices are validated, so no per-word quoting. */
 			values: string;
 	  }
-	| { kind: "path" | "suppress" };
+	| { kind: "path" | "suppress" }
+	| { kind: "complete"; address: string };
 
 /**
  * Walk every flag at every depth and emit one {@link FlagValueCase} per
@@ -161,7 +168,9 @@ function collectFlagValueCases(
 ): void {
 	for (const flag of node.flags) {
 		let mode: FlagValueMode;
-		if (flag.choices !== undefined) {
+		if (flag.complete !== undefined) {
+			mode = { kind: "complete", address: flag.complete };
+		} else if (flag.choices !== undefined) {
 			// Choice values are validated to a safe character set, so we can
 			// emit them bare inside the `compgen -W` wordlist without per-
 			// candidate quoting. This keeps the generated script readable.
@@ -182,28 +191,34 @@ function collectFlagValueCases(
 }
 
 /**
- * Per-command summary of positional-argument choices. Built once per
+ * What a positional slot offers: its `choices` (space-joined, validated,
+ * unquoted), or the `__complete` address of its `complete` function.
+ */
+type SlotValues = { choices: string } | { address: string };
+
+/**
+ * Per-command summary of positional-argument candidates. Built once per
  * command and consumed by the runtime walker to map a `(cmd_path,
  * pos_idx)` pair to a candidate list.
  *
- * `bySlot` lists *fixed-slot* arguments with choices, in declaration
+ * `bySlot` lists *fixed-slot* arguments with candidates, in declaration
  * order. `variadicFrom` is set when the command ends in a variadic
- * positional that has choices — the choice list then applies to every
- * slot from `variadicFrom` onwards.
+ * positional that has candidates — they then apply to every slot from
+ * `variadicFrom` onwards.
  */
 interface ArgChoiceEntry {
 	/** Command path key (e.g. `""`, `"build"`, `"remote:add"`). */
 	cmdPath: string;
 	/**
-	 * Fixed-slot positional choices. Index N's choice list is at `bySlot[N]`
-	 * when defined; gaps (no choices) are `undefined`. The array length is
-	 * the number of declared *non-variadic* positionals.
+	 * Fixed-slot positional candidates. Index N's are at `bySlot[N]` when
+	 * defined; gaps (none) are `undefined`. The array length is the number
+	 * of declared *non-variadic* positionals.
 	 */
-	bySlot: ReadonlyArray<string | undefined>;
+	bySlot: ReadonlyArray<SlotValues | undefined>;
 	/** Slot index from which `variadicValues` applies, or `undefined`. */
 	variadicFrom?: number;
-	/** Space-joined value list for the variadic tail (validated, unquoted). */
-	variadicValues?: string;
+	/** Candidates of the variadic tail. */
+	variadicValues?: SlotValues;
 	/** Slot of an `"afterDoubleDash"` argument; a fixed slot, though variadic. */
 	ddSlot?: number;
 }
@@ -255,38 +270,39 @@ function collectArgSuppressCases(
 }
 
 /**
- * Collect per-command positional choice entries, recursively. Returns
+ * Collect per-command positional candidate entries, recursively. Returns
  * one {@link ArgChoiceEntry} per command that has at least one positional
- * arg with a `choices` list (variadic or otherwise). Commands with no
- * positional choices are omitted so the rendered case-block stays
- * tight.
+ * arg with a `choices` list or a `complete` function (variadic or
+ * otherwise). Commands with neither are omitted so the rendered
+ * case-block stays tight.
  */
 function collectArgChoiceCases(
 	cmdPath: string,
 	node: CompletionCommand,
 	out: ArgChoiceEntry[],
 ): void {
-	const bySlot: Array<string | undefined> = [];
+	const bySlot: Array<SlotValues | undefined> = [];
 	let variadicFrom: number | undefined;
-	let variadicValues: string | undefined;
+	let variadicValues: SlotValues | undefined;
 	let hasAny = false;
 	const ddSlot = ddSlotOf(node);
 	node.args.forEach((arg, idx) => {
+		const values: SlotValues | undefined =
+			arg.complete !== undefined
+				? { address: arg.complete }
+				: arg.choices !== undefined
+					? // Validated bare values — see comment in `collectFlagValueCases`.
+						{ choices: arg.choices.join(" ") }
+					: undefined;
+		if (values !== undefined) hasAny = true;
 		if (arg.variadic && arg.variadic !== "afterDoubleDash") {
-			if (arg.choices !== undefined) {
+			if (values !== undefined) {
 				variadicFrom = idx;
-				// Validated bare values — see comment in `collectFlagValueCases`.
-				variadicValues = arg.choices.join(" ");
-				hasAny = true;
+				variadicValues = values;
 			}
 			return;
 		}
-		if (arg.choices !== undefined) {
-			bySlot[idx] = arg.choices.join(" ");
-			hasAny = true;
-		} else {
-			bySlot[idx] = undefined;
-		}
+		bySlot[idx] = values;
 	});
 	if (hasAny) {
 		out.push({ cmdPath, bySlot, variadicFrom, variadicValues, ddSlot });
@@ -295,6 +311,13 @@ function collectArgChoiceCases(
 		const subPath = childPath(cmdPath, sub.name);
 		collectArgChoiceCases(subPath, sub, out);
 	}
+}
+
+/** The bash assignment that selects a slot's candidates in the generated walker. */
+function slotAssignment(values: SlotValues): string {
+	return "choices" in values
+		? `pos_choices="${bashDoubleQuoteInner(values.choices)}"`
+		: `pos_complete=${bashSingleQuote(values.address)}`;
 }
 
 /** Slot index of the command's `"afterDoubleDash"` argument (always the last), if any. */
@@ -360,6 +383,7 @@ export function renderBash(
 	const ident = toShellIdent(binName);
 	const fnName = `_${ident}`;
 	const initFn = `__${ident}_init_completion`;
+	const walkFn = `__${ident}_walk`;
 
 	const rootSubcmds = subcmdWordlist(spec);
 	const rootFlags = flagWordlist(spec);
@@ -389,7 +413,8 @@ export function renderBash(
 	const lines: string[] = [];
 
 	// Emit one `case` over `$subject` for the value token `$value`. The
-	// equals form passes `prefix` so candidates keep their `--flag=` head.
+	// equals form passes `prefix`, the `--flag=` head each candidate needs
+	// when Readline replaces the whole word (empty when `=` breaks words).
 	const pushFlagValueCase = (indent: string, subject: string, value: string, prefix?: string) => {
 		if (flagValueCases.length === 0) return;
 		lines.push(`${indent}case "$cmd_path|${subject}" in`);
@@ -402,6 +427,10 @@ export function renderBash(
 				);
 			} else if (c.kind === "path") {
 				lines.push(`${indent}\t\t__${ident}_file_candidates "${prefix ?? ""}" "${value}"`);
+			} else if (c.kind === "complete") {
+				lines.push(
+					`${indent}\t\t__${ident}_complete "${prefix ?? ""}" "${value}" ${bashSingleQuote(c.address)}`,
+				);
 			} else {
 				lines.push(`${indent}\t\tcompopt +o default 2>/dev/null`);
 			}
@@ -419,26 +448,45 @@ export function renderBash(
 	// Cobra-style init shim. Provides cur/prev/words/cword without depending
 	// on the bash-completion package. Adapted from spf13/cobra's
 	// bash_completionsV2.
+	// Readline splits `--flag=value` at `=` and `node:22` at `:`; the shim
+	// joins them back, as `_init_completion -n "=:"` does, so the walk sees
+	// one word.
+	// COMP_WORDS drops the spaces; COMP_LINE tells `--flag=value` from
+	// `--flag= value`. A word that is not a prefix of the rest of the line
+	// leaves `gap` at 0, so the shim joins as if no space were there.
 	lines.push(`${initFn}() {`);
 	lines.push("\tCOMPREPLY=()");
-	lines.push('\tcur="${COMP_WORDS[COMP_CWORD]}"');
+	lines.push("\twords=()");
+	lines.push('\tlocal w joined=0 gap line="$COMP_LINE"');
+	lines.push('\tfor w in "${COMP_WORDS[@]:0:COMP_CWORD+1}"; do');
+	lines.push("\t\tgap=0");
 	lines.push(
-		'\tif (( COMP_CWORD > 0 )); then prev="${COMP_WORDS[COMP_CWORD-1]}"; else prev=""; fi',
+		'\t\tif [[ "$line" == [[:space:]]* ]]; then gap=1; line="${line#"${line%%[![:space:]]*}"}"; fi',
 	);
-	lines.push('\twords=("${COMP_WORDS[@]}")');
-	lines.push("\tcword=$COMP_CWORD");
+	lines.push('\t\tline="${line#"$w"}"');
+	lines.push('\t\tif (( ! gap && ${#words[@]} > 0 )) && [[ -n "$w" && "$w" != *[!=:]* ]]; then');
+	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=1');
+	lines.push("\t\telif (( joined && ! gap )); then");
+	lines.push('\t\t\twords[${#words[@]}-1]+="$w"; joined=0');
+	lines.push("\t\telse");
+	// A word that starts with `:` or `=` takes the next piece too.
+	lines.push('\t\t\twords[${#words[@]}]="$w"; joined=0');
+	lines.push('\t\t\tif [[ -n "$w" && "$w" != *[!=:]* ]]; then joined=1; fi');
+	lines.push("\t\tfi");
+	lines.push("\tdone");
+	lines.push("\tcword=$(( ${#words[@]} - 1 ))");
+	lines.push('\tcur="${words[cword]}"');
+	lines.push('\tif (( cword > 0 )); then prev="${words[cword-1]}"; else prev=""; fi');
 	lines.push("}");
 	lines.push("");
 
 	// Helper: test whether the previous token is a value-taking flag at
 	// the current depth. Returns 0 (true) when prev is in $valueFlags,
 	// 1 otherwise.
+	// Spellings hold no whitespace, so a padded match is exact; a `for`
+	// loop over the unquoted list would glob-expand a short such as `-*`.
 	lines.push(`__${ident}_prev_is_value_flag() {`);
-	lines.push("\tlocal candidate");
-	lines.push("\tfor candidate in $valueFlags; do");
-	lines.push('\t\tif [[ "$candidate" == "$prev" ]]; then return 0; fi');
-	lines.push("\tdone");
-	lines.push("\treturn 1");
+	lines.push('\t[[ " $valueFlags " == *" $prev "* ]]');
 	lines.push("}");
 	lines.push("");
 
@@ -462,14 +510,62 @@ export function renderBash(
 		lines.push("");
 	}
 
-	// Main completion function.
+	// Helper: append the values `<bin> __complete` prints for the address
+	// `$3` and the word `$2` that start with `$2`, each prefixed with `$1`
+	// and quoted with `%q` (a value is data, not shell code), and keep file
+	// names out. The word is as typed, so a value also matches in its quoted
+	// spelling: `free\ t` finds `free tier`. Its errors stay off the terminal.
+	if (hasComplete(spec)) {
+		lines.push(`__${ident}_complete() {`);
+		lines.push("\tlocal c q");
+		lines.push("\tcompopt +o default 2>/dev/null || :");
+		lines.push("\twhile IFS= read -r c; do");
+		lines.push('\t\tprintf -v q %q "$c"');
+		lines.push(
+			'\t\tif [[ -n "$c" ]] && [[ "$c" == "$2"* || "$q" == "$2"* ]]; then COMPREPLY[${#COMPREPLY[@]}]="$1$q"; fi',
+		);
+		lines.push(`\tdone <<< "$(${bashSingleQuote(binName)} __complete -- "$3" "$2" 2>/dev/null)"`);
+		lines.push("}");
+		lines.push("");
+	}
+
+	// Main completion function. The walk offers each candidate as a whole
+	// word. Readline replaces only the text after the word's last break, so
+	// the part of the word before it is taken off each candidate, as
+	// bash-completion's `__ltrim_colon_completions` does for `:`.
 	lines.push(`${fnName}() {`);
 	lines.push("\tlocal cur prev words cword");
 	lines.push("\tif declare -F _init_completion >/dev/null 2>&1; then");
-	lines.push('\t\t_init_completion -n "=" || return');
+	lines.push('\t\t_init_completion -n "=:" || return');
 	lines.push("\telse");
 	lines.push(`\t\t${initFn} || return`);
 	lines.push("\tfi");
+	lines.push(`\t${walkFn}`);
+	lines.push('\tlocal _breaks="" _kept _quoted _n');
+	lines.push('\tif [[ "$COMP_WORDBREAKS" == *=* ]]; then _breaks+="="; fi');
+	lines.push('\tif [[ "$COMP_WORDBREAKS" == *:* ]]; then _breaks+=":"; fi');
+	lines.push('\tif [[ -z "$_breaks" || "$cur" != *[$_breaks]* ]]; then return 0; fi');
+	lines.push('\t_kept="${cur%"${cur##*[$_breaks]}"}"');
+	// A live value is quoted with `%q`, which may write the kept part another way (`a\,b:`).
+	lines.push('\tprintf -v _quoted %q "$_kept"');
+	lines.push("\tfor (( _n = 0; _n < ${#COMPREPLY[@]}; _n++ )); do");
+	lines.push('\t\tif [[ "${COMPREPLY[_n]}" == "$_kept"* ]]; then');
+	lines.push('\t\t\tCOMPREPLY[_n]="${COMPREPLY[_n]#"$_kept"}"');
+	lines.push("\t\telse");
+	lines.push('\t\t\tCOMPREPLY[_n]="${COMPREPLY[_n]#"$_quoted"}"');
+	lines.push("\t\tfi");
+	lines.push("\tdone");
+	lines.push("}");
+	lines.push("");
+
+	// The walk: reads and edits the caller's cur, prev, words and cword.
+	lines.push(`${walkFn}() {`);
+	// A short quoted for insertion (`-\'`) is compared in its literal spelling.
+	lines.push("\tlocal _n");
+	lines.push("\tfor (( _n = 1; _n < cword; _n++ )); do");
+	lines.push('\t\tif [[ "${words[_n]}" == -\\\\? ]]; then words[_n]="-${words[_n]:2}"; fi');
+	lines.push("\tdone");
+	lines.push('\tif (( cword > 0 )); then prev="${words[cword-1]}"; fi');
 	lines.push("");
 	lines.push('\tlocal cmd_path=""');
 	lines.push(`\tlocal subcmds="${bashDoubleQuoteInner(rootSubcmds)}"`);
@@ -491,12 +587,7 @@ export function renderBash(
 	lines.push("\t\tfi");
 	// Bare flag: if it's a value-taking flag, skip the value too. A lone `-` (stdin) is a positional.
 	lines.push('\t\tif [[ "$w" == -?* ]]; then');
-	lines.push("\t\t\tlocal candidate");
-	lines.push("\t\t\tlocal _was_value_flag=0");
-	lines.push("\t\t\tfor candidate in $valueFlags; do");
-	lines.push('\t\t\t\tif [[ "$candidate" == "$w" ]]; then _was_value_flag=1; break; fi');
-	lines.push("\t\t\tdone");
-	lines.push("\t\t\tif (( _was_value_flag )); then ((i+=2)); else ((i++)); fi");
+	lines.push('\t\t\tif [[ " $valueFlags " == *" $w "* ]]; then ((i+=2)); else ((i++)); fi');
 	lines.push("\t\t\tcontinue");
 	lines.push("\t\tfi");
 	lines.push('\t\tcase "$cmd_path|$w" in');
@@ -533,13 +624,12 @@ export function renderBash(
 
 	// `--name=value` partial: split, look up, then offer choice values or
 	// path candidates, or suppress the file fallback. `compgen -P` / the
-	// file helper prefix each candidate with `${_flag}=` so bash's
-	// command-line replacement substitutes the full token (otherwise
-	// readline would replace `--target=br` with bare `browser`).
+	// helpers prefix each with `${_flag}=` to make it the whole word.
 	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == --*=* ]]; then');
 	lines.push('\t\tlocal _flag="${cur%%=*}"');
 	lines.push('\t\tlocal _value="${cur#*=}"');
-	pushFlagValueCase("\t\t", "$_flag", "$_value", "${_flag}=");
+	lines.push('\t\tlocal _prefix="${_flag}="');
+	pushFlagValueCase("\t\t", "$_flag", "$_value", "$_prefix");
 	// Free-form `--name=value`: let bash file-complete the value portion.
 	lines.push("\t\treturn");
 	lines.push("\tfi");
@@ -564,8 +654,15 @@ export function renderBash(
 	lines.push("");
 
 	// Default branch: flags vs subcmds vs positional choices.
+	// Line by line: an unquoted `$(compgen …)` would glob-expand a short such as `-*`.
+	// Readline inserts a candidate as typed text, so `%q` keeps a short such as `-'` one word.
 	lines.push('\tif (( ! end_of_options )) && [[ "$cur" == -* ]]; then');
-	lines.push('\t\tCOMPREPLY=( $(compgen -W "$flags" -- "$cur") )');
+	lines.push("\t\tlocal _flag_word");
+	lines.push("\t\twhile IFS= read -r _flag_word; do");
+	lines.push(
+		'\t\t\tif [[ -n "$_flag_word" ]]; then printf -v _flag_word %q "$_flag_word"; COMPREPLY[${#COMPREPLY[@]}]="$_flag_word"; fi',
+	);
+	lines.push('\t\tdone <<< "$(compgen -W "$flags" -- "$cur")"');
 	lines.push("\telse");
 	const needsPosWalk = argChoiceEntries.length > 0 || argSuppressEntries.length > 0;
 	if (needsPosWalk) {
@@ -599,10 +696,7 @@ export function renderBash(
 		lines.push("\t\t\t\t((_pidx_j++)); continue");
 		lines.push("\t\t\tfi");
 		lines.push('\t\t\tif [[ "$_pidx_w" == -?* ]]; then');
-		lines.push("\t\t\t\tlocal _pidx_cand");
-		lines.push("\t\t\t\tfor _pidx_cand in $valueFlags; do");
-		lines.push('\t\t\t\t\tif [[ "$_pidx_cand" == "$_pidx_w" ]]; then _pidx_skip_next=1; break; fi');
-		lines.push("\t\t\t\tdone");
+		lines.push('\t\t\t\tif [[ " $valueFlags " == *" $_pidx_w "* ]]; then _pidx_skip_next=1; fi');
 		lines.push("\t\t\t\t((_pidx_j++)); continue");
 		lines.push("\t\t\tfi");
 		// Use `pos_idx=$((pos_idx + 1))` rather than `((pos_idx++))` so the
@@ -646,6 +740,7 @@ export function renderBash(
 			lines.push("\t\tesac");
 		}
 		lines.push('\t\tlocal pos_choices=""');
+		lines.push('\t\tlocal pos_complete=""');
 		// Per-command, nested per-slot case. The slot ladder includes a
 		// `*)` fallback for variadic-with-choices commands so every slot
 		// from `variadicFrom` onwards offers the variadic candidate set.
@@ -657,14 +752,13 @@ export function renderBash(
 				// The `"afterDoubleDash"` slot keeps an empty case so the variadic `*)` before it can't claim it.
 				if (values === undefined && idx !== entry.ddSlot) return;
 				lines.push(`\t\t\t\t\t${idx})`);
-				if (values !== undefined)
-					lines.push(`\t\t\t\t\t\tpos_choices="${bashDoubleQuoteInner(values)}"`);
+				if (values !== undefined) lines.push(`\t\t\t\t\t\t${slotAssignment(values)}`);
 				lines.push("\t\t\t\t\t\t;;");
 			});
 			if (entry.variadicFrom !== undefined && entry.variadicValues !== undefined) {
 				lines.push("\t\t\t\t\t*)");
 				lines.push(
-					`\t\t\t\t\t\tif (( pos_idx >= ${entry.variadicFrom} )); then pos_choices="${bashDoubleQuoteInner(entry.variadicValues)}"; fi`,
+					`\t\t\t\t\t\tif (( pos_idx >= ${entry.variadicFrom} )); then ${slotAssignment(entry.variadicValues)}; fi`,
 				);
 				lines.push("\t\t\t\t\t\t;;");
 			}
@@ -705,12 +799,15 @@ export function renderBash(
 		// At slot 0, blend positional choices with subcommand candidates so
 		// commands that offer BOTH a positional choice list AND subcommands
 		// surface both. At slot >0 we never offer subcommands.
-		lines.push("\t\tif (( _pidx_first )); then");
-		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") )');
-		lines.push("\t\telse");
 		// compgen fails without a match, which `set -e` callers would exit on; after
 		// `--` a dash-led word lands here and usually matches nothing.
+		lines.push("\t\tif (( _pidx_first )); then");
+		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices $subcmds" -- "$cur") ) || :');
+		lines.push("\t\telse");
 		lines.push('\t\t\tCOMPREPLY=( $(compgen -W "$pos_choices" -- "$cur") ) || :');
+		lines.push("\t\tfi");
+		lines.push('\t\tif [[ -n "$pos_complete" ]]; then');
+		lines.push(`\t\t\t__${ident}_complete "" "$cur" "$pos_complete"`);
 		lines.push("\t\tfi");
 	} else {
 		lines.push("\t\tif (( ! end_of_options )); then");

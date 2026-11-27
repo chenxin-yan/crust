@@ -18,8 +18,9 @@
  *    programmer-controlled identifiers in the source CLI definition.
  *    They have no business containing whitespace, quotes, semicolons, or
  *    control characters. We reject those at spec/render time with a
- *    clear error rather than try to escape them through three different
- *    shell grammars.
+ *    clear error rather than try to escape them through four different
+ *    shell grammars. Flag shorts are the exception: Core accepts any one
+ *    character, so the templates escape them per shell.
  * 2. **Escape free-form text** — descriptions, choice values, version
  *    strings, and the embedded comment headers are user-facing prose.
  *    Those go through per-shell escape helpers so the templates can
@@ -29,43 +30,24 @@
 import { INSTALLED_COMMAND_NAME_RULE, isInstalledCommandName } from "@crustjs/core/tooling";
 
 /**
- * Choice-value shape accepted for `flags[].choices` and `args[].choices`.
- *
- * Looser than {@link IDENT_PATTERN} so legitimate enumerated values like
- * `us-east-1`, `1.0`, `text/plain`, or `node@20` flow through unchanged,
- * but still excludes whitespace, quotes, and shell metacharacters that
- * would force per-shell escaping inside the emitted action lists
- * (`compgen -W`, zsh `(...)` action, fish `-a`).
- *
- * If a CLI legitimately needs choice values containing whitespace or
- * shell-special characters, we'd need a richer per-shell escaping scheme;
- * that's out of scope for v1. We fail fast with a clear message rather
- * than silently mis-quote.
+ * The choice values the scripts hold as written: `us-east-1`, `1.0`, `text/plain`, `node@20`.
+ * Whitespace, quotes and shell metacharacters would need escaping per shell inside the emitted
+ * action lists (`compgen -W`, zsh `(...)`, fish `-a`), and a leading `-` reads as an option
+ * there. A definition with any other choice is completed by the CLI instead, which the scripts
+ * already quote: see `choiceCompleter`.
  */
-// Require an alphanumeric first character so values can never be confused
-// with flags by completion shells (e.g. bash's `compgen` treating `-x` as
-// an option). Subsequent chars allow the broader safe set.
 const CHOICE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.+:@/-]*$/;
 
-export function assertSafeChoiceValue(value: string): string {
-	if (!CHOICE_VALUE_PATTERN.test(value)) {
-		throw new Error(
-			`completion extension: unsupported choice value ${JSON.stringify(value)} — ` +
-				`must match ${CHOICE_VALUE_PATTERN}. ` +
-				`Whitespace and shell metacharacters are not supported in v1.`,
-		);
-	}
-	return value;
-}
+export const isScriptChoice = (value: string): boolean => CHOICE_VALUE_PATTERN.test(value);
 
 /**
  * Identifier shape accepted for command names, flag names, flag aliases,
- * short flags, and arg names.
+ * and arg names.
  *
  * - First char must be alphanumeric (avoids leading `-` which `complete`
  *   would interpret as an option in bash/fish).
  * - Subsequent chars: alphanumeric, `_`, `.`, or `-`.
- * - Single-character names are allowed (covers single-char short flags).
+ * - Single-character names are allowed (covers one-character aliases).
  *
  * This is deliberately conservative. CLI authors who want a command
  * named `foo:bar` or `it's` are out of scope for v1 — every shell would
@@ -150,6 +132,16 @@ export function bashSingleQuote(value: string): string {
 }
 
 /**
+ * Escape one word of a `compgen -W` wordlist. `compgen` expands each word
+ * (parameters, command substitution, quote removal) after splitting the list,
+ * so a backslash before every other character keeps a spelling such as `-$`
+ * or `-'` literal.
+ */
+export function bashCompgenWord(value: string): string {
+	return value.replace(/[^A-Za-z0-9_.-]/gu, "\\$&");
+}
+
+/**
  * Escape a single value for inclusion as a literal-matched key in a bash
  * `case` pattern, when the entire pattern is wrapped in double quotes.
  *
@@ -186,6 +178,18 @@ export function zshArgsDescription(value: string): string {
 }
 
 /**
+ * Escape a flag spelling for the option-name part of an `_arguments` spec.
+ * `_arguments` matches the name against the word as it stands on the command
+ * line, so a character zsh quotes there (as `${(q)…}` does: `-$` reads `-\$`)
+ * keeps its backslash; `:`, `+` and `=` are `_arguments` syntax and get one
+ * too. A short `-+` or `-=` therefore completes its value only when typed
+ * `-\+` or `-\=`.
+ */
+export function zshOptionName(spelling: string): string {
+	return spelling.replace(/["#$&'()*;<>?[\\\]^`{|}:+=]/gu, "\\$&");
+}
+
+/**
  * Escape a value for inclusion as the **name** field of a `_describe`
  * item (the part before the `:` description separator). `_describe`
  * splits each item on the first un-escaped `:`, so embedded colons
@@ -211,4 +215,15 @@ export function zshDescribeField(value: string): string {
  */
 export function fishSingleQuote(value: string): string {
 	return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+// ── PowerShell ────────────────────────────────────────────────────────────
+
+/**
+ * Wrap `value` as a PowerShell single-quoted string. PowerShell also reads
+ * the typographic single quotes (U+2018–U+201B) as quote characters, so
+ * every quote character is doubled.
+ */
+export function powershellSingleQuote(value: string): string {
+	return `'${value.replace(/['\u2018-\u201B]/g, "$&$&")}'`;
 }

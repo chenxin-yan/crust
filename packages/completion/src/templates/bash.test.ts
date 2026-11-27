@@ -1,15 +1,11 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import {
-	reapBoundedProcesses,
-	runBoundedProcess,
-} from "../../../../crust/tests/bounded-process.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
 import { renderBash } from "./bash.ts";
@@ -22,6 +18,8 @@ const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
  * Drive a generated bash completion function as bash itself would: source
  * the script (registers `fnName`), set `COMP_WORDS`/`COMP_CWORD` for the
  * cursor position, invoke `fnName`, then print `COMPREPLY` one per line.
+ * `line` is `COMP_LINE`; by default the words with no space around a `=` or
+ * `:` word, as Readline splits `--flag=value` and `node:22`.
  * Returns the candidates sorted so equality checks are order-stable.
  */
 async function runBashCompletion(
@@ -29,16 +27,21 @@ async function runBashCompletion(
 	fnName: string,
 	words: string[],
 	cwd?: string,
+	pathDir?: string,
+	line = words.reduce((l, w, i) =>
+		/^[=:]$/.test(w) || /^[=:]$/.test(words[i - 1]!) ? l + w : `${l} ${w}`,
+	),
 ): Promise<string[]> {
 	const compWordsLines = words.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`).join("\n");
 	const compCword = words.length - 1;
 	const driver = `
 set -e
+${pathDir === undefined ? "" : `PATH=${shQuote(pathDir)}:"$PATH"`}
 source ${shQuote(scriptPath)}
 ${compWordsLines}
 COMP_CWORD=${compCword}
-COMP_LINE=${shQuote(words.join(" "))}
-COMP_POINT=${words.join(" ").length}
+COMP_LINE=${shQuote(line)}
+COMP_POINT=${line.length}
 ${fnName}
 for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 `;
@@ -247,9 +250,9 @@ describe("renderBash — url/path/json value-flag handling", () => {
 			]);
 		});
 
-		it("equals form: `mycli --out=st<TAB>` keeps the literal `*` and the flag prefix", async () => {
-			const completions = await runCompletion(["mycli", "--out=st"]);
-			expect(completions).toEqual(["--out=star*.txt", "--out=starlight.txt"]);
+		it("equals form: `mycli --out=st<TAB>` keeps the literal `*`", async () => {
+			const completions = await runCompletion(["mycli", "--out", "=", "st"]);
+			expect(completions).toEqual(["star*.txt", "starlight.txt"]);
 		});
 	});
 
@@ -331,7 +334,7 @@ describe("renderBash · mixed flag value modes", () => {
 
 	it.each<[string, string[], string[]]>([
 		["choices, short separate", ["dep", "-m", ""], ["fast", "slow"]],
-		["choices, alias equals", ["deploy", "--flavor="], ["--flavor=fast", "--flavor=slow"]],
+		["choices, alias equals", ["deploy", "--flavor", "="], ["fast", "slow"]],
 		[
 			"files, short separate",
 			["dep", "-o", ""],
@@ -339,8 +342,8 @@ describe("renderBash · mixed flag value modes", () => {
 		],
 		[
 			"files, alias equals",
-			["deploy", "--output=hello"],
-			["--output=hello world.txt", "@compopt -o filenames"],
+			["deploy", "--output", "=", "hello"],
+			["@compopt -o filenames", "hello world.txt"],
 		],
 		["suppression, short separate", ["dep", "-e", ""], ["@compopt +o default"]],
 		["suppression, alias equals", ["deploy", "--url=ht"], ["@compopt +o default"]],
@@ -363,7 +366,7 @@ describe("renderBash · one-character alias spellings", () => {
 					serve.add(defineCommand("start", (start) => start.action(() => {}))),
 				),
 			);
-		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		const spec = walkCommand(await app.snapshot());
 		tmpDir = await mkdtemp(join(tmpdir(), "bash-one-char-"));
 		scriptPath = join(tmpDir, "mycli-completion.bash");
 		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
@@ -377,6 +380,270 @@ describe("renderBash · one-character alias spellings", () => {
 		expect(
 			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-P", "9090", "serve", ""]),
 		).toEqual(["start"]);
+	});
+});
+
+/** Core accepts any one-character short but whitespace and `-`; the script keeps each literal. */
+describe("renderBash · punctuation shorts", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+	const shorts = [".", "$", "*", "\\", "`"];
+
+	beforeAll(async () => {
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [
+				...shorts.map((short, index) => ({
+					name: `flag${index}`,
+					spellings: [`-${short}`],
+					type: "boolean" as const,
+					takesValue: false as const,
+				})),
+				{
+					name: "money",
+					spellings: ["-+", "--money"],
+					type: "string",
+					takesValue: true,
+					choices: ["cash", "card"],
+				},
+				{
+					name: "quote",
+					spellings: ["-'"],
+					type: "string",
+					takesValue: true,
+					choices: ["east", "west"],
+				},
+			],
+			args: [],
+			subCommands: [{ name: "serve", flags: [], args: [], subCommands: [] }],
+		};
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-shorts-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
+		// An unquoted `-*` would glob-match this file.
+		await writeFile(join(tmpDir, "-zz"), "");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers every punctuation short quoted as Readline inserts it", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-"], tmpDir)).toEqual(
+			["-.", "-\\$", "-\\*", "-\\'", "-\\\\", "-\\`", "-+", "--money"].sort(),
+		);
+	});
+
+	it("completes and routes past the value of a punctuation short", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-+", "c"], tmpDir)).toEqual([
+			"card",
+			"cash",
+		]);
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-*", "-+", "cash", ""], tmpDir),
+		).toEqual(["serve"]);
+	});
+
+	it("completes and routes past the value of a short inserted quoted", async () => {
+		expect(await runBashCompletion(scriptPath, "_mycli", ["mycli", "-\\'", "e"], tmpDir)).toEqual([
+			"east",
+		]);
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "-\\'", "east", ""], tmpDir),
+		).toEqual(["serve"]);
+	});
+});
+
+/** The script calls `<bin> __complete -- <address> <word>`; a stub on PATH answers here. */
+describe("renderBash · complete functions", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "deploy",
+				flags: [
+					{
+						name: "region",
+						spellings: ["-r", "--region"],
+						type: "string",
+						takesValue: true,
+						complete: "mycli deploy --region",
+					},
+				],
+				args: [
+					{
+						name: "service",
+						type: "string",
+						required: true,
+						variadic: false,
+						complete: "mycli deploy service",
+					},
+				],
+				subCommands: [],
+			},
+		],
+	};
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-complete-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1.0.0"), "utf8");
+		await mkdir(join(tmpDir, "bin"));
+		const stub = join(tmpDir, "bin", "mycli");
+		await writeFile(
+			stub,
+			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$3|$4" > "$0.asked"\nprintf '%s\\n' "$4-one" "$4-two" "at $3" '$(x)'\n`,
+		);
+		await chmod(stub, 0o755);
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	const complete = (words: string[]) =>
+		runBashCompletion(scriptPath, "_mycli", words, tmpDir, join(tmpDir, "bin"));
+
+	it("offers a flag's values that start with the word, quoted, in both spellings", async () => {
+		expect(await complete(["mycli", "deploy", "--region", ""])).toEqual([
+			"-one",
+			"-two",
+			"\\$\\(x\\)",
+			"at\\ mycli\\ deploy\\ --region",
+		]);
+		expect(await complete(["mycli", "deploy", "-r", "us"])).toEqual(["us-one", "us-two"]);
+		// The address shows the flag, not the argument, takes the word after `=`.
+		expect(await complete(["mycli", "deploy", "--region", "=", "at"])).toEqual([
+			"at-one",
+			"at-two",
+			"at\\ mycli\\ deploy\\ --region",
+		]);
+	});
+
+	it("offers an argument's values", async () => {
+		expect(await complete(["mycli", "deploy", "api"])).toEqual(["api-one", "api-two"]);
+	});
+
+	it("matches and trims a value in the spelling it is inserted in", async () => {
+		// `%q` writes `a,b:va-one` as `a\,b:va-one`; the part Readline keeps is taken off that.
+		expect(await complete(["mycli", "deploy", "-r", "a,b", ":", "va"])).toEqual([
+			"va-one",
+			"va-two",
+		]);
+		// A word typed with its escape still matches the value: "at mycli…" is inserted as `at\\ mycli…`.
+		expect(await complete(["mycli", "deploy", "-r", "at\\ my"])).toContain(
+			"at\\ mycli\\ deploy\\ --region",
+		);
+	});
+
+	it("keeps a value that starts with `:` in one word", async () => {
+		expect(
+			await runBashCompletion(
+				scriptPath,
+				"_mycli",
+				["mycli", "deploy", "-r", ":", "ma"],
+				tmpDir,
+				join(tmpDir, "bin"),
+				"mycli deploy -r :ma",
+			),
+		).toEqual(["ma-one", "ma-two"]);
+		// The flag's function was asked, with the whole word.
+		expect(await readFile(join(tmpDir, "bin", "mycli.asked"), "utf8")).toBe(
+			"mycli deploy --region|:ma\n",
+		);
+	});
+
+	it("passes a value holding `=` whole, and offers what Readline replaces", async () => {
+		expect(await complete(["mycli", "deploy", "--region", "=", "KEY", "=", "va"])).toEqual([
+			"va-one",
+			"va-two",
+		]);
+		expect(await complete(["mycli", "deploy", "-r", "KEY", "=", "va"])).toEqual([
+			"va-one",
+			"va-two",
+		]);
+	});
+
+	it("offers nothing, silently, when the CLI cannot answer", async () => {
+		expect(
+			await runBashCompletion(scriptPath, "_mycli", ["mycli", "deploy", "--region", ""], tmpDir),
+		).toEqual([]);
+	});
+});
+
+describe("renderBash · values holding a Readline word break", () => {
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [
+			{
+				name: "image",
+				spellings: ["--image"],
+				type: "string",
+				takesValue: true,
+				choices: ["node:22", "node:24", "plain"],
+			},
+		],
+		args: [
+			{
+				name: "ref",
+				type: "string",
+				required: false,
+				variadic: false,
+				choices: ["origin:main", "origin:dev"],
+			},
+		],
+		subCommands: [],
+	};
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "bash-breaks-"));
+		scriptPath = join(tmpDir, "mycli-completion.bash");
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1"));
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	const complete = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
+
+	it("completes the rest of a value after `:`, for a flag in both forms and an argument", async () => {
+		// Readline replaces only the text after the last break, so that is what is offered.
+		expect(await complete(["mycli", "--image", "=", "node", ":", "2"])).toEqual(["22", "24"]);
+		expect(await complete(["mycli", "--image", "=", "node", ":"])).toEqual(["22", "24"]);
+		expect(await complete(["mycli", "--image", "node", ":", "2"])).toEqual(["22", "24"]);
+		expect(await complete(["mycli", "origin", ":", "m"])).toEqual(["main"]);
+		// Before the break, the whole value.
+		expect(await complete(["mycli", "--image", "=", "no"])).toEqual(["node:22", "node:24"]);
+		expect(await complete(["mycli", "--image", "no"])).toEqual(["node:22", "node:24"]);
+		// A space ends the value, as COMP_LINE shows.
+		expect(
+			await runBashCompletion(
+				scriptPath,
+				"_mycli",
+				["mycli", "--image", "node", ":", "o"],
+				undefined,
+				undefined,
+				"mycli --image node: o",
+			),
+		).toEqual(["origin:dev", "origin:main"]);
+	});
+
+	it("offers whole words when `=` and `:` do not break words", async () => {
+		const wholeWordScript = join(tmpDir, "whole-word.bash");
+		await writeFile(wholeWordScript, `COMP_WORDBREAKS=" "\nsource ${shQuote(scriptPath)}\n`);
+		const whole = (words: string[]) => runBashCompletion(wholeWordScript, "_mycli", words);
+		expect(await whole(["mycli", "--image=node:2"])).toEqual([
+			"--image=node:22",
+			"--image=node:24",
+		]);
+		expect(await whole(["mycli", "--image", "node:2"])).toEqual(["node:22", "node:24"]);
 	});
 });
 
@@ -511,11 +778,32 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 	const complete = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words);
 
 	it("`--name=value` form completes the value's choice list", async () => {
-		const candidates = await complete(["mycli", "build", "--target=br"]);
-		// Bash sees one current token `--target=br`; the script splits on
-		// `=` and offers the choices that match prefix `br`.
-		expect(candidates).toContain("--target=browser");
-		expect(candidates).not.toContain("--target=node");
+		// Readline splits at `=` and replaces only the text after it.
+		expect(await complete(["mycli", "build", "--target", "=", "br"])).toEqual(["browser"]);
+		expect(await complete(["mycli", "build", "--target", "="])).toEqual(["browser", "node"]);
+		expect(await complete(["mycli", "build", "--target", "=", "node", "--"])).toEqual([
+			"--out",
+			"--target",
+		]);
+
+		// Without `=` in COMP_WORDBREAKS, the word arrives whole and is replaced whole.
+		const wholeWordScript = join(tmpDir, "whole-word.bash");
+		await writeFile(wholeWordScript, `COMP_WORDBREAKS=" "\nsource ${shQuote(scriptPath)}\n`);
+		expect(
+			await runBashCompletion(wholeWordScript, "_mycli", ["mycli", "build", "--target=br"]),
+		).toEqual(["--target=browser"]);
+
+		// A space after the empty value ends it, as COMP_LINE shows.
+		expect(
+			await runBashCompletion(
+				scriptPath,
+				"_mycli",
+				["mycli", "build", "--target", "=", "--o"],
+				undefined,
+				undefined,
+				"mycli build --target= --o",
+			),
+		).toEqual(["--out"]);
 	});
 
 	it("after `--`, no subcommand or flag candidates are offered", async () => {

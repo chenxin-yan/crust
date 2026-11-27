@@ -1,0 +1,69 @@
+{
+	"name": "@crustjs/completion",
+	"version": "0.6.1",
+	"description": "Shell completion scripts for bash, zsh, fish, and PowerShell from Crust command definitions",
+	"type": "module",
+	"sideEffects": false,
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/completion"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"crust",
+		"completion",
+		"bash",
+		"zsh",
+		"fish",
+		"powershell",
+		"bun"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "vp run build:task",
+		"dev": "vp pack --watch",
+		"check:types": "vp run check:types:task",
+		"test": "vp run test:task",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
+	},
+	"devDependencies": {
+		"@crustjs/core": "workspace:*",
+		"@crustjs/extensions": "workspace:*",
+		"@crustjs/internal-config": "workspace:*",
+		"@crustjs/testing": "workspace:*",
+		"@crustjs/utils": "workspace:*",
+		"vite-plus": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:^",
+		"typescript": ">=5.9.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
+	"engines": {
+		"bun": ">=1.4.0",
+		"node": ">=24"
+	}
+}

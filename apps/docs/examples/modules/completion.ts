@@ -1,5 +1,5 @@
+import { completion } from "@crustjs/completion";
 import { Crust, defineCommand } from "@crustjs/core";
-import { completion } from "@crustjs/extensions";
 
 const app = new Crust("my-cli", { version: "1.2.3" })
 	.extend(completion())

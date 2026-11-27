@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { captureExecute } from "@crustjs/testing";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -31,37 +30,41 @@ describe("walker · validation", () => {
 		const snapshot = await cli.snapshot();
 		const ok = snapshot.subCommands.ok!;
 		// Core rejects this name; the walker still guards snapshots that come from elsewhere.
-		const model = buildCommandDocumentation({
+		const model = {
 			...snapshot,
 			subCommands: { "two words": { ...ok, meta: { ...ok.meta, name: "two words" } } },
-		});
+		};
 		expect(() => walkCommand(model)).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", async () => {
 		const cli = new Crust("bad").flags({ "a;rm": { type: "boolean" } }).action(() => {});
-		const model = buildCommandDocumentation(await cli.snapshot());
+		const model = await cli.snapshot();
 		expect(() => walkCommand(model)).toThrow(/invalid flag name/);
 	});
 
-	it("rejects choice values containing spaces", async () => {
-		const cli = new Crust("bad")
+	it("keeps a choice the scripts cannot hold out of them: the CLI answers for that definition", async () => {
+		const cli = new Crust("safe")
 			.flags({
-				target: {
-					type: "string",
-					choices: ["a", "two words", "c"],
-				},
+				target: { type: "string", choices: ["a", "two words", "$(x)"] },
+				plain: { type: "string", choices: ["a", "b"] },
 			})
+			.args({ name: "plan", type: "string", choices: ["-1", "it's"] })
 			.action(() => {});
-		const model = buildCommandDocumentation(await cli.snapshot());
-		expect(() => walkCommand(model)).toThrow(/unsupported choice value/);
+		const spec = walkCommand(await cli.snapshot());
+		expect(spec.flags.map(({ name, choices, complete }) => ({ name, choices, complete }))).toEqual([
+			{ name: "target", choices: undefined, complete: "safe --target" },
+			{ name: "plain", choices: ["a", "b"], complete: undefined },
+		]);
+		expect(spec.args[0]).toMatchObject({ complete: "safe plan" });
+		expect(spec.args[0]?.choices).toBeUndefined();
 	});
 
 	it("strips control characters from descriptions instead of throwing", async () => {
 		const cli = new Crust("safe", {
 			description: "first line\nsecond line\rstill same line",
 		}).action(() => {});
-		const spec = walkCommand(buildCommandDocumentation(await cli.snapshot()));
+		const spec = walkCommand(await cli.snapshot());
 		// Newlines and CR collapse to spaces, so no raw newline can break
 		// out of an emitted comment line.
 		expect(spec.description).toBe("first line second line still same line");

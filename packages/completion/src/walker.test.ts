@@ -1,11 +1,11 @@
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { describe, expect, it } from "vite-plus/test";
 
+import { completion } from "./index.ts";
 import { walkCommand } from "./walker.ts";
 
 async function walk(app: AnyCrust) {
-	return walkCommand(buildCommandDocumentation(await app.snapshot()));
+	return walkCommand(await app.snapshot());
 }
 
 describe("walkCommand", () => {
@@ -153,5 +153,50 @@ describe("walkCommand — url/path/json valueCompletion", () => {
 		expect(by.endpoint?.valueCompletion).toBe("none");
 		expect(by.out?.valueCompletion).toBe("files");
 		expect(by.config?.valueCompletion).toBe("none");
+	});
+});
+
+describe("walkCommand — complete and punctuation shorts", () => {
+	it("gives a definition with a complete function the address __complete reads", async () => {
+		const complete = () => [];
+		const app = new Crust("mycli", { version: "1.0.0" })
+			.extend(completion())
+			.flags({ quiet: { type: "boolean", complete } })
+			.add(
+				defineCommand("deploy", (command) =>
+					command
+						.args({ name: "service", type: "string", choices: ["api server"], complete })
+						.flags({
+							region: { type: "string", choices: ["us east"], complete },
+							scope: { type: "exclusive", flags: { team: { type: "string", complete } } },
+							plain: { type: "string" },
+						})
+						.action(() => {}),
+				),
+			);
+		const spec = await walk(app);
+		const deploy = spec.subCommands.find((command) => command.name === "deploy")!;
+		expect(deploy.args[0]?.complete).toBe("mycli deploy service");
+		// The complete function replaces the choices, so a space in them does not stop the walk.
+		expect(deploy.args[0]?.choices).toBeUndefined();
+		expect(deploy.flags[0]?.choices).toBeUndefined();
+		expect(deploy.flags.map((flag) => [flag.name, flag.complete])).toEqual([
+			["region", "mycli deploy --region"],
+			["team", "mycli deploy --team"],
+			["plain", undefined],
+		]);
+		// A boolean takes no value to complete.
+		expect(spec.flags.find((flag) => flag.name === "quiet")?.complete).toBeUndefined();
+	});
+
+	it("accepts any short Core accepts, such as ripgrep's -.", async () => {
+		const app = new Crust("mycli").flags({
+			hidden: { type: "boolean", short: "." },
+			money: { type: "string", short: "$" },
+		});
+		expect((await walk(app)).flags.map((flag) => flag.spellings)).toEqual([
+			["-.", "--hidden"],
+			["-$", "--money"],
+		]);
 	});
 });

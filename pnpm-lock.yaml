@@ -260,6 +260,9 @@ importers:
       '@crustjs/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@crustjs/completion':
+        specifier: workspace:*
+        version: link:../../packages/completion
       '@crustjs/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -375,6 +378,31 @@ importers:
       '@napi-rs/keyring':
         specifier: ^2.1.2
         version: 2.1.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.7.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.1.0)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
+
+  packages/completion:
+    dependencies:
+      typescript:
+        specifier: '>=5.9.0'
+        version: 7.0.2
+    devDependencies:
+      '@crustjs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@crustjs/extensions':
+        specifier: workspace:*
+        version: link:../extensions
+      '@crustjs/internal-config':
+        specifier: workspace:*
+        version: link:../internal-config
+      '@crustjs/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@crustjs/utils':
+        specifier: workspace:*
+        version: link:../utils
       vite-plus:
         specifier: 'catalog:'
         version: 1.7.0(@arethetypeswrong/core@0.18.5)(@types/node@26.6.6)(@vitest/ui@5.1.0)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.25)(typescript@7.0.2)(yaml@2.9.1)
@@ -631,6 +659,9 @@ importers:
         specifier: '>=5.9.0'
         version: 7.0.2
     devDependencies:
+      '@crustjs/completion':
+        specifier: workspace:*
+        version: link:../completion
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core

@@ -4,6 +4,7 @@
   "pages": [
     "core",
     "extensions",
+    "completion",
     "crust",
     "man",
     "skills",

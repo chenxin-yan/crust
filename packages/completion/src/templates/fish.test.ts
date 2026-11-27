@@ -3,14 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import {
-	reapBoundedProcesses,
-	runBoundedProcess,
-} from "../../../../crust/tests/bounded-process.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
 import { renderFish } from "./fish.ts";
@@ -207,11 +203,7 @@ describe("renderFish", () => {
 				q: { type: "boolean", aliases: ["Q"], default: true },
 			})
 			.action(() => {});
-		const script = renderFish(
-			walkCommand(buildCommandDocumentation(await app.snapshot())),
-			"mycli",
-			"1.0.0",
-		);
+		const script = renderFish(walkCommand(await app.snapshot()), "mycli", "1.0.0");
 		expect(script).toContain("printf '%s\\n' '-p' '-P' '--port' '--P' '--listen'");
 		expect(script).toContain("printf '%s\\n' '-q' '-Q'");
 		const options = script.split("\n").flatMap(
@@ -256,6 +248,61 @@ describe("renderFish", () => {
 		// `'it\'s complicated'` — fish single-quote with `\'` for the
 		// embedded apostrophe.
 		expect(script).toContain("-d 'it\\'s complicated'");
+	});
+});
+
+describe("renderFish · punctuation shorts and complete functions", () => {
+	it("passes a punctuation short to `complete -s` as one quoted character", () => {
+		const script = renderFish(
+			{
+				name: "mycli",
+				flags: [
+					{ name: "hidden", spellings: ["-.", "--hidden"], type: "boolean", takesValue: false },
+					{ name: "quote", spellings: ["-'"], type: "boolean", takesValue: false },
+				],
+				args: [],
+				subCommands: [],
+			},
+			"mycli",
+			"1.0.0",
+		);
+		expect(script).toContain("-s '.'");
+		expect(script).toContain("-s '\\''");
+	});
+
+	it("offers what `<bin> __complete` prints, with the flag's own word", () => {
+		const script = renderFish(
+			{
+				name: "mycli",
+				flags: [
+					{
+						name: "region",
+						spellings: ["--region"],
+						type: "string",
+						takesValue: true,
+						complete: "mycli --region",
+					},
+				],
+				args: [
+					{
+						name: "service",
+						type: "string",
+						required: true,
+						variadic: false,
+						complete: "mycli service",
+					},
+				],
+				subCommands: [],
+			},
+			"mycli",
+			"1.0.0",
+		);
+		expect(script).toContain(
+			`-x -l 'region' -a '(command \\'mycli\\' __complete -- "mycli --region" (commandline -ct | string replace -r -- \\'^--[^=]*=\\' \\'\\') 2>/dev/null)'`,
+		);
+		expect(script).toContain(
+			`-f -a '(command \\'mycli\\' __complete -- "mycli service" (commandline -ct) 2>/dev/null)'`,
+		);
 	});
 });
 

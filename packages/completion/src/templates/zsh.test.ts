@@ -1,16 +1,12 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { buildCommandDocumentation } from "@crustjs/core/tooling";
 import { which } from "@crustjs/utils/process";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
-import {
-	reapBoundedProcesses,
-	runBoundedProcess,
-} from "../../../../crust/tests/bounded-process.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { walkCommand } from "../walker.ts";
 import { fixture, posFixture, valueTypeFixture } from "./test-fixtures.ts";
@@ -321,11 +317,12 @@ _quote
  * never matches its own echo, and a newline first keeps the first match off
  * the echoed line.
  */
-async function zshComplete(scriptPath: string, line: string): Promise<string[]> {
+async function zshComplete(scriptPath: string, line: string, pathDir?: string): Promise<string[]> {
+	const path = pathDir === undefined ? "" : `PATH=${shQuoteForZsh(pathDir)}:$PATH; `;
 	const driver = `
 zmodload zsh/zpty || exit 1
 zpty -b z zsh -f -i
-zpty -w z ${shQuoteForZsh(`PS1=''; autoload -Uz compinit; compinit -u -D; source ${shQuoteForZsh(scriptPath)}`)}
+zpty -w z ${shQuoteForZsh(`${path}PS1=''; autoload -Uz compinit; compinit -u -D; source ${shQuoteForZsh(scriptPath)}`)}
 zpty -w z 'complete_print() { print >/dev/tty; compadd() { local -a m; builtin compadd -O m "$@"; (( $#m )) && print -rl -- \${(@)m/#/CAND:} >/dev/tty; builtin compadd "$@"; }; _main_complete; unfunction compadd; print -r -- END$((1+1)) >/dev/tty; }; zle -C complete-print complete-word complete_print; bindkey "^X" complete-print'
 zpty -w -n z ${shQuoteForZsh(line)}$'\\x18'
 local all='' chunk
@@ -360,7 +357,7 @@ describeIfZsh("renderZsh · one-character alias spellings", () => {
 					serve.add(defineCommand("start", (start) => start.action(() => {}))),
 				),
 			);
-		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		const spec = walkCommand(await app.snapshot());
 		tmpDir = await mkdtemp(join(tmpdir(), "zsh-one-char-"));
 		scriptPath = join(tmpDir, "_mycli");
 		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
@@ -372,6 +369,175 @@ describeIfZsh("renderZsh · one-character alias spellings", () => {
 
 	it("routes past the value of `-P`", async () => {
 		expect(await zshComplete(scriptPath, "mycli -P 9090 serve ")).toEqual(["start"]);
+	});
+});
+
+/** Core accepts any one-character short but whitespace and `-`; `_arguments` reads each literally. */
+describeIfZsh("renderZsh · punctuation shorts", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [
+				...[".", ":", "[", "'", "+"].map((short, index) => ({
+					name: `flag${index}`,
+					spellings: [`-${short}`],
+					type: "boolean" as const,
+					takesValue: false as const,
+				})),
+				{
+					name: "money",
+					spellings: ["-$", "--money"],
+					type: "string",
+					takesValue: true,
+					choices: ["cash", "card"],
+				},
+			],
+			args: [],
+			subCommands: [],
+		};
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-shorts-"));
+		scriptPath = join(tmpDir, "_mycli");
+		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers every punctuation short as typed", async () => {
+		expect(await zshComplete(scriptPath, "mycli -")).toEqual(
+			["-.", "-:", "-[", "-'", "-$", "-+", "--money"].sort(),
+		);
+	});
+
+	it("completes the value of a punctuation short typed as zsh quotes it", async () => {
+		expect(await zshComplete(scriptPath, "mycli -\\$ ")).toEqual(["card", "cash"]);
+	});
+});
+
+/** `:` separates the fields of an `_arguments` spec, so a choice that holds one is escaped. */
+describeIfZsh("renderZsh · choices holding a colon", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [
+				{
+					name: "image",
+					spellings: ["--image"],
+					type: "string",
+					takesValue: true,
+					choices: ["node:22", "node:24"],
+				},
+			],
+			args: [
+				{
+					name: "ref",
+					type: "string",
+					required: false,
+					variadic: false,
+					choices: ["origin:main", "origin:dev"],
+				},
+			],
+			subCommands: [],
+		};
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-colon-"));
+		scriptPath = join(tmpDir, "_mycli");
+		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers a flag's and an argument's choices whole", async () => {
+		expect(await zshComplete(scriptPath, "mycli --image ")).toEqual(["node:22", "node:24"]);
+		expect(await zshComplete(scriptPath, "mycli --image=node:2")).toEqual(["node:22", "node:24"]);
+		expect(await zshComplete(scriptPath, "mycli origin:m")).toEqual(["origin:main"]);
+	});
+});
+
+/** The script calls `<bin> __complete -- <address> <word>`; a stub on PATH answers here. */
+describeIfZsh("renderZsh · complete functions", () => {
+	let tmpDir: string;
+	let scriptPath: string;
+
+	beforeAll(async () => {
+		const spec: CompletionCommand = {
+			name: "mycli",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "deploy",
+					flags: [
+						{
+							name: "region",
+							spellings: ["--region"],
+							type: "string",
+							takesValue: true,
+							complete: "mycli deploy --region",
+						},
+					],
+					args: [
+						{
+							name: "service",
+							type: "string",
+							required: true,
+							variadic: false,
+							complete: "mycli deploy service",
+						},
+					],
+					subCommands: [],
+				},
+			],
+		};
+		tmpDir = await mkdtemp(join(tmpdir(), "zsh-complete-"));
+		scriptPath = join(tmpDir, "_mycli");
+		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");
+		await mkdir(join(tmpDir, "bin"));
+		const stub = join(tmpDir, "bin", "mycli");
+		await writeFile(
+			stub,
+			`#!/bin/sh\n[ "$1" = __complete ] && [ "$2" = -- ] || exit 1\nprintf '%s\\n' "$4-one" "$4-two" "\${3##* }"\n`,
+		);
+		await chmod(stub, 0o755);
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("offers a flag's values, in both spellings", async () => {
+		const bin = join(tmpDir, "bin");
+		expect(await zshComplete(scriptPath, "mycli deploy --region ", bin)).toEqual([
+			"--region",
+			"-one",
+			"-two",
+		]);
+		expect(await zshComplete(scriptPath, "mycli deploy --region=us", bin)).toEqual([
+			"us-one",
+			"us-two",
+		]);
+	});
+
+	it("offers an argument's values", async () => {
+		expect(await zshComplete(scriptPath, "mycli deploy api", join(tmpDir, "bin"))).toEqual([
+			"api-one",
+			"api-two",
+		]);
+	});
+
+	it("passes the word unquoted", async () => {
+		expect(await zshComplete(scriptPath, "mycli deploy a\\ b", join(tmpDir, "bin"))).toEqual([
+			"a b-one",
+			"a b-two",
+		]);
 	});
 });
 
@@ -419,7 +585,7 @@ describeIfZsh("renderZsh · after `--`", () => {
 					.action(() => {}),
 			),
 		);
-		const spec = walkCommand(buildCommandDocumentation(await app.snapshot()));
+		const spec = walkCommand(await app.snapshot());
 		tmpDir = await mkdtemp(join(tmpdir(), "zsh-double-dash-"));
 		scriptPath = join(tmpDir, "_mycli");
 		await writeFile(scriptPath, renderZsh(spec, "mycli", "1.0.0"), "utf8");

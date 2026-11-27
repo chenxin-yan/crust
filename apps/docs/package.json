@@ -31,6 +31,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.70.1",
     "@crustjs/auth": "workspace:*",
+    "@crustjs/completion": "workspace:*",
     "@crustjs/config": "workspace:*",
     "@crustjs/core": "workspace:*",
     "@crustjs/create": "workspace:*",

@@ -13,6 +13,7 @@ import { database } from "../examples/guide/contexts-setup";
 import { debug } from "../examples/guide/error-handling";
 import { audited, list } from "../examples/guide/extensions-provider-flags";
 import * as terminalIO from "../examples/guide/terminal-io";
+import { app as completeExample } from "../examples/modules/completion-complete";
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 
 const read = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
@@ -84,6 +85,12 @@ it("the terminal I/O examples write bytes, answer for the terminal, and read std
 		"CAF\uFFFD",
 	);
 	expect((await captureExecute(terminalIO.log, [])).stdout).toMatch(/^line 1\n[^]*line 500\n$/);
+});
+
+it("completion example prints the branches that start with the typed word", async () => {
+	expect(
+		await captureExecute(completeExample, ["__complete", "--", "my-cli checkout branch", "re"]),
+	).toEqual({ stdout: "release\n", stderr: "", exitCode: 0 });
 });
 
 it("extensions example prints the version for `--version` on the actionless root", async () => {

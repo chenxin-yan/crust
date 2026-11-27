@@ -10,6 +10,24 @@ function host() {
 }
 
 // Compile-time regression checks; intentionally never invoked.
+// `complete` is typed on arguments and flags and never reaches the action's values
+function _typecheckCompleteKey() {
+	defineCommand("deploy", (command) =>
+		command
+			.args({ name: "service", type: "string", complete: async (typed) => [`${typed}-api`] })
+			.flags({ region: { type: "string", complete: (typed) => [typed] } })
+			.action(({ args, flags }) => {
+				const service: string | undefined = args.service;
+				const region: string | undefined = flags.region;
+				// @ts-expect-error -- the key never reaches the action's flags
+				void flags.complete;
+				return [service, region];
+			}),
+	);
+	// @ts-expect-error -- a completer returns strings
+	defineCommand("bad", (command) => command.flags({ x: { type: "string", complete: () => [1] } }));
+}
+
 // the default `completion` command keeps the host's command tree closed
 function _typecheckDefaultNameKeepsHostTreeClosed() {
 	const app = host().extend(completion());
@@ -22,7 +40,7 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 	// @ts-expect-error -- unknown flags on host commands stay rejected
 	void app.run(["deploy"], { flags: { forse: true } });
 	// @ts-expect-error -- the contributed command keeps its shell choices
-	void app.run(["completion"], { args: { shell: "powershell" } });
+	void app.run(["completion"], { args: { shell: "nushell" } });
 }
 
 // a literal `command` option renames the contributed command without opening the tree
