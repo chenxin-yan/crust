@@ -713,10 +713,11 @@ export async function runDistributeBuild<T extends string>(
 	for (const { name, sourceDir, dereference } of copies) {
 		const options = { recursive: true, dereference, verbatimSymlinks: !dereference };
 		cpSync(sourceDir, join(rootDir, name), options);
-		// artifactPath (core) computes `<root>/<name>` from a Node bundle but
-		// `dirname(process.execPath)/<name>` from a compiled binary, which is a
-		// platform package's bin dir — the root package is unreachable from there,
-		// so each platform package ships its own copy of the artifacts.
+		// artifactPath (core) computes `<root>/<name>` from a Node bundle, and from a
+		// compiled binary its launcher started. A binary started on its own, from a
+		// platform package installed directly or a release archive, has no root package
+		// and reads `dirname(process.execPath)/<name>`, so each platform package ships
+		// its own copy of the artifacts.
 		for (const targetPackage of distributionTargets) {
 			cpSync(sourceDir, join(targetPackage.packageDir, "bin", name), options);
 		}

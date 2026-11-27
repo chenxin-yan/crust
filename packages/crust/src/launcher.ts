@@ -1,3 +1,5 @@
+import { LAUNCHER_ENV } from "@crustjs/core/tooling";
+
 import type { DistributionTarget } from "./distribute.ts";
 
 /** Node.js the launcher needs for `process.execve`: the same floor as every Crust package. */
@@ -90,6 +92,9 @@ if (!binPath) {
 \t);
 \tprocess.exit(1);
 }
+
+// The binary reads its artifacts from this package, so the paths it records do not name a platform.
+process.env.${LAUNCHER_ENV} = JSON.stringify([binPath, resolve(dir, "..")]);
 
 if (process.platform === "win32") {
 \tlaunchWindows(binPath);

@@ -45,6 +45,7 @@ await new Crust("greet", { version: "0.1.0" })
 			greeting: flags.shout ? greeting.toUpperCase() : greeting,
 			runtime,
 			asset: readFileSync(artifactPath("assets/greeting.txt"), "utf8").trim(),
+			assets: artifactPath("assets"),
 			publicMessage: process.env.PUBLIC_MESSAGE ?? null,
 			secretMessage: process.env.SECRET_MESSAGE ?? null,
 		}));
@@ -294,16 +295,17 @@ describe("host artifact acceptance", () => {
 			".bin",
 			process.platform === "win32" ? "greet.cmd" : "greet",
 		);
+		const installedBundle = join(consumer, "node_modules", "@crust-fixture", "node-package");
 		expect(await greet(bin, [])).toEqual({
 			greeting: "HELLO WORLD!",
 			runtime: `node ${nodeVersion}`,
 			asset: "hello from assets",
+			assets: join(installedBundle, "assets"),
 			publicMessage: "hello-from-build",
 			secretMessage: null,
 		});
 		await expectUnknownFlag(bin, []);
 		// Same installed bundle through the consumer's node, as a package-manager-free entry.
-		const installedBundle = join(consumer, "node_modules", "@crust-fixture", "node-package");
 		expect(await greet(node, [join(installedBundle, "bin", "greet.js")])).toMatchObject({
 			greeting: "HELLO WORLD!",
 			asset: "hello from assets",
@@ -338,10 +340,12 @@ describe("host artifact acceptance", () => {
 			publicMessage: null,
 			secretMessage: null,
 		};
-		// In place, as a project's `start` script runs it: the launcher finds the sibling stage.
-		expect(await greet(node, [join(project, ".crust", "root", "bin", "greet.js")])).toEqual(
-			expected,
-		);
+		// In place, as a project's `start` script runs it: the launcher finds the sibling stage,
+		// and the binary reads the launcher's package.
+		expect(await greet(node, [join(project, ".crust", "root", "bin", "greet.js")])).toEqual({
+			...expected,
+			assets: join(project, ".crust", "root", "assets"),
+		});
 
 		const consumer = await installStaged("bun-binary", project, manifest);
 		const platformDir = join(consumer, "node_modules", platform!.name);
@@ -358,8 +362,16 @@ describe("host artifact acceptance", () => {
 			"bin",
 			"greet.js",
 		);
-		expect(await greet(binary, [])).toEqual(expected);
-		expect(await greet(node, [launcher])).toEqual(expected);
+		// On its own the binary reads beside itself; through the launcher, the root package, so a
+		// path it records (a skill link) is the same on every platform.
+		expect(await greet(binary, [])).toEqual({
+			...expected,
+			assets: join(platformDir, "bin", "assets"),
+		});
+		expect(await greet(node, [launcher])).toEqual({
+			...expected,
+			assets: join(consumer, "node_modules", "@crust-fixture", "bun-binary", "assets"),
+		});
 		await expectUnknownFlag(binary, []);
 		await expectUnknownFlag(node, [launcher]);
 	}, 240_000);

@@ -76,7 +76,7 @@ const visible = visibleSectionsFor(snapshot, "acme:web-docs");
 
 | Export                                                                             | Role                                                               |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol |
+| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV` / `LAUNCHER_ENV`                         | Environment variable names for the first-party subprocess protocol |
 | `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot |
 | `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
 | `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension or its id           |
@@ -94,7 +94,8 @@ The [tooling entry point](https://github.com/chenxin-yan/crust/blob/main/package
 
 <Callout type="warn">
   `crust build` sets `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` when it runs a source entry to
-  prepare its snapshot. Do not set them in your CLI.
+  prepare its snapshot, and the npm launcher of a binary release sets `LAUNCHER_ENV` to the binary
+  it starts and its own package. Do not set them in your CLI.
 </Callout>
 
 ### Installed command names
