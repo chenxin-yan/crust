@@ -532,7 +532,8 @@ export function defineConfig<
 
 	const toStderr = (line: string) => void process.stderr.write(`${line}\n`);
 
-	const bindFiles = async (ctx: ExtensionContext) => {
+	/** The files' values for the config flags the run left out, as the words core converts. */
+	const fromFilesFor = async (ctx: ExtensionContext) => {
 		const wanted = Object.entries(ctx.command.flags).filter(([flagName, flag]) => {
 			const source = ctx.sources.flags[flagName];
 			return (
@@ -541,20 +542,18 @@ export function defineConfig<
 				(source === undefined || source === "default")
 			);
 		});
+		// No file is read, and none can fail, for a command whose config flags the run gave.
 		if (wanted.length === 0) return;
 		const read = await readFiles((line) => ctx.stderr(line));
+		const flags: Record<string, string | string[]> = {};
 		for (const [flagName, flag] of wanted) {
+			// Converted here, so an error names the file; core converts the same words again.
 			const file = await fromFiles(flag.config!.slice(prefix.length), read);
-			// Converted once already, so binding the same words cannot fail.
-			if (file !== undefined) {
-				ctx.bindText({ flags: { [flagName]: flag.multiple ? file.words : file.words[0]! } });
-			}
+			if (file !== undefined) flags[flagName] = flag.multiple ? file.words : file.words[0]!;
 		}
+		return { flags };
 	};
 
-	// A file's error waits for the action, so `--help` works whatever the files hold, as for an
-	// invalid environment value.
-	const failures = new WeakMap<object, unknown>();
 	const where = [
 		...(hasProject ? [`${projectName} (the nearest from the working directory up)`] : []),
 		...(hasUser ? [`${userName} in the configuration directory of ${name}`] : []),
@@ -567,17 +566,10 @@ export function defineConfig<
 	const width = Math.max(0, ...keys.map((key) => key.length));
 	const extension = defineExtension(`crust:config:${name}`)
 		.owns("config")
-		.setup(async (ctx) => {
-			startRun(ctx);
-			try {
-				await bindFiles(ctx);
-			} catch (error) {
-				failures.set(ctx, error);
-			}
-		})
-		.preRun((ctx) => {
-			if (failures.has(ctx)) throw failures.get(ctx);
-		})
+		.setup(startRun)
+		// Only when the action will run, so `--help` reads no file, and after every setup, so what
+		// `--input` gave and where a `-C` flag went are settled, whatever the `.extend()` order.
+		.defaults(fromFilesFor)
 		.sections(() => [
 			{
 				command: [],

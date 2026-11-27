@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { Crust, defineCommand, defineExtension } from "@crustjs/core";
-import { help } from "@crustjs/extensions";
+import { help, jsonInput } from "@crustjs/extensions";
 import { prompts } from "@crustjs/prompts/extension";
 import { captureExecute, withEnv } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
@@ -203,8 +203,8 @@ describe("flags take the files' values", () => {
 
 it("composes with prompts(): a value found in a file is not asked for", async () => {
 	const { config } = acme();
-	// Before prompts(), so a file's error fails the run before anything is asked.
-	const app = new Crust("acme").extend(config.extension, prompts()).command("deploy", (command) =>
+	// Listed after prompts(): the files are read before anything is asked, whatever the order.
+	const app = new Crust("acme").extend(prompts(), config.extension).command("deploy", (command) =>
 		command
 			.flags({
 				region: { ...config.flag("region"), prompt: "Region" },
@@ -218,6 +218,27 @@ it("composes with prompts(): a value found in a file is not asked for", async ()
 	asked.keys("down", "return");
 	expect(await asked.done).toMatchObject({ stdout: "eu x2\n", exitCode: 0 });
 	expect(asked.screen()).not.toContain("Replicas");
+});
+
+it("does not fail on a file for a flag --input gave, wherever jsonInput() is listed", async () => {
+	write(userFile(), "{ broken");
+	const { config } = acme();
+	for (const extensions of [
+		[jsonInput(), config.extension],
+		[config.extension, jsonInput()],
+	] as const) {
+		const app = new Crust("acme")
+			.extend(...extensions)
+			.command("ps", (command) =>
+				command
+					.flags({ format: config.flag("psFormat") })
+					.action(({ flags, stdout }) => stdout(`ps: ${flags.format}`)),
+			);
+		expect(await captureExecute(app, ["ps", "--input", '{"format":"json"}'])).toMatchObject({
+			stdout: "ps: json\n",
+			exitCode: 0,
+		});
+	}
 });
 
 describe("the project file", () => {
@@ -708,7 +729,7 @@ it("documents the files and the settings in the root's help", async () => {
 	expect(stdout).toMatch(/^ {2}tags$/m);
 });
 
-it("runs as if started in another folder with a -C Extension listed first", async () => {
+it("runs as if started in another folder with a -C Extension, wherever it is listed", async () => {
 	write(join(root, "other", "acme.config.json"), { replicas: 7 });
 	const { config } = acme();
 	const chdir = defineExtension("app:chdir")
@@ -717,7 +738,7 @@ it("runs as if started in another folder with a -C Extension listed first", asyn
 			if (ctx.flags.dir) process.chdir(ctx.flags.dir);
 		});
 	const app = new Crust("acme")
-		.extend(chdir, config.extension)
+		.extend(config.extension, chdir)
 		.add(
 			defineCommand("deploy", (command) =>
 				command
