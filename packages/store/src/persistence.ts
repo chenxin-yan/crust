@@ -67,7 +67,10 @@ export const MAX_FILE_BYTES: number = 16 * 1024 * 1024;
  * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
-export async function readJson(filePath: string): Promise<JsonValue | undefined> {
+export async function readJson(
+	filePath: string,
+	parse: (text: string) => unknown = JSON.parse,
+): Promise<JsonValue | undefined> {
 	const notRegular = () =>
 		new CrustStoreError("PATH", `Store file is not a regular file: ${filePath}`, {
 			path: filePath,
@@ -132,11 +135,12 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 	}
 
 	try {
-		return JSON.parse(raw);
+		// SAFETY: a format's `parse` returns what the file holds; the store's fields check it.
+		return parse(raw) as JsonValue;
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"PARSE",
-			`Malformed JSON in store file: ${filePath}`,
+			`Malformed ${parse === JSON.parse ? "JSON in store" : "store"} file: ${filePath}`,
 			{
 				path: filePath,
 			},

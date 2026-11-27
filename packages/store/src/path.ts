@@ -288,17 +288,25 @@ export function cacheDir(appName: string, env?: PlatformEnv): string {
 /**
  * Constructs the absolute store file path from a directory and store name.
  *
- * Validates `dirPath` (must be absolute, not end in `.json`) and `name`
- * (no path separators, no `.json` suffix), then joins them as
- * `<dirPath>/<name>.json`.
+ * Validates `dirPath` (must be absolute, not end in `.json`), `name`
+ * (no path separators, no `.json` suffix) and `extension` (a format's: no path
+ * separators, no leading dot), then joins them as `<dirPath>/<name>.<extension>`.
  *
  * @param dirPath - Absolute directory path.
- * @param name - Store name used as the JSON filename.
+ * @param name - Store name used as the filename.
+ * @param extension - The file's extension, without the dot.
  * @returns Absolute path to the store file.
- * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
+ * @throws {CrustStoreError} `PATH` if `dirPath`, `name` or `extension` is invalid.
  */
-export function resolveStorePath(dirPath: string, name: string): string {
+export function resolveStorePath(dirPath: string, name: string, extension = "json"): string {
 	validateDirPath(dirPath);
 	validateSegment(name, "name");
-	return process.getBuiltinModule("node:path").join(dirPath, `${name}.json`);
+	if (!/^[^./\\][^/\\]*$/.test(extension)) {
+		throw new CrustStoreError(
+			"PATH",
+			'format.extension must be a file extension without its dot, such as "toml"',
+			{ path: extension },
+		);
+	}
+	return process.getBuiltinModule("node:path").join(dirPath, `${name}.${extension}`);
 }

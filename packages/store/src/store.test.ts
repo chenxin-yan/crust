@@ -457,6 +457,82 @@ describe("the store file", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// format
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("format", () => {
+	/** A `key = value` file, standing in for a TOML or INI package: every value is text. */
+	const lines = {
+		extension: "conf",
+		parse: (text: string) =>
+			Object.fromEntries(
+				text
+					.split("\n")
+					.filter((line) => line !== "")
+					.map((line) => {
+						if (!line.includes(" = ")) throw new Error(`not a setting: ${line}`);
+						return line.split(" = ");
+					}),
+			),
+		stringify: (document: Record<string, unknown>) =>
+			Object.entries(document)
+				.map(([key, value]) => `${key} = ${String(value)}\n`)
+				.join(""),
+	};
+	const confStore = () =>
+		createStore({
+			dirPath: tempDir,
+			name: "state",
+			fields: { region: { type: "string" }, runs: { type: "number", default: 0 } },
+			format: lines,
+		});
+
+	it("reads and writes <name>.<extension> through the format's parse and stringify", async () => {
+		const store = confStore();
+		await store.patch({ region: "eu" });
+		await store.update((state) => ({ ...state, runs: state.runs + 1 }));
+
+		// The file's own text, whatever order the keys are in.
+		const text = await readFile(join(tempDir, "state.conf"), "utf-8");
+		expect(text.split("\n").toSorted()).toEqual(["", "region = eu", "runs = 1"]);
+		// The file holds text; a number field converts it as for a JSON string.
+		expect(await store.read()).toEqual({ region: "eu", runs: 1 });
+		expect(existsSync(join(tempDir, "state.json"))).toBe(false);
+	});
+
+	it("keeps an unset field out of the document it gives stringify", async () => {
+		const store = confStore();
+		await store.patch({ region: "eu" });
+		await store.patch({ region: undefined });
+
+		expect(await readFile(join(tempDir, "state.conf"), "utf-8")).toBe("runs = 0\n");
+	});
+
+	it("rejects a file its parse throws on, and one that does not hold an object", async () => {
+		const path = join(tempDir, "state.conf");
+		await writeFile(path, "nonsense");
+		await expect(confStore().read()).rejects.toMatchObject({
+			code: "PARSE",
+			message: `Malformed store file: ${path}`,
+		});
+
+		const list = createStore({
+			dirPath: tempDir,
+			name: "state",
+			fields: {},
+			format: { ...lines, parse: () => ["a"] },
+		});
+		await expect(list.read()).rejects.toMatchObject({ code: "PARSE" });
+	});
+
+	it.each(["", ".conf", "a/b", "a\\b"])("refuses the extension %j", (extension) => {
+		expect(() =>
+			createStore({ dirPath: tempDir, name: "state", fields: {}, format: { ...lines, extension } }),
+		).toThrow(expect.objectContaining({ code: "PATH" }));
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // write
 // ────────────────────────────────────────────────────────────────────────────
 

@@ -256,6 +256,19 @@ export type StoreAccess = "default" | "private" | StorePermissionBits;
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * A file format other than JSON, from a parser package of your choice:
+ * `{ extension: "toml", parse, stringify }`.
+ */
+export interface StoreFormat {
+	/** The file's extension, without the dot: `name: "config"` with `"toml"` is `config.toml`. */
+	readonly extension: string;
+	/** Reads the file's text into an object of fields. */
+	readonly parse: (text: string) => unknown;
+	/** Writes an object of fields as the file's text, the reverse of `parse`. */
+	readonly stringify: (document: Record<string, unknown>) => string;
+}
+
+/**
  * Options for {@link createStore}.
  *
  * @typeParam F - The field definitions record (inferred via `const` generic).
@@ -289,6 +302,13 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * separators or the `.json` extension.
 	 */
 	name: string;
+
+	/**
+	 * The file's format: its extension, and how its text is read and written.
+	 *
+	 * @default JSON, in `<name>.json`
+	 */
+	format?: StoreFormat;
 
 	/**
 	 * Field definitions that declare the store's config schema.
