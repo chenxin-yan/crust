@@ -175,6 +175,7 @@ Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per 
 The root package's launcher selects the platform package for the host:
 
 - It supports only the targets included in the build.
+- It looks for the platform package where Node.js would resolve it: under the root package's own `node_modules` first, then beside the root package. Another version installed beside the root never takes the place of the root's own.
 - On POSIX it replaces itself with the binary (`process.execve`), so signals sent to the command reach the binary and the exit status is the binary's. This needs Node.js `>=24`, which binary-only root packages declare in `engines.node`; roots that also publish library `exports` keep the project's range.
 - Signals ignored by whatever starts the command are not passed on: Node.js resets inherited ignores (except `SIGPIPE` and `SIGXFSZ`) before the launcher runs. Under `nohup` the binary still ends on `SIGHUP`, and as a background job of a non-interactive shell (`my-cli &` in a script) it still takes `SIGINT`. Run the platform binary directly when those ignores matter.
 - On Windows, which has no `execve`, it starts the binary, forwards `SIGTERM` and `SIGHUP`, and exits with the binary's exit code or signal. `SIGINT` is never forwarded: the console delivers Ctrl-C to the binary directly.

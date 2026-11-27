@@ -102,6 +102,8 @@ describe("artifactPath", () => {
 		for (const value of [
 			JSON.stringify([join(tmpDir, "other", "bin", "tool"), rootPackage]),
 			JSON.stringify([binary]),
+			JSON.stringify([binary, "relative"]),
+			JSON.stringify([binary, ""]),
 			JSON.stringify({ binary, rootPackage }),
 			"not json",
 			"",

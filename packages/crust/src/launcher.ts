@@ -74,10 +74,11 @@ if (!target) {
 }
 
 const candidates = [
-\t// Hoisted install: the platform package beside this one in node_modules.
-\tresolve(dir, "..", "..", target.packagePathSegment, "bin", target.binaryFilename),
+\t// In Node's own order, so another version beside this package never wins over this one's.
 \t// Nested install: the platform package under this package's node_modules.
 \tresolve(dir, "..", "node_modules", target.packageName, "bin", target.binaryFilename),
+\t// Hoisted install: the platform package beside this one in node_modules.
+\tresolve(dir, "..", "..", target.packagePathSegment, "bin", target.binaryFilename),
 \t// In place: the .crust/ tree crust build staged, before any install.
 \tresolve(dir, "..", "..", target.targetAlias, "bin", target.binaryFilename),
 ];

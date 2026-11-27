@@ -305,3 +305,50 @@ open(os.environ["LAUNCHER_TEST_LOG"], "a").write("nonblocking " + ",".join("1" i
 		},
 	);
 });
+
+describe.skipIf(process.platform === "win32")("generated npm launcher platform package", () => {
+	it("starts the root package's own nested platform package before a hoisted one, and names itself to it", () => {
+		const dir = mkdtempSync(join(tmpdir(), "crust-launcher-test-"));
+		tmpDir = dir;
+		const bunTarget = hostTarget();
+		if (!bunTarget) throw new Error("No Bun target matches this machine.");
+		const info: TargetInfo = BUN_TARGETS.info[bunTarget];
+		const target: DistributionTarget = {
+			target: bunTarget,
+			platformKey: info.platformKey,
+			targetAlias: info.alias,
+			packageName: `app-${info.alias}`,
+			packagePathSegment: `app-${info.alias}`,
+			packageDir: join(dir, info.alias),
+			os: info.os,
+			cpu: info.cpu,
+			...(info.libc ? { libc: info.libc } : {}),
+		};
+		// npm nests a dependency when another version holds the hoisted place.
+		const rootPackage = join(dir, "node_modules", "app");
+		const binaryIn = (nodeModules: string, name: string) => {
+			const binDir = join(nodeModules, target.packageName, "bin");
+			mkdirSync(binDir, { recursive: true });
+			const path = join(binDir, binaryFilename("app", target));
+			writeFileSync(
+				path,
+				`#!${process.execPath}\nconsole.log(JSON.stringify([${JSON.stringify(name)}, process.env.CRUST_INTERNAL_LAUNCHER]));\n`,
+			);
+			chmodSync(path, 0o755);
+			return path;
+		};
+		binaryIn(join(dir, "node_modules"), "hoisted");
+		const nested = binaryIn(join(rootPackage, "node_modules"), "nested");
+		mkdirSync(join(rootPackage, "bin"), { recursive: true });
+		const launcherPath = join(rootPackage, "bin", "app.js");
+		writeFileSync(launcherPath, generateLauncher("app", [target]));
+
+		const { stdout, status } = spawnSync(process.execPath, [launcherPath], {
+			encoding: "utf8",
+			timeout: TIMEOUT,
+		});
+		expect(status).toBe(0);
+		// The binary and the artifacts it is pointed at come from the same release.
+		expect(JSON.parse(stdout)).toEqual(["nested", JSON.stringify([nested, rootPackage])]);
+	});
+});

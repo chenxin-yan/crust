@@ -73,7 +73,11 @@ function launcherRoot(): string | undefined {
 	if (!value) return undefined;
 	try {
 		const [binary, root] = JSON.parse(value) as unknown[];
-		if (typeof binary !== "string" || typeof root !== "string") return undefined;
+		// A launcher writes an absolute root; any other would follow the working directory.
+		const { isAbsolute } = process.getBuiltinModule("node:path");
+		if (typeof binary !== "string" || typeof root !== "string" || !isAbsolute(root)) {
+			return undefined;
+		}
 		// Real paths: a package manager may link the platform package into place.
 		const { realpathSync } = process.getBuiltinModule("node:fs");
 		return realpathSync.native(binary) === realpathSync.native(process.execPath) ? root : undefined;
