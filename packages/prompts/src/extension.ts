@@ -1,0 +1,145 @@
+// ────────────────────────────────────────────────────────────────────────────
+// @crustjs/prompts/extension — asks for missing values declared with `prompt`
+// ────────────────────────────────────────────────────────────────────────────
+
+import {
+	type ArgSnapshot,
+	type ExtensionFactory,
+	type ExtensionId,
+	type FlagSnapshot,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
+
+import { canPrompt } from "./core/renderer.ts";
+import { confirm } from "./prompts/confirm.ts";
+import { input } from "./prompts/input.ts";
+import { multiselect } from "./prompts/multiselect.ts";
+import { select } from "./prompts/select.ts";
+
+declare module "@crustjs/core" {
+	interface ArgExtras {
+		/**
+		 * The question `prompts()` asks on a terminal when the argument has no value, or only its
+		 * default. Read only by `prompts()` from `@crustjs/prompts/extension`.
+		 */
+		prompt?: string;
+	}
+	interface FlagExtras {
+		/**
+		 * The question `prompts()` asks on a terminal when the flag has no value, or only its
+		 * default. Read only by `prompts()` from `@crustjs/prompts/extension`.
+		 */
+		prompt?: string;
+	}
+}
+
+const PROMPTS: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:prompts");
+
+/**
+ * Asks for `def`'s value and binds the answer: yes/no for a boolean, a list for `choices`
+ * (several picks for a list value), otherwise text, converted as the same word on the command
+ * line and asked again with the error until it converts. An empty answer without a default
+ * leaves an optional value unset and is refused for a required one. Asks nothing for a list
+ * value without `choices`, a count flag, or an exclusive group.
+ */
+async function ask(
+	def: ArgSnapshot | FlagSnapshot,
+	message: string,
+	list: boolean,
+	bindText: (text: string | readonly string[]) => void,
+	bindBoolean: (value: boolean) => void,
+): Promise<void> {
+	if (def.type === "boolean" && !list) {
+		bindBoolean(await confirm({ message, default: def.default === true }));
+	} else if (def.choices && list) {
+		// A variadic argument's default is one word.
+		const preselected = def.default === undefined ? undefined : [def.default].flat().map(String);
+		const picked = await multiselect({
+			message,
+			// One row per value: a pick then repeats nothing, so `kept` below compares sets exactly.
+			choices: [...new Set(def.choices)],
+			default: preselected,
+			required: def.required,
+		});
+		// An unchanged pick keeps the default as declared: its order and its repeats.
+		const kept =
+			preselected !== undefined &&
+			picked.length === new Set(preselected).size &&
+			picked.every((value) => preselected.includes(value));
+		bindText(kept ? preselected : picked);
+	} else if (def.choices) {
+		const preselected = typeof def.default === "string" ? def.default : undefined;
+		bindText(await select({ message, choices: def.choices, default: preselected }));
+	} else if (!list && def.type !== "count" && def.type !== "exclusive") {
+		// A kept default is bound too, so a later positional argument can follow it. Its text
+		// converts back to the declared value: a `json` default is already parsed, a `url` one is
+		// its href, and core parses a `parse` or `path` default as text.
+		const kept =
+			def.default === undefined
+				? undefined
+				: def.type === "json"
+					? JSON.stringify(def.default)
+					: String(def.default);
+		await input({
+			message,
+			default: kept,
+			validate: (answer) => {
+				if (answer === "" && def.default !== "") {
+					if (def.required) throw new Error("A value is required");
+					return;
+				}
+				try {
+					bindText(answer);
+				} catch (error) {
+					// `min` and `max` check supplied values, not the default: one they would refuse
+					// stays as declared.
+					if (answer !== kept) throw error;
+				}
+			},
+		});
+	}
+}
+
+/**
+ * Asks on a terminal for each argument and flag with a `prompt` question that has no value
+ * or only its default, before the Command Action runs. A value from argv, an environment
+ * variable, or another Extension (such as `--input`) is never asked for. Asks only under
+ * `execute()` where {@link canPrompt} is true, never under typed `run()`; elsewhere the
+ * command's own errors, such as a missing required flag, apply.
+ */
+export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension(PROMPTS)
+	.owns("prompt")
+	.factory((extension) =>
+		extension.preRun(async (ctx) => {
+			// Typed `run()` captures stderr, so it is never a terminal there.
+			if (!ctx.stderr.isTTY || !canPrompt()) return;
+			const missing = (source: string | undefined) => source === undefined || source === "default";
+			let gap = false;
+			for (const arg of ctx.command.args) {
+				// A positional argument cannot follow an omitted one, so asking for it could never
+				// bind; a list after `--` is bound apart from the positionals before it.
+				if (gap && arg.variadic !== "afterDoubleDash") continue;
+				if (arg.prompt !== undefined && missing(ctx.sources.args[arg.name])) {
+					await ask(
+						arg,
+						arg.prompt,
+						arg.variadic !== undefined,
+						(text) => ctx.bindText({ args: { [arg.name]: text } }),
+						(value) => ctx.bindInput({ args: { [arg.name]: value } }),
+					);
+				}
+				gap ||= missing(ctx.sources.args[arg.name]);
+			}
+			for (const [name, flag] of Object.entries(ctx.command.flags)) {
+				if (flag.prompt === undefined || !missing(ctx.sources.flags[name])) continue;
+				await ask(
+					flag,
+					flag.prompt,
+					flag.multiple === true,
+					(text) => ctx.bindText({ flags: { [name]: text } }),
+					(value) => ctx.bindInput({ flags: { [name]: value } }),
+				);
+			}
+		}),
+	);

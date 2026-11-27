@@ -6,7 +6,7 @@ export default defineConfig({
 	test: { tags: testTags },
 	pack: {
 		...pack,
-		entry: ["src/index.ts", "src/testing.ts"],
+		entry: ["src/index.ts", "src/extension.ts", "src/testing.ts"],
 	},
 	run: { tasks: libraryTasks },
 });
