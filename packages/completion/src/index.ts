@@ -270,7 +270,7 @@ const completionFactory: ExtensionFactory<
 						command: [subcommandName],
 						title: "Setup",
 						// Lines to copy: only help prints a body line by line.
-						only: [defineExtensionId("crust:help")],
+						only: ["crust:help"],
 						body: [
 							"# bash, in ~/.bashrc",
 							`source <(${run} bash)`,
