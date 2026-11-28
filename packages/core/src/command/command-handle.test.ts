@@ -35,7 +35,7 @@ describe("app.at(path) command handles", () => {
 
 		const outcome = await unwrap(pending);
 		expect(outcome).toMatchObject({ status: "completed", result: { remote: "origin" } });
-		expect(outcome.stdout).toBe("added origin");
+		expect(outcome.stdout).toBe("added origin\n");
 		expect(received).toEqual([{ args: { name: "origin", url: "git@x" }, flags: { fetch: true } }]);
 		expect(remoteAdd.path).toEqual(["remote", "add"]);
 	});

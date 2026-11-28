@@ -246,6 +246,8 @@ const checkedRules: readonly (readonly [DefinitionErrorReason, () => unknown])[]
 				.snapshot(),
 	],
 	["unowned-key", () => new Crust("cli").command("deploy", { hint: "x" } as {}, action).snapshot()],
+	// An own `__proto__` key stays a key on the root, as on any other command.
+	["unowned-key", () => new Crust("cli", JSON.parse('{"__proto__":{}}')).snapshot()],
 	[
 		"unowned-key",
 		() =>

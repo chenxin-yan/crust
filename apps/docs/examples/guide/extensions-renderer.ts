@@ -11,5 +11,5 @@ export const quiet = defineExtension(defineExtensionId("acme:quiet"))
 const app = new Crust("app").extend(quiet).action(({ stdout }) => {
 	stdout("deployed");
 });
-console.log((await app.run([])).stdout); // => "deployed"
+console.log((await app.run([])).stdout); // => "deployed\n"
 console.log((await app.run([], { flags: { quiet: true } })).stdout); // => ""

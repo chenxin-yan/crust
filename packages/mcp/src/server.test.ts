@@ -275,7 +275,7 @@ describe("createMcpServer", () => {
 		expect(await client.callTool({ name: "deploy" })).toEqual({
 			content: [
 				{ type: "text", text: JSON.stringify({ ok: true }, null, 2) },
-				{ type: "text", text: "Next steps:\n  Check the deployment:\n    cli status" },
+				{ type: "text", text: "Next steps:\n  Check the deployment:\n    cli status\n" },
 			],
 			structuredContent: { ok: true },
 		});
@@ -284,7 +284,7 @@ describe("createMcpServer", () => {
 				{ type: "text", text: "Error: not logged in" },
 				{
 					type: "text",
-					text: "Next steps:\n  Log in:\n    cli login\n  Check the deployment:\n    cli status",
+					text: "Next steps:\n  Log in:\n    cli login\n  Check the deployment:\n    cli status\n",
 				},
 			],
 			isError: true,
@@ -509,6 +509,42 @@ describe("createMcpServer", () => {
 
 		expect(result.isError).toBeUndefined();
 		expect((await readdir(dir)).length).toBeGreaterThan(0);
+	});
+
+	it("reports a completed run with a non-zero exit code as a tool error, content unchanged", async () => {
+		const app = new Crust("cli")
+			.add(
+				defineCommand("check", (c) =>
+					c.output(jsonSchemaOutput({ type: "object" })).action(({ exitCode }) => {
+						exitCode(3);
+						return { problems: 2 };
+					}),
+				),
+			)
+			.add(
+				defineCommand("count", (c) =>
+					c.output(jsonSchemaOutput({ type: "number" })).action(({ exitCode, stdout }) => {
+						stdout("no count");
+						exitCode(1);
+						return -0;
+					}),
+				),
+			)
+			.add(defineCommand("ok", (c) => c.action(({ exitCode }) => exitCode(0))));
+		const client = await connect(app);
+		await client.listTools();
+		// structuredContent is kept, and the SDK client still validates it against the outputSchema.
+		expect(await client.callTool({ name: "check" })).toEqual({
+			content: [{ type: "text", text: JSON.stringify({ problems: 2 }, null, 2) }],
+			structuredContent: { problems: 2 },
+			isError: true,
+		});
+		// With isError set, a text-only result needs no structuredContent, so it is not reworded.
+		expect(await client.callTool({ name: "count" })).toEqual({
+			content: [{ type: "text", text: "no count\n" }],
+			isError: true,
+		});
+		expect(await client.callTool({ name: "ok" })).not.toHaveProperty("isError");
 	});
 
 	it("sends progress notifications for yielded events when the request has a progress token", async () => {
@@ -768,6 +804,15 @@ describe("toolResultFromOutcome", () => {
 			"failed",
 			{ status: "failed" as const, error: new Error("boom"), exitCode: 1, stdout: "", stderr: "" },
 			{ content: [{ type: "text", text: "Error: boom" }], isError: true },
+		],
+		[
+			"completed with a non-zero exit code",
+			{ ...completed({ a: 1 }), exitCode: 3 },
+			{
+				content: [{ type: "text", text: '{\n  "a": 1\n}' }],
+				structuredContent: { a: 1 },
+				isError: true,
+			},
 		],
 	])("appends non-empty stderr after a %s result", (_label, outcome, withoutStderr) => {
 		expect(toolResultFromOutcome(outcome)).toEqual(withoutStderr);

@@ -1164,20 +1164,28 @@ describe("Extension named hooks", () => {
 			},
 		);
 
-		it("treats a list the delimiter leaves empty as omitted, as argv does", async () => {
-			async function execute(text: Text, argv: string[]) {
+		it("reads a list the delimiter leaves empty as an empty list, as argv does", async () => {
+			async function execute(text: Text, argv: string[], required: boolean) {
 				const stderr: string[] = [];
+				const stdout: string[] = [];
+				const tags = required
+					? ({ type: "string", multiple: true, delimiter: ",", required } as const)
+					: ({ type: "string", multiple: true, delimiter: ",", default: ["d"] } as const);
 				const exitCode = await new Crust("cli")
-					.flags({ tags: { type: "string", multiple: true, delimiter: ",", required: true } })
+					.flags({ tags })
 					.extend(defineExtension(defineExtensionId("text")).preRun((ctx) => ctx.bindText(text)))
-					.action(() => {})
-					.execute({ argv, io: { stdout: { write() {} }, stderr: lineSink(stderr) } });
-				return { exitCode, stderr: stderr.join("\n") };
+					.action(({ flags, stdout }) => stdout(JSON.stringify(flags.tags)))
+					.execute({ argv, io: { stdout: lineSink(stdout), stderr: lineSink(stderr) } });
+				return { exitCode, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 			}
-			const fromArgv = await execute({}, ["--tags", ","]);
+			const optional = await execute({}, ["--tags", ","], false);
+			expect(optional).toEqual({ exitCode: 0, stdout: "[]", stderr: "" });
+			expect(await execute({ flags: { tags: [","] } }, [], false)).toEqual(optional);
+			expect(await execute({ flags: { tags: [] } }, [], false)).toEqual(optional);
+			const fromArgv = await execute({}, ["--tags", ","], true);
 			expect(fromArgv.exitCode).toBe(2);
 			expect(fromArgv.stderr).toContain('Missing required flag "--tags"');
-			expect(await execute({ flags: { tags: [","] } }, [])).toEqual(fromArgv);
+			expect(await execute({ flags: { tags: [","] } }, [], true)).toEqual(fromArgv);
 		});
 
 		it("does not suggest a command-line spelling for text that starts with =", async () => {
@@ -1306,9 +1314,10 @@ describe("Extension named hooks", () => {
 			]);
 		});
 
-		it("reports an empty variadic or multiple-flag array as omitted under run() and bindInput", async () => {
+		it("reports an empty variadic or multiple-flag array as given under run() and bindInput", async () => {
 			const empty = { args: { files: [] }, flags: { tags: [], labels: [] } };
 			const seen: ExtensionContext["sources"][] = [];
+			const received: unknown[] = [];
 			const app = (bind: boolean) =>
 				new Crust("cli")
 					.flags({
@@ -1321,11 +1330,15 @@ describe("Extension named hooks", () => {
 							.setup((ctx) => void (bind && ctx.bindInput(empty)))
 							.preRun((ctx) => void seen.push(ctx.sources)),
 					)
-					.action(() => {});
+					.action(({ args, flags }) => void received.push({ args, flags }));
 			await unwrap(app(false).run([], empty));
 			expect(await app(true).execute({ argv: [] })).toBe(0);
-			const omitted = { args: {}, flags: { tags: "default" } };
-			expect(seen).toEqual([omitted, omitted]);
+			expect(seen).toEqual([
+				{ args: { files: "run" }, flags: { tags: "run", labels: "run" } },
+				{ args: { files: "bound" }, flags: { tags: "bound", labels: "bound" } },
+			]);
+			// The default does not apply: `[]` is an empty list.
+			expect(received).toEqual([empty, empty]);
 		});
 
 		it("is empty in the routing-failure onError context", async () => {
@@ -1633,14 +1646,14 @@ describe("Extension setup, flag handlers, and noAction", () => {
 				)
 				.action(({ stdout }) => stdout("action"));
 		const repeatable = handled({ mode: { type: "boolean", multiple: true } });
-		expect((await repeatable.run([], { flags: { mode: [false] } })).stdout).toBe("action");
+		expect((await repeatable.run([], { flags: { mode: [false] } })).stdout).toBe("action\n");
 		const defaulted = handled({ mode: { type: "boolean", default: true } });
-		expect((await defaulted.run([], { flags: { mode: undefined } })).stdout).toBe("action");
+		expect((await defaulted.run([], { flags: { mode: undefined } })).stdout).toBe("action\n");
 		const listed = handled({
 			mode: { type: "string", multiple: true, delimiter: ",", default: ["a"] },
 		});
-		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("action");
-		// `--mode ""` is given: an empty list, not an omission.
+		// `[]` and `--mode ""` are given: an empty list, not an omission.
+		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("handled\n");
 		const lines: string[] = [];
 		await listed.execute({
 			argv: ["--mode", ""],
@@ -1658,7 +1671,9 @@ describe("Extension setup, flag handlers, and noAction", () => {
 			)
 			.action(({ stdout }) => stdout("action"));
 		for (const mode of [[], [false], false]) {
-			expect((await app.run([], { flags: { mode } })).stdout, JSON.stringify(mode)).toBe("handled");
+			expect((await app.run([], { flags: { mode } })).stdout, JSON.stringify(mode)).toBe(
+				"handled\n",
+			);
 		}
 		const lines: string[] = [];
 		await app.execute({
@@ -1680,9 +1695,9 @@ describe("Extension setup, flag handlers, and noAction", () => {
 					.action(({ flags, stdout }) => stdout(`publishing ${flags.version}`)),
 			)
 			.action(() => {});
-		expect((await app.run([], { flags: { version: true } })).stdout).toBe("cli v1");
+		expect((await app.run([], { flags: { version: true } })).stdout).toBe("cli v1\n");
 		expect((await app.run(["publish"], { flags: { version: true } })).stdout).toBe(
-			"publishing true",
+			"publishing true\n",
 		);
 		const lines: string[] = [];
 		await app.execute({
@@ -2053,7 +2068,7 @@ describe("Extension renderer", () => {
 		expect(await execute(app, [], lines)).toBe(0);
 		expect(lines).toEqual(["stdout:initializing", "pulled", "stdout:ready"]);
 		const outcome = await app.run([]);
-		expect(outcome.stdout).toBe("initializing\nready");
+		expect(outcome.stdout).toBe("initializing\nready\n");
 	});
 
 	it("keeps the bytes of Context output waiting for the renderer as they were written", async () => {
@@ -2526,8 +2541,8 @@ describe("Crust .run()", () => {
 
 		expect(out).toEqual(["ambient out"]);
 		expect(err).toEqual(["ambient err"]);
-		expect(result.stdout).toBe("ambient out");
-		expect(result.stderr).toBe("ambient err");
+		expect(result.stdout).toBe("ambient out\n");
+		expect(result.stderr).toBe("ambient err\n");
 		expect(getAmbientTerminalIO()).toBeUndefined();
 	});
 });

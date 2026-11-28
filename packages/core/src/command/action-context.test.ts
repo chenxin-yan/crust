@@ -82,7 +82,7 @@ describe("runCommand", () => {
 			result: {
 				status: "completed",
 				result: { target: "api", replicas: 1 },
-				stdout: "deploying api",
+				stdout: "deploying api\n",
 				exitCode: 0,
 			},
 		});
@@ -168,8 +168,8 @@ describe("runCommand", () => {
 		expect(outcome).toMatchObject({
 			status: "completed",
 			result: [
-				{ status: "completed", stdout: "a" },
-				{ status: "completed", stdout: "b" },
+				{ status: "completed", stdout: "a\n" },
+				{ status: "completed", stdout: "b\n" },
 			],
 		});
 		const results =

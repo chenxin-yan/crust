@@ -29,17 +29,23 @@ async function _typecheckWithEnvKeepsTypedRun() {
 
 void _typecheckWithEnvKeepsTypedRun;
 
-// `provide` is typed against the app's root Contexts.
-async function _typecheckProvideReplacesAppContexts() {
+// `provide` takes any Context instance: one the root provides, or one a command provides itself.
+async function _typecheckProvideTakesAnyContext() {
 	const clock = defineContext("clock").setup(() => "real");
-	const other = defineContext("other").setup(() => 1);
-	const app = new Crust("cli").provide(clock()).action(async ({ ctx }) => await ctx.clock);
+	const local = defineContext("local").setup(() => 1);
+	const app = new Crust("cli")
+		.provide(clock())
+		.command("work", (command) =>
+			command.provide(local()).action(async ({ ctx }) => (await ctx.local) + 1),
+		);
 	await captureExecute(app, [], { provide: [clock.of("fake")] });
 	runInteractive(app, [], { provide: [clock.of("fake")] });
-	// @ts-expect-error -- the app provides no Context named other
-	await captureExecute(app, [], { provide: [other.of(2)] });
-	// @ts-expect-error -- the app provides no Context named other
-	runInteractive(app, [], { provide: [other.of(2)] });
+	await captureExecute(app, ["work"], { provide: [local.of(2)] });
+	runInteractive(app, ["work"], { provide: [local.of(2)] });
+	// @ts-expect-error -- only a Context instance replaces one
+	await captureExecute(app, [], { provide: [{ name: "clock" }] });
+	// @ts-expect-error -- only a Context instance replaces one
+	runInteractive(app, [], { provide: ["clock"] });
 }
 
-void _typecheckProvideReplacesAppContexts;
+void _typecheckProvideTakesAnyContext;

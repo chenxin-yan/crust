@@ -357,7 +357,7 @@ describe("create-crust CLI", () => {
 		await vi.waitFor(() => expect(terminal.screen()).toContain("already exists. Overwrite?"));
 		terminal.keys("enter");
 
-		expect(await outcome).toMatchObject({ status: "completed", stdout: "Aborted." });
+		expect(await outcome).toMatchObject({ status: "completed", stdout: "Aborted.\n" });
 		expect(readdirSync(projectDir)).toEqual(["sentinel.txt"]);
 	});
 

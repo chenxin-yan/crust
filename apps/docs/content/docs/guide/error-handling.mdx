@@ -95,7 +95,7 @@ Error: Missing required argument "<pattern>"
 
 - To fail with a status of your own, throw an error that carries it, such as `Object.assign(new Error("Container exited"), { exitCode: 137 })`. An error from a child process library that sets `exitCode` passes its status through unchanged, except a multiple of 256, which a shell would read as success: it exits `1`.
 - Setting `process.exitCode` in an action or hook has no effect: `execute()` overwrites it. `onError` hooks change how a failure prints, never its status.
-- [`run()` outcomes](#handle-errors-in-code) and [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) report the same `exitCode`.
+- [`run()` outcomes](#handle-errors-in-code) and [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) report the same `exitCode`. An [MCP](/docs/modules/mcp#results) tool call whose exit code is not 0 is a tool error (`isError`), a completed one included.
 
 ## Customize error output
 

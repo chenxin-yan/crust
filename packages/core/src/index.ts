@@ -7,7 +7,6 @@ export type {
 	ContextFactory,
 	ContextInstance,
 	ContextMap,
-	ContextReplacement,
 	ContextSetup,
 	FactoryValueOf,
 } from "./api/context.ts";

@@ -36,7 +36,7 @@ See the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 <include lang="ts">../../../examples/guide/testing.ts#capture-execute</include>
 
-`captureExecute()` runs argv through `execute()` and resolves to `{ stdout, stderr, exitCode }`: what a user would see and the exit code the shell would get, including Extension error rendering. `stdout` and `stderr` are exactly what was written, so a line printed with `stdout(text)` ends in a newline, unlike `run()`'s outcome, which drops one final newline. It restores the prior process exit state afterwards. Its `stdin`, `isTTY`, and `columns` options set what the action reads from [`stdin`](/docs/guide/terminal-io) and whether its output is a terminal; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
+`captureExecute()` runs argv through `execute()` and resolves to `{ stdout, stderr, exitCode }`: what a user would see and the exit code the shell would get, including Extension error rendering. `stdout` and `stderr` are exactly what was written, so a line printed with `stdout(text)` ends in a newline, as in `run()`'s outcome. It restores the prior process exit state afterwards. Its `stdin`, `isTTY`, and `columns` options set what the action reads from [`stdin`](/docs/guide/terminal-io) and whether its output is a terminal; see the [`captureExecute()` reference](/docs/modules/testing#captureexecuteapp-argv).
 
 <Callout type="warn">
   Patching `process.stdout.write` doesn't capture Crust's output: outside Windows, `execute()`

@@ -88,7 +88,7 @@ describe("parseArgs — number flags", () => {
 		});
 		expect(parseArgs(cmd, ["--port=-42", "--", "007"]).flags.port).toBe(-42);
 		expect(parseArgs(cmd, ["--", "007"]).args.count).toBe(7);
-		for (const raw of ["1.5", "1e3", "+1", "0x10", "", "99999999999999999999"]) {
+		for (const raw of ["1.5", "1e3", "+1", "0x10", ""]) {
 			expect(() => parseAndValidate(cmd, [`--port=${raw}`], {})).toThrow(
 				"Expected an integer for --port.",
 			);
@@ -97,6 +97,17 @@ describe("parseArgs — number flags", () => {
 		expect(() => validateParsed(cmd, parseStructured(cmd, { flags: { port: 1.5 } }))).toThrow(
 			"Expected an integer for --port.",
 		);
+	});
+
+	it("refuses an integer a number cannot hold exactly, saying so", () => {
+		const cmd = makeNode({ meta: "test", flags: { id: { type: "integer" } } });
+		const range = "Expected an integer from -9007199254740991 to 9007199254740991 for --id;";
+		expect(parseArgs(cmd, ["--id=9007199254740991"]).flags.id).toBe(Number.MAX_SAFE_INTEGER);
+		// `Number("9007199254740993")` is 9007199254740992: another id.
+		for (const raw of ["9007199254740993", "-9007199254740992", "99999999999999999999"]) {
+			expect(() => parseAndValidate(cmd, [`--id=${raw}`], {})).toThrow(range);
+		}
+		expect(() => parseStructured(cmd, { flags: { id: 2 ** 53 } })).toThrow(range);
 	});
 
 	it("checks min and max on every source, but not on the default", () => {
@@ -493,8 +504,8 @@ describe("parseArgs — variadic args", () => {
 		expect(parseArgs(cmd, []).args.files).toEqual(["fallback"]);
 		expect(parseArgs(cmd, ["a", "b"]).args.files).toEqual(["a", "b"]);
 		expect(parseStructured(cmd, {}).args.files).toEqual(["fallback"]);
-		// An empty occurrence array is omission, matching `multiple` flags.
-		expect(parseStructured(cmd, { args: { files: [] } }).args.files).toEqual(["fallback"]);
+		// An empty occurrence array is a supplied empty list, as for `multiple` flags.
+		expect(parseStructured(cmd, { args: { files: [] } }).args.files).toEqual([]);
 		expect(parseStructured(cmd, { args: { files: ["a"] } }).args.files).toEqual(["a"]);
 	});
 
@@ -1395,19 +1406,25 @@ describe("parseStructured", () => {
 		).toEqual(parseArgs(command, []));
 	});
 
-	it("treats empty multiple arrays as zero occurrences for defaults and required flags", () => {
+	it("reads empty multiple arrays as empty lists, over the environment and the default", () => {
 		const command = makeNode({
 			meta: "test",
 			flags: {
 				optional: { type: "string", multiple: true },
-				defaulted: { type: "string", multiple: true, default: ["fallback"] },
-				required: { type: "string", multiple: true, required: true },
+				defaulted: { type: "string", multiple: true, default: ["fallback"], env: "TAGS" },
+				required: { type: "string", multiple: true, required: true, delimiter: "," },
 			},
 		});
-		const result = parseStructured(command, {
-			flags: { optional: [], defaulted: [], required: [] },
-		});
-		expect(result).toEqual(parseArgs(command, []));
+		const result = parseStructured(
+			command,
+			{ flags: { optional: [], defaulted: [], required: [] } },
+			{ TAGS: "a" },
+		);
+		expect(result.flags).toEqual({ optional: [], defaulted: [], required: [] });
+		expect(result.sources.flags).toEqual({ optional: "run", defaulted: "run", required: "run" });
+		// A required list given none fails as `--required ""` does on the command line.
+		const argv = parseArgs(command, ["--required", ""], {});
+		expect(() => validateParsed(command, argv)).toThrow('Missing required flag "--required"');
 		expect(() => validateParsed(command, result)).toThrow('Missing required flag "--required"');
 	});
 });

@@ -306,6 +306,31 @@ describe("prompts()", () => {
 		expect(await run.done).toMatchObject({ stdout: "jobs=3\n", exitCode: 0 });
 	});
 
+	it("binds an empty list for an empty pick, even over the default", async () => {
+		const run = runInteractive(app, [
+			"new",
+			"app",
+			"out",
+			"--template",
+			"vue",
+			"--git",
+			"--description",
+			"d",
+		]);
+		// Both defaults are preselected; the cursor wraps, so this deselects each wherever it starts.
+		const result = await answer(
+			run,
+			[/Targets/, ""],
+			[/Features/, "", "space", "down", "space"],
+			[/Config/, ""],
+		);
+		expect(result).toMatchObject({
+			stdout:
+				'name=app dir=out targets=api template=vue features= git=true description=d config={"enabled":true}\n',
+			exitCode: 0,
+		});
+	});
+
 	it("asks for no positional after an omitted one", async () => {
 		const run = runInteractive(app, ["copy"]);
 		expect(await run.done).toEqual({
@@ -395,6 +420,6 @@ describe("prompts()", () => {
 
 	it("never asks under typed run(), even inside a terminal scope", async () => {
 		const outcome = await withTerminalIO(createPromptIO().io, () => app.run(["db", "reset"]));
-		expect(outcome).toMatchObject({ status: "completed", stdout: "db reset confirm=false" });
+		expect(outcome).toMatchObject({ status: "completed", stdout: "db reset confirm=false\n" });
 	});
 });

@@ -951,7 +951,7 @@ describe("Invocation pipeline — streams", () => {
 			stdout(` ${stdout.isTTY} ${stdout.columns} ${stderr.isTTY}`);
 		});
 		const outcome = await app.run([], undefined, { stdout: (chunk) => void live.push(chunk) });
-		expect(outcome.stdout).toBe("ééab false undefined false");
+		expect(outcome.stdout).toBe("ééab false undefined false\n");
 		expect(live).toHaveLength(5);
 	});
 

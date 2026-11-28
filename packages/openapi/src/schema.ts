@@ -187,17 +187,20 @@ export function isArraySchema(spec: OpenApiSpec, value: unknown): boolean {
 }
 
 /**
- * The flag value of a schema {@link valueKind} calls a scalar or an array of scalars: `number` for
- * numbers and integers, `boolean`, else `string`, with a string enum as `choices`. A numeric enum
- * is a plain `number`: the API checks it.
+ * The flag value of a schema {@link valueKind} calls a scalar or an array of scalars: `integer` for
+ * an `integer` type, `number` for other numbers, `boolean`, else `string`, with a string enum as
+ * `choices`. A numeric enum is a plain `number` or `integer`: the API checks it, as it checks
+ * `minimum` and `maximum`.
  */
 export function flagValue(
 	spec: OpenApiSpec,
 	value: unknown,
 ): {
-	type: "string" | "number" | "boolean";
+	type: "string" | "number" | "integer" | "boolean";
 	multiple: boolean;
 	choices?: string[];
+	/** The enum's non-null members, whatever their type: each is a valid value. */
+	values: readonly unknown[];
 	/** Whether the value may be `null`, which no flag sends: its `type` and its `enum`, where set, allow it. */
 	nullable: boolean;
 	/** For a list, whether its items may be `null`, by the same rule. */
@@ -208,15 +211,18 @@ export function flagValue(
 	const item = multiple ? record(typedView(spec, publishedSchema(spec, view?.items), 0)) : view;
 	const values = Array.isArray(item?.enum) ? item.enum.filter((entry) => entry !== null) : [];
 	const types = [item?.type, ...values.map((entry) => typeof entry)].flat();
-	const type = types.some((entry) => entry === "number" || entry === "integer")
-		? "number"
-		: types.includes("boolean")
-			? "boolean"
-			: "string";
+	const type = [item?.type].flat().includes("integer")
+		? "integer"
+		: types.some((entry) => entry === "number" || entry === "integer")
+			? "number"
+			: types.includes("boolean")
+				? "boolean"
+				: "string";
 	const choices = values.every((entry): entry is string => typeof entry === "string") ? values : [];
 	return {
 		type,
 		multiple,
+		values,
 		nullable: allowsNull(view),
 		itemNullable: multiple && allowsNull(item),
 		...(type === "string" && choices.length > 0 && { choices }),

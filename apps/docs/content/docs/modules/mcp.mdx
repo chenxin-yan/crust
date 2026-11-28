@@ -66,14 +66,14 @@ Every `include` path must be a canonical command path; hidden commands count. A 
 
 ### The `mcp` key
 
-`mcp()` owns an `mcp` key on command metadata, for `defineCommand()` and inline `.command()` alike:
+`mcp()` owns an `mcp` key on command metadata, for `defineCommand()`, inline `.command()`, and the root's `new Crust(name, { mcp })` alike:
 
 <include lang="ts">../../../examples/modules/mcp.ts#key</include>
 
 - `mcp: false` keeps the command, and everything under it, out of the tools. Use it for commands an agent should not run unattended, or that need a person, such as a browser sign-in. A command [`@crustjs/openapi`](/docs/modules/openapi#overrides) generates takes the key in its override.
 - An object holds the tool's [annotations](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations), under the specification's names: `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. They are passed to the client as they are, as hints; a client must not rely on them for safety.
 - The key is in the types once any file of the project imports `@crustjs/mcp`. A command that sets it in an application that does not install `mcp()` fails with a `DEFINITION` error (`unowned-key`) from source and in `crust build`, also when the application is served with `createMcpServer()`: install `mcp()` there too.
-- The root command takes no `mcp` key.
+- On the root, `false` covers every command, so the server lists no tools, and hints become the root tool's annotations.
 
 The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. Building the tool list throws, naming the paths, when:
 
@@ -110,6 +110,7 @@ The outcome of the run decides the tool result:
 - A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. An object property holding `undefined` is left out, as `JSON.stringify` does. Arrays and primitives are wrapped as `{ "result": value }` under every protocol revision: 2026-07-28 allows any JSON value, but earlier revisions require an object.
 - Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
 - A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors. Arguments that cannot become `run()` input, such as an invalid URL or a value that is not JSON data, fail the same way with `PARSE`.
+- A `completed` outcome whose action called [`exitCode(n)`](/docs/guide/error-handling#exit-status) with a non-zero `n` also sets `isError`, with the content above unchanged, `structuredContent` included. The MCP specification counts such business-logic failures as tool execution errors, so the agent sees that the call did not succeed.
 
 Whatever the outcome, non-empty captured stderr follows as one more text block, so warnings and [`nextSteps()`](/docs/modules/extensions/next-steps)' `Next steps:` block (recovery steps included on failure) reach the client. It changes neither `structuredContent` nor `isError`.
 
@@ -126,7 +127,7 @@ A command whose [`.output()`](/docs/api/crust#outputschema) schema converts to J
 | May or may not be an object (no top-level `type`, such as `anyOf`, or a `type` list with `"object"`) | None, since results may be sent either way                                                        |
 | Non-object, with a `$ref` outside `#/$defs/` (such as `"#"`) or another `$` keyword such as `$id`    | None, since wrapping would break it                                                               |
 
-MCP requires `structuredContent` from a tool with an `outputSchema`. When such a tool's call ends with only captured stdout (a `handled` outcome, or a result that is not plain JSON), the result sets `isError`, with a line saying the result is missing before the stdout text.
+MCP requires `structuredContent` from a tool with an `outputSchema`. When such a tool's call ends with only captured stdout (a `handled` outcome, or a result that is not plain JSON), the result sets `isError`, with a line saying the result is missing before the stdout text. A result that already sets `isError`, such as one with a non-zero exit code, is returned as it is.
 
 ## Progress
 

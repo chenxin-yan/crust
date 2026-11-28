@@ -523,10 +523,20 @@ function _typecheckOfValueStandsInForTheRealInstance() {
 	// @ts-expect-error -- a real engine still needs config where it is provided
 	new Crust("cli").provide(engine()).add(list);
 
-	// `provide` replaces a Context for one invocation, typed against the app's root Contexts.
+	// `provide` replaces a Context for one invocation and takes any Context instance.
 	void app.run(["list"], {}, { provide: [engine.of({ url: "double" })] });
-	// @ts-expect-error -- the double's value must have the Context's type
+	// @ts-expect-error -- `.of()` types the double's value by its Context
 	void app.run(["list"], {}, { provide: [engine.of({ url: 1 })] });
-	// @ts-expect-error -- the app provides no Context named config
+	// A name nothing provides is ignored at runtime.
 	void app.run(["list"], {}, { provide: [config.of({ url: "x" })] });
+	// @ts-expect-error -- only a Context instance replaces one
+	void app.run(["list"], {}, { provide: [{ name: "engine" }] });
+
+	// A Context a command provides itself.
+	const local = defineContext("local").setup(() => 1);
+	const own = new Crust("cli").command("work", (cmd) =>
+		cmd.provide(local()).action(async ({ ctx }) => (await ctx.local) + 1),
+	);
+	void own.run(["work"], {}, { provide: [local.of(2)] });
+	void own.execute({ provide: [local.of(2)] });
 }

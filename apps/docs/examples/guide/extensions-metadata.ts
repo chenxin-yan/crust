@@ -11,4 +11,4 @@ export const stamp = defineExtension<"version">(defineExtensionId("acme:stamp"))
 
 // [!code highlight]
 const app = new Crust("my-cli", { version: "1.2.3" }).extend(stamp).action(() => {});
-console.log((await app.run([])).stdout); // => "version 1.2.3"
+console.log((await app.run([])).stdout); // => "version 1.2.3\n"

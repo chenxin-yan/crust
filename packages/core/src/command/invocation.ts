@@ -1342,9 +1342,9 @@ function hasInjectedIO(io: ExecuteOptions["io"]): boolean {
 	return io !== undefined && Object.keys(io).length > 0;
 }
 
-/** `run()`'s captured text: every chunk as UTF-8, without the final newline a last `stdout(text)` adds. */
+/** `run()`'s captured text: every chunk as UTF-8, exactly as written. */
 function capturedText(chunks: readonly Buffer[]): string {
-	return Buffer.concat(chunks).toString("utf8").replace(/\n$/, "");
+	return Buffer.concat(chunks).toString("utf8");
 }
 
 /** Quiet programmatic boundary: capture output and the failure escaping the complete lifecycle. */

@@ -16,7 +16,7 @@ test("returns output and the action result", async () => {
 	const outcome = await app.run([]);
 	//    ^?
 
-	expect(outcome.stdout).toBe("first\nsecond");
+	expect(outcome.stdout).toBe("first\nsecond\n");
 	expect(outcome.status).toBe("completed");
 	// [!code highlight]
 	if (outcome.status === "completed") {

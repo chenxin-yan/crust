@@ -39,9 +39,10 @@ const PROMPTS: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:prompts");
 /**
  * Asks for `def`'s value and binds the answer: yes/no for a boolean, a list for `choices`
  * (several picks for a list value), otherwise text, converted as the same word on the command
- * line and asked again with the error until it converts. An empty answer without a default
- * leaves an optional value unset and is refused for a required one. Asks nothing for a list
- * value without `choices`, a count flag, or an exclusive group.
+ * line and asked again with the error until it converts. An empty text answer without a default
+ * leaves an optional value unset, and an empty pick binds an empty list; both are refused for a
+ * required value. Asks nothing for a list value without `choices`, a count flag, or an
+ * exclusive group.
  */
 async function ask(
 	def: ArgSnapshot | FlagSnapshot,
