@@ -350,19 +350,22 @@ export function validatePublishManifest(
 		}
 
 		for (const command of commands) {
-			const binary = pkg.bins[command];
-			if (binary === undefined || stagedPackageJson.bin?.[command] !== binary) {
+			if (pkg.bins[command] === undefined) {
 				throw new Error(
 					`Staged package ${pkg.dir} is missing correct bin metadata for ${command}.`,
 				);
 			}
 		}
 
-		if (
-			Object.keys(pkg.bins).length !== commands.length ||
-			Object.keys(stagedPackageJson.bin ?? {}).length !== commands.length
-		) {
+		if (Object.keys(pkg.bins).length !== commands.length) {
 			throw new Error(`Staged package ${pkg.dir} commands do not match manifest.json root.bins.`);
+		}
+
+		// A `bin` of the root's name in an optional package npm skips makes npm 10 drop the command.
+		if (stagedPackageJson.bin !== undefined) {
+			throw new Error(
+				`Staged package ${pkg.dir} must not declare bin: the root package provides the commands.`,
+			);
 		}
 
 		if (optionalDeps[pkg.name] !== rootPackageJson.version) {

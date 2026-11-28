@@ -140,15 +140,15 @@ describe("runDistributeBuild", () => {
 				os: string[];
 				cpu: string[];
 				libc?: string[];
-				bin: Record<string, string>;
 				publishConfig?: Record<string, string>;
 			}>(join(plan.stageDir, dir, "package.json"));
 		expect(platformPackage("linux-x64")).toMatchObject({
 			os: ["linux"],
 			cpu: ["x64"],
 			libc: ["glibc"],
-			bin: { "test-cli": "bin/test-cli-bun-linux-x64" },
 		});
+		// The root package provides the command: a platform package is not installed on its own.
+		expect(platformPackage("linux-x64")).not.toHaveProperty("bin");
 		expect(platformPackage("linux-x64-musl")).toMatchObject({
 			os: ["linux"],
 			cpu: ["x64"],
@@ -256,8 +256,9 @@ describe("runDistributeBuild", () => {
 			},
 		});
 		expect(
-			readJson<{ bin: Record<string, string> }>(join(plan.stageDir, "windows-x64", "package.json"))
-				.bin,
+			readJson<DistributionManifest>(join(plan.stageDir, "manifest.json")).packages.find(
+				(pkg) => pkg.dir === "windows-x64",
+			)?.bins,
 		).toEqual({ greet: "bin/greet-bun-windows-x64.exe", admin: "bin/admin-bun-windows-x64.exe" });
 		expect(readFileSync(join(plan.stageDir, "root", "bin", "admin.js"), "utf8")).toContain(
 			'"binaryFilename": "admin-bun-linux-x64"',

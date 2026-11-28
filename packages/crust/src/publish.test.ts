@@ -86,7 +86,6 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 				{
 					name: pkg.name,
 					version: manifest.version,
-					bin: pkg.bins,
 					os: [pkg.os],
 					cpu: [pkg.cpu],
 					...(pkg.libc ? { libc: [pkg.libc] } : {}),
@@ -409,12 +408,11 @@ describe("publish manifest validation", () => {
 
 		const stagedPath = join(tmpDir, "darwin-arm64", "package.json");
 		const staged = JSON.parse(readFileSync(stagedPath, "utf8"));
-		writeFileSync(
-			stagedPath,
-			JSON.stringify({ ...staged, bin: { ...staged.bin, "demo-admin": "bin/demo-admin" } }),
-		);
+		// Only the root package provides the commands: a platform package with a `bin` of the same
+		// name makes npm 10 drop the root's command.
+		writeFileSync(stagedPath, JSON.stringify({ ...staged, bin: { demo: "bin/demo" } }));
 		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
-			"Staged package darwin-arm64 is missing correct bin metadata for demo-admin.",
+			"Staged package darwin-arm64 must not declare bin: the root package provides the commands.",
 		);
 		writeFileSync(stagedPath, JSON.stringify(staged));
 
@@ -448,16 +446,10 @@ describe("publish manifest validation", () => {
 		expect(() => validatePublishManifest(tmpDir, repeated)).toThrow(/unique/);
 	});
 
-	it("rejects extra commands in either platform bin map", () => {
+	it("rejects extra commands in a platform package's manifest entry", () => {
 		const extra = structuredClone(manifest);
 		extra.packages[0]!.bins.extra = "bin/extra";
 		expect(() => validatePublishManifest(tmpDir, extra)).toThrow(/command/);
-
-		const stagedPath = join(tmpDir, "linux-x64", "package.json");
-		const staged = JSON.parse(readFileSync(stagedPath, "utf8"));
-		staged.bin.extra = "bin/extra";
-		writeFileSync(stagedPath, JSON.stringify(staged));
-		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(/command/);
 	});
 
 	it("rejects missing staged directories", () => {

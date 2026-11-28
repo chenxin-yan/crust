@@ -373,9 +373,13 @@ function validatePeerDependencies(
 	return { peerDependencies: ranges, peerDependenciesMeta };
 }
 
+/**
+ * A platform package holds the binary for the root package's launcher and is not installed on its
+ * own, so it declares no `bin`: the root provides the commands. (A `bin` of the same name in an
+ * optional package npm skips also makes npm 10 drop the root's command.)
+ */
 function buildDistributionPlatformPackageJson(
 	metadata: DistributionMetadata,
-	commands: readonly string[],
 	target: DistributionTarget,
 ): PlatformPublishPackageJson {
 	return {
@@ -383,7 +387,6 @@ function buildDistributionPlatformPackageJson(
 		name: target.packageName,
 		version: metadata.version,
 		files: ["bin"],
-		bin: platformBinMap(commands, target),
 		os: [target.os],
 		cpu: [target.cpu],
 		...(target.libc ? { libc: [target.libc] } : {}),
@@ -565,7 +568,7 @@ function stageDistributionPackages(
 		mkdirSync(join(target.packageDir, "bin"), { recursive: true });
 		writeJson(
 			join(target.packageDir, "package.json"),
-			buildDistributionPlatformPackageJson(platformMetadata, commands, target),
+			buildDistributionPlatformPackageJson(platformMetadata, target),
 		);
 	}
 

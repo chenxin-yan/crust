@@ -310,8 +310,7 @@ describe("host artifact acceptance", () => {
 		});
 	}, 180_000);
 
-	// Direct native binary and root launcher: `.bin` may select the platform
-	// binary itself (both packages are direct dependencies), bypassing the resolver.
+	// The installed binary, started on its own and through the root launcher.
 	it("Bun binary: installed native binary and root launcher run with the embedded runtime", async () => {
 		const node = requireTool("node");
 		const runtimeVersion = await toolVersion("bun", /^(\S+)/);
@@ -346,8 +345,9 @@ describe("host artifact acceptance", () => {
 
 		const consumer = await installStaged("bun-binary", project, manifest);
 		const platformDir = join(consumer, "node_modules", platform!.name);
-		const platformBin = readJson<{ bin: Record<string, string> }>(join(platformDir, "package.json"))
-			.bin.greet!;
+		// The platform package provides no command: only the root's launcher is on PATH.
+		expect(readJson<object>(join(platformDir, "package.json"))).not.toHaveProperty("bin");
+		const platformBin = platform!.bins.greet!;
 		expect(platformBin).toBe(`bin/greet-${target}${process.platform === "win32" ? ".exe" : ""}`);
 		const binary = join(platformDir, platformBin);
 		const launcher = join(

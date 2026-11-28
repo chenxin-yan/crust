@@ -162,17 +162,19 @@ await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running $
 				files: ["bin", "man", "skills"],
 				man: ["./man/admin-tool.1", "./man/greet.1"],
 			});
+			// The platform package provides no command of its own; the manifest says where its binaries are.
 			expect(
-				readJson<{ bin: Record<string, string> }>(join(projectDir, ".crust", alias, "package.json"))
-					.bin,
-			).toEqual({
+				readJson<object>(join(projectDir, ".crust", alias, "package.json")),
+			).not.toHaveProperty("bin");
+			const staged = readJson<{
+				root: { bins: string[] };
+				packages: { bins: Record<string, string> }[];
+			}>(join(projectDir, ".crust", "manifest.json"));
+			expect(staged.packages[0]!.bins).toEqual({
 				greet: `bin/greet-${host}${host.includes("windows") ? ".exe" : ""}`,
 				"admin-tool": `bin/admin-tool-${host}${host.includes("windows") ? ".exe" : ""}`,
 			});
-			expect(
-				readJson<{ root: { bins: string[] } }>(join(projectDir, ".crust", "manifest.json")).root
-					.bins,
-			).toEqual(["greet", "admin-tool"]);
+			expect(staged.root.bins).toEqual(["greet", "admin-tool"]);
 
 			for (const command of ["greet", "admin-tool"]) {
 				const binary = await runBoundedProcess(stagedBunBinary(projectDir, command, host), [], {
