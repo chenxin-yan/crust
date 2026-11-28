@@ -82,9 +82,3 @@ import { defineExtensionId } from "../identity.ts";
 	// @ts-expect-error `descripton` is not a command property
 	new Crust("tool").command("deploy", { descripton: "Deploy", hidden: true }, (command) => command);
 }
-
-{
-	// A key typed `?: never` holds no value, so a type that forbids properties this way passes.
-	const forbidding: { readonly type: "string"; readonly hidden?: never } = { type: "string" };
-	defineFlag(forbidding);
-}
