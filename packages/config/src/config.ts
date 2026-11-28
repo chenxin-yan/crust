@@ -119,9 +119,9 @@ export interface ConfigFiles {
 
 /** The options of {@link defineConfig}: its settings in three groups, by the file that may hold them. */
 export interface ConfigOptions<
-	U extends ConfigSettings,
-	P extends ConfigSettings,
-	B extends ConfigSettings,
+	U extends ConfigSettings | undefined,
+	P extends ConfigSettings | undefined,
+	B extends ConfigSettings | undefined,
 > {
 	/** The app's name: the user's file is in its configuration directory, `configDir(name)`. */
 	readonly name: string;
@@ -192,8 +192,8 @@ type CheckedSettings<G> = {
 	readonly [K in keyof G]: LocalValueBrand<G[K]> & KnownPropertiesBrand<G[K]>;
 } & ReservedNameBrand<G>;
 
-/** A group as given: one given as `undefined` is inferred as every name, and holds no setting. */
-type Group<G> = string extends keyof G ? {} : G;
+/** A group's settings: none for a group given as `undefined`. */
+type Group<G> = G extends ConfigSettings ? G : {};
 
 /** The settings that are in two groups. */
 type InTwoGroups<U, P, B> = (keyof U & keyof P) | (keyof U & keyof B) | (keyof P & keyof B);
@@ -202,7 +202,13 @@ type InTwoGroups<U, P, B> = (keyof U & keyof P) | (keyof U & keyof B) | (keyof P
 const TEXT = "CRUST_CONFIG_TEXT";
 
 type FileValues = Readonly<Record<string, unknown>>;
-type ConfigFile = { readonly path: string; readonly values: FileValues };
+/** A file as read: the settings it may hold, and its values or why it could not be read. */
+type ConfigFile = {
+	readonly may: (key: string) => boolean;
+	readonly path: string;
+	readonly values: FileValues;
+	readonly error?: unknown;
+};
 
 /**
  * `text` from `env[variable]` as the setting's value, converted as core converts an environment
@@ -290,9 +296,10 @@ function shown(value: unknown, separator: string): string {
  * `get`, `list` and `set` read and save settings from anywhere.
  */
 export function defineConfig<
-	const U extends ConfigSettings = {},
-	const P extends ConfigSettings = {},
-	const B extends ConfigSettings = {},
+	// `| undefined`: a group given as `undefined` is then inferred as that, not as every name.
+	const U extends ConfigSettings | undefined = {},
+	const P extends ConfigSettings | undefined = {},
+	const B extends ConfigSettings | undefined = {},
 	const C extends boolean = false,
 >(
 	options: ConfigOptions<U, P, B> & {
@@ -376,55 +383,58 @@ export function defineConfig<
 		ctx.defer(() => void (run.over = true));
 	};
 	/**
-	 * The files in the order they apply: the project file, then the user's file. Both are read, so
-	 * a setting in the wrong one is warned of, but a file that may hold none of `wanted` cannot fail
-	 * the read: a broken project file does not stand in the way of a setting only the user's holds.
+	 * The files in the order they apply: the project file, then the user's file. A file that cannot
+	 * be read keeps its error for the setting that needs it, so a broken project file does not
+	 * stand in the way of a setting only the user's file holds.
 	 */
-	const readFiles = async (
-		warn: (line: string) => void,
-		wanted: readonly string[],
-	): Promise<ConfigFile[]> => {
+	const readFiles = async (warn: (line: string) => void): Promise<ConfigFile[]> => {
 		const run = runs?.getStore();
 		const warned = run === undefined || run.over ? new Set<string>() : run.warned;
 		const read: ConfigFile[] = [];
-		/** A file's values without the settings only the `other` file may set. */
+		/** The file `locate` finds, without the settings only the `other` file may set. */
 		const add = async (
-			path: string,
+			file: string,
+			locate: () => string | Promise<string>,
 			may: (key: string) => boolean,
 			other: () => string | Promise<string>,
 		) => {
-			let values: Record<string, unknown>;
+			let path = file;
 			try {
-				values = { ...(await readValues(path)) };
+				path = await locate();
+				const values = { ...(await readValues(path)) };
+				for (const key of Object.keys(values)) {
+					if (may(key)) continue;
+					delete values[key];
+					// The other file by its name, when its folder cannot be told.
+					const only = await Promise.resolve(other()).catch(() => userName);
+					const line = `Warning: ${path} sets "${key}", which only ${only} may set; ignored.`;
+					if (!warned.has(line)) warn(line);
+					warned.add(line);
+				}
+				read.push({ may, path, values });
 			} catch (error) {
-				if (wanted.some(may)) throw error;
-				return;
+				read.push({ may, path, values: {}, error });
 			}
-			for (const key of Object.keys(values)) {
-				if (may(key)) continue;
-				delete values[key];
-				const line = `Warning: ${path} sets "${key}", which only ${await other()} may set; ignored.`;
-				if (!warned.has(line)) warn(line);
-				warned.add(line);
-			}
-			read.push({ path, values });
 		};
 		const found = hasProject ? nearest(projectName) : undefined;
-		if (found !== undefined) await add(found, inProject, userPath);
-		if (hasUser) await add(await userPath(), inUser, () => projectName);
+		if (found !== undefined) await add(projectName, () => found, inProject, userPath);
+		if (hasUser) await add(userName, userPath, inUser, () => projectName);
 		return read;
 	};
 
-	/** Reads the files on the first call only, for the settings `wanted` of one `list()` or `get()`. */
-	const filesOnce = (warn: (line: string) => void, wanted: readonly string[]) => {
+	/** Reads the files on the first call only, for the settings of one `list()` or `get()`. */
+	const filesOnce = (warn: (line: string) => void) => {
 		let pending: Promise<ConfigFile[]> | undefined;
-		return () => (pending ??= readFiles(warn, wanted));
+		return () => (pending ??= readFiles(warn));
 	};
 
 	/** The first file that gives `key` a value: a value that converts to nothing gives none. */
 	const fromFiles = async (key: string, files: readonly ConfigFile[]) => {
 		const def = settings[key]!;
-		for (const { path, values } of files) {
+		for (const { may, path, values, error } of files) {
+			if (!may(key)) continue;
+			// Only a setting this file may hold fails on it.
+			if (error !== undefined) throw error;
 			if (!Object.hasOwn(values, key)) continue;
 			const words = fileWords(key, def, values[key], path);
 			const converted = await Promise.all(
@@ -526,10 +536,7 @@ export function defineConfig<
 			);
 		});
 		if (wanted.length === 0) return;
-		const read = await readFiles(
-			(line) => ctx.stderr(line),
-			wanted.map(([, flag]) => flag.config!.slice(prefix.length)),
-		);
+		const read = await readFiles((line) => ctx.stderr(line));
 		for (const [flagName, flag] of wanted) {
 			const file = await fromFiles(flag.config!.slice(prefix.length), read);
 			// Converted once already, so binding the same words cannot fail.
@@ -616,7 +623,7 @@ export function defineConfig<
 			command
 				.command("list", { description: "Show every setting, its value and its source" }, (list) =>
 					list.action(async ({ stdout, stderr }) => {
-						const files = filesOnce((line) => stderr(line), keys);
+						const files = filesOnce((line) => stderr(line));
 						const entries = await Promise.all(
 							keys.map(async (setting) => ({ setting, ...(await resolve(setting, files)) })),
 						);
@@ -635,7 +642,7 @@ export function defineConfig<
 					get.args(key).action(async ({ args, stdout, stderr }) => {
 						const { value } = await resolve(
 							args.key,
-							filesOnce((line) => stderr(line), [args.key]),
+							filesOnce((line) => stderr(line)),
 						);
 						if (value !== undefined) stdout(shown(value, "\n"));
 					}),
@@ -668,7 +675,7 @@ export function defineConfig<
 	const config = {
 		flag: (key: string) => ({ ...settings[key], config: `${prefix}${key}` }),
 		get: async (key: string) => {
-			const { value } = await resolve(key, filesOnce(toStderr, [key]));
+			const { value } = await resolve(key, filesOnce(toStderr));
 			const def = settings[key]!;
 			if (value === undefined && def.required) {
 				const variables = [def.env ?? []].flat().map((variable) => `$${variable}`);
@@ -680,7 +687,7 @@ export function defineConfig<
 			return value;
 		},
 		list: async () => {
-			const files = filesOnce(toStderr, keys);
+			const files = filesOnce(toStderr);
 			return Promise.all(keys.map(async (key) => ({ key, ...(await resolve(key, files)) })));
 		},
 		set: async (values: Record<string, unknown>, target?: { readonly project?: true }) => {

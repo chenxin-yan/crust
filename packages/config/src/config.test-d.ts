@@ -126,6 +126,9 @@ defineConfig({
 defineConfig({ name: "acme", both: { active: { type: "boolean" } }, user: undefined }).flag(
 	"active",
 );
+// A group typed as a record of any names keeps its settings, under any name.
+const wide: Record<string, { type: "string" }> = { pager: { type: "string" } };
+void defineConfig({ name: "acme", user: wide }).get("pager");
 const twice = defineConfig({
 	name: "acme",
 	user: { region: { type: "string" } },

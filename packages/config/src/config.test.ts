@@ -322,6 +322,49 @@ describe("a setting only the project file may hold", () => {
 		expect(await config.get("entry")).toBe("src/main.ts");
 	});
 
+	it("fails list() only for a setting a broken file would have given", async () => {
+		const config = defineConfig({
+			name: "acme",
+			user: { pager: { type: "string" } },
+			project: { entry: { type: "string", env: "ACME_ENTRY" } },
+		});
+		write(userFile(), { pager: "less" });
+		write(projectFile(), "{ broken");
+		await expect(config.list()).rejects.toThrow(`Malformed config file: ${projectFile()}`);
+		// Its variable gives entry, so nothing is asked of the broken file.
+		await withEnv({ ...process.env, ACME_ENTRY: "src/main.ts" }, async () => {
+			expect(await config.list()).toEqual([
+				{ key: "pager", value: "less", source: { kind: "file", path: userFile() } },
+				{ key: "entry", value: "src/main.ts", source: { kind: "env", name: "ACME_ENTRY" } },
+			]);
+		});
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"reads a project setting when the user's folder cannot be resolved",
+		async () => {
+			const { config } = tool();
+			write(projectFile(), { entry: "src/main.ts", pager: "less" });
+			// No configuration folder: a relative home, and no XDG_CONFIG_HOME.
+			const home = vi
+				.spyOn(process.getBuiltinModule("node:os"), "homedir")
+				.mockReturnValue("relative");
+			await withEnv({ ...process.env, XDG_CONFIG_HOME: undefined }, async () => {
+				const warn = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+				try {
+					expect(await config.get("entry")).toBe("src/main.ts");
+					expect(warn).toHaveBeenCalledWith(
+						`Warning: ${projectFile()} sets "pager", which only config.json may set; ignored.\n`,
+					);
+					await expect(config.get("pager")).rejects.toThrow();
+				} finally {
+					warn.mockRestore();
+					home.mockRestore();
+				}
+			});
+		},
+	);
+
 	it("is saved only in the project file", async () => {
 		const { config, app } = tool();
 		await config.set({ entry: "src/main.ts" }, { project: true });
