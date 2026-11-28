@@ -129,6 +129,10 @@ defineConfig({ name: "acme", both: { active: { type: "boolean" } }, user: undefi
 // A group typed as a record of any names keeps its settings, under any name.
 const wide: Record<string, { type: "string" }> = { pager: { type: "string" } };
 void defineConfig({ name: "acme", user: wide }).get("pager");
+// Beside a group of known names, its unknown names are no duplicate of them.
+void defineConfig({ name: "acme", user: wide, project: { entry: { type: "string" } } }).get(
+	"entry",
+);
 const twice = defineConfig({
 	name: "acme",
 	user: { region: { type: "string" } },

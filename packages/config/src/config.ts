@@ -195,8 +195,11 @@ type CheckedSettings<G> = {
 /** A group's settings: none for a group given as `undefined`. */
 type Group<G> = G extends ConfigSettings ? G : {};
 
+/** A group's names, when they are known: a record of any names tells nothing about another group. */
+type Names<G> = string extends keyof G ? never : keyof G;
+
 /** The settings that are in two groups. */
-type InTwoGroups<U, P, B> = (keyof U & keyof P) | (keyof U & keyof B) | (keyof P & keyof B);
+type InTwoGroups<U, P, B> = (Names<U> & Names<P>) | (Names<U> & Names<B>) | (Names<P> & Names<B>);
 
 /** The variable name the files' text is converted under, as the text of an environment variable. */
 const TEXT = "CRUST_CONFIG_TEXT";
