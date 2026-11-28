@@ -22,7 +22,7 @@
 
 ## What is Crust?
 
-Crust is a TypeScript CLI framework for humans and agents. Define a command once with full type inference, and it runs as a CLI, packages as an agent skill, and can be exposed over MCP. Composable modules add prompts, progress, TUI, styling, persistence, man pages, and testing helpers as you need them. It runs on Bun and Node.js, with native Bun integrations. Crust and its extensions follow the [Command Line Interface Guidelines](https://clig.dev).
+Crust is a TypeScript CLI framework for humans and agents. Define a command once with full type inference, and it runs as a CLI, packages as an agent skill, and can be exposed over MCP. Composable modules add prompts, progress, TUI, styling, persistence, man pages, and testing helpers as you need them. It runs on Bun and Node.js, with native Bun integrations. Its defaults follow the modern best practices in the [Command Line Interface Guidelines](https://clig.dev), so a CLI built with Crust behaves the way people expect from the tools they already use.
 
 ## Who uses Crust?
 
