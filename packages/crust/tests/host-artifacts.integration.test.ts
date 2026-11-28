@@ -141,7 +141,11 @@ async function buildProject(
 	process.cwd = () => project;
 	let result: Awaited<ReturnType<typeof captureExecute>>;
 	try {
-		result = await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]);
+		result = await captureExecute(new Crust("test").add(buildCommand), [
+			"build",
+			"--no-typecheck",
+			...argv,
+		]);
 	} finally {
 		process.cwd = originalCwd;
 	}

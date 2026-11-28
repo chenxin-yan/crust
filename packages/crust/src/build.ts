@@ -8,6 +8,7 @@ import {
 	statSync,
 } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -17,6 +18,7 @@ import { bold, dim, green, yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
+import { runProcess } from "@crustjs/utils/process";
 
 import { type ArtifactOwner, mergeEntryArtifacts } from "./artifacts.ts";
 import { execBuild, execScriptBuild } from "./bundle.ts";
@@ -24,6 +26,7 @@ import {
 	assertTargetsBuildableWithoutBun,
 	type BuildCompiler,
 	type BuildRunner,
+	processOutput,
 	resolveBinaryCompiler,
 	resolveBunBuildRunner,
 } from "./compilers.ts";
@@ -437,6 +440,16 @@ export type BuildOptions = {
 	/** Materialize Command Snapshots and run Extension build hooks before compiling. Default: true. */
 	validate?: boolean | undefined;
 	/**
+	 * Run the project's own `tsc --noEmit` before building. Default: true; the build fails
+	 * when it reports errors, or when `typescript` or the root `tsconfig.json` is missing.
+	 */
+	typecheck?: boolean | undefined;
+	/**
+	 * Extra arguments for the type check's `tsc --noEmit`, such as `["--runExternalCode"]`.
+	 * Rejected when `typecheck` is false.
+	 */
+	tscArgs?: readonly string[] | undefined;
+	/**
 	 * Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`.
 	 * A throw rejects `build()`; on the closing summary lines `.crust/` already holds the new build.
 	 */
@@ -689,6 +702,53 @@ async function prepareEntries(
 	return reports;
 }
 
+/**
+ * Runs the TypeScript that `cwd` resolves (`tsc --noEmit`) on the project's root
+ * `tsconfig.json`; throws with its output on errors. tsc would otherwise look for
+ * a tsconfig.json in parent directories, so the root one is required.
+ */
+async function typecheckProject(cwd: string, io: LineIO, extra: readonly string[]): Promise<void> {
+	const skip = "pass --no-typecheck to build without type checking";
+	if (!existsSync(join(cwd, "tsconfig.json"))) {
+		throw new Error(
+			`crust build type-checks the project with tsc --noEmit, but ${cwd} has no tsconfig.json.\n  Add one, or ${skip}.`,
+		);
+	}
+	let manifestPath: string;
+	try {
+		manifestPath = createRequire(join(cwd, "package.json")).resolve("typescript/package.json");
+	} catch (error) {
+		throw new Error(
+			`crust build type-checks the project with tsc --noEmit, but typescript is not installed in ${cwd}.\n  Install it as a devDependency, or ${skip}.`,
+			{ cause: error },
+		);
+	}
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	const tsc = join(dirname(manifestPath), manifest.bin.tsc);
+	const args = ["--noEmit", ...extra];
+	io.stdout(
+		`${dim("Type check:")} typescript ${manifest.version} ${dim(`(tsc ${args.join(" ")})`)}`,
+	);
+	// bin/tsc is a JavaScript launcher (TypeScript 7's starts its native compiler).
+	const runner = resolveBunBuildRunner();
+	const result = await runProcess(runner.command, [tsc, ...args], {
+		env: runner.env,
+		cwd,
+		stdio: "collect",
+	});
+	if (result.exitCode !== 0) {
+		const output = processOutput(result);
+		throw new Error(
+			`Type check failed${output ? `:\n${output}` : ""}\n  Fix the errors, or ${skip}.`,
+		);
+	}
+	// Silent unless an argument after `--` asks tsc to print, such as `--listFiles`. Each line
+	// goes to the stream tsc wrote it on.
+	const lines = (text: string) => (text.trim() ? text.trimEnd().split(/\r?\n/) : []);
+	for (const line of lines(result.stderr)) io.stderr(line);
+	for (const line of lines(result.stdout)) io.stdout(line);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Build command
 // ────────────────────────────────────────────────────────────────────────────
@@ -700,9 +760,10 @@ async function prepareEntries(
  * launcher (artifact `binary`), plus for binaries one platform package per
  * target holding one executable per command. Command names and source entries
  * come from `bin`; the runtime, artifact, Bun plugins, extra directories, and
- * external dependencies from package.json `crust`. Bundling and Command
- * Snapshots run in bun subprocesses (bun on PATH, or the running Bun
- * executable), so this works under Node as well when Bun is installed; Node
+ * external dependencies from package.json `crust`. The project's own
+ * `tsc --noEmit` runs first unless `typecheck` is false. The type check,
+ * bundling, and Command Snapshots run in bun subprocesses (bun on PATH, or the
+ * running Bun executable), so this works under Node as well when Bun is installed; Node
  * binaries need a node on PATH that Crust's tsdown can build executables with.
  *
  * Throws on any failure, leaving the previous `.crust/` stage untouched: the
@@ -759,6 +820,13 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 					`${yellow("Warning:")} ${entryPath} starts with a ${named} shebang but crust.runtime is "${plan.runtime}". The build targets ${plan.runtime}; a linked command (npm link) still starts ${named}.`,
 				);
 			}
+		}
+		const tscArgs = options.tscArgs ?? [];
+		if (options.typecheck ?? true) await typecheckProject(cwd, io, tscArgs);
+		else if (tscArgs.length > 0) {
+			throw new Error(
+				`Arguments for tsc were given (${tscArgs.join(" ")}), but --no-typecheck skips the type check.\n  Drop --no-typecheck, or drop the arguments after --.`,
+			);
 		}
 		const compilers = await selectCompilers(plan, io);
 		// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.

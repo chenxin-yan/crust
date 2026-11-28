@@ -114,7 +114,12 @@ await new Crust("bun-admin").action(({ stdout, exitCode }) => {
 		const app = new Crust("test").add(buildCommand);
 		process.cwd = () => project;
 		try {
-			const result = await captureExecute(app, ["build", "--artifact", "package"]);
+			const result = await captureExecute(app, [
+				"build",
+				"--artifact",
+				"package",
+				"--no-typecheck",
+			]);
 			expect(result.exitCode, result.stderr).toBe(0);
 			expect(result.stdout).toContain("Runtime: bun (default)");
 			expect(result.stdout).toContain("Artifact: package");

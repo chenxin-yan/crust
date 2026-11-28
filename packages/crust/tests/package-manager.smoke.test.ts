@@ -50,6 +50,7 @@ console.log(args.join(" ") || "resolver-ok");
 			"--target",
 			target,
 			"--no-validate",
+			"--no-typecheck",
 		]);
 		if (result.exitCode !== 0) throw new Error(result.stderr);
 	} finally {

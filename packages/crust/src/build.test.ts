@@ -10,6 +10,7 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +34,7 @@ const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import schema from "../schema/package.json";
 import {
-	build,
+	build as buildProject,
 	type BuildOptions,
 	CRUST_CONFIG_KEYS,
 	planBuild,
@@ -633,6 +634,8 @@ describe("readCrustConfig", () => {
 });
 
 describe("build", () => {
+	// These fixtures have no tsconfig.json; "build type check" below covers the type check.
+	const build = (options: BuildOptions) => buildProject({ typecheck: false, ...options });
 	// `$&` in the project path checks that reported paths keep it literally.
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-$&-"));
 	const stageDir = join(tmpDir, ".crust");
@@ -1006,6 +1009,135 @@ describe("build", () => {
 	);
 });
 
+describe("build type check", () => {
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-typecheck-"));
+	const stageDir = join(tmpDir, ".crust");
+	const bundlePath = join(stageDir, "root", "bin", "typed-cli.js");
+	const typescriptDir = dirname(createRequire(import.meta.url).resolve("typescript/package.json"));
+	const typescriptVersion = JSON.parse(readFileSync(join(typescriptDir, "package.json"), "utf8"))
+		.version as string;
+	const writeEntry = (entry: string) => writeFileSync(join(tmpDir, "src", "cli.ts"), entry);
+
+	beforeEach(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		mkdirSync(join(tmpDir, "node_modules"));
+		symlinkSync(typescriptDir, join(tmpDir, "node_modules", "typescript"), "junction");
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({
+				name: "typed-cli",
+				version: "0.1.0",
+				crust: { runtime: "node", artifact: "package" },
+			}),
+		);
+		writeFileSync(
+			join(tmpDir, "tsconfig.json"),
+			JSON.stringify({ compilerOptions: { strict: true, types: [] }, include: ["src"] }),
+		);
+		writeEntry('export const greeting: string = "first";\n');
+	});
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it("logs what tsc prints on success one line at a time", async () => {
+		const logged: string[] = [];
+		await buildProject({
+			cwd: tmpDir,
+			validate: false,
+			tscArgs: ["--listFiles"],
+			onLog: (line, stream) => stream === "stdout" && logged.push(line),
+		});
+		// The file list arrives as one record per file, not as one block.
+		expect(logged.filter((line) => /src[\\/]cli\.ts/.test(line))).toEqual([
+			expect.not.stringContaining("\n"),
+		]);
+	}, 60_000);
+
+	it("runs the project's tsc before building and keeps the previous stage on errors", async () => {
+		const logged: string[] = [];
+		await buildProject({ cwd: tmpDir, validate: false, onLog: (line) => logged.push(line) });
+		expect(logged).toContain(`Type check: typescript ${typescriptVersion} (tsc --noEmit)`);
+		expect(readFileSync(bundlePath, "utf8")).toContain("first");
+
+		writeEntry('export const count: number = "second";\n');
+		const failure = buildProject({ cwd: tmpDir, validate: false });
+		await expect(failure).rejects.toThrow("src/cli.ts(1,14): error TS2322");
+		await expect(failure).rejects.toThrow("pass --no-typecheck to build without type checking");
+		expect(readFileSync(bundlePath, "utf8")).toContain("first");
+		expect(existsSync(join(stageDir, "manifest.json"))).toBe(true);
+		expect(existsSync(join(tmpDir, ".crust.lock"))).toBe(false);
+
+		await buildProject({ cwd: tmpDir, validate: false, typecheck: false });
+		expect(readFileSync(bundlePath, "utf8")).toContain("second");
+	}, 60_000);
+
+	it("fails without TypeScript or a root tsconfig.json, naming --no-typecheck", async () => {
+		rmSync(join(tmpDir, "node_modules"), { recursive: true });
+		await expect(buildProject({ cwd: tmpDir, validate: false })).rejects.toThrow(
+			`typescript is not installed in ${tmpDir}.\n  Install it as a devDependency, or pass --no-typecheck to build without type checking.`,
+		);
+		rmSync(join(tmpDir, "tsconfig.json"));
+		await expect(buildProject({ cwd: tmpDir, validate: false })).rejects.toThrow(
+			`${tmpDir} has no tsconfig.json.\n  Add one, or pass --no-typecheck to build without type checking.`,
+		);
+		expect(existsSync(stageDir)).toBe(false);
+	});
+
+	it("maps --no-typecheck onto typecheck: false", async () => {
+		writeEntry('export const count: number = "second";\n');
+		const originalCwd = process.cwd;
+		process.cwd = () => tmpDir;
+		try {
+			const app = new Crust("test").add(buildCommand);
+			const checked = await captureExecute(app, ["build", "--no-validate"]);
+			expect(checked.exitCode).toBe(1);
+			expect(checked.stderr).toContain("error TS2322");
+			const unchecked = await captureExecute(app, ["build", "--no-validate", "--no-typecheck"]);
+			expect(unchecked.exitCode, unchecked.stderr).toBe(0);
+			expect(unchecked.stdout).not.toContain("Type check:");
+		} finally {
+			process.cwd = originalCwd;
+		}
+	}, 60_000);
+
+	it("passes the words after -- to tsc", async () => {
+		writeEntry("export function echo(value) {\n\treturn value;\n}\n");
+		const originalCwd = process.cwd;
+		process.cwd = () => tmpDir;
+		try {
+			const app = new Crust("test").add(buildCommand);
+			const strict = await captureExecute(app, ["build", "--no-validate"]);
+			expect(strict.exitCode).toBe(1);
+			expect(strict.stderr).toContain("error TS7006");
+			const loose = await captureExecute(app, [
+				"build",
+				"--no-validate",
+				"--",
+				"--strict",
+				"false",
+				"--listFiles",
+			]);
+			expect(loose.exitCode, loose.stderr).toBe(0);
+			expect(loose.stdout).toContain("(tsc --noEmit --strict false --listFiles)");
+			// What tsc prints on success, here the files it read, is shown too.
+			expect(loose.stdout).toMatch(/src[\\/]cli\.ts/);
+			// Nothing runs tsc, so there is nowhere to pass them.
+			const skipped = await captureExecute(app, [
+				"build",
+				"--no-validate",
+				"--no-typecheck",
+				"--",
+				"--strict",
+				"false",
+			]);
+			expect(skipped.exitCode).toBe(1);
+			expect(skipped.stderr).toContain("--no-typecheck");
+		} finally {
+			process.cwd = originalCwd;
+		}
+	}, 60_000);
+});
+
 describe("buildCommand", () => {
 	it("rejects invalid identity before staging, even with --no-validate", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-identity-guard-"));
@@ -1069,6 +1201,7 @@ describe("buildCommand", () => {
 					"build",
 					"--artifact",
 					"binary",
+					"--no-typecheck",
 				]);
 
 				expect(result.exitCode, result.stderr).toBe(0);
@@ -1118,6 +1251,7 @@ describe("buildCommand", () => {
 				"build",
 				"--artifact",
 				"binary",
+				"--no-typecheck",
 				...argv,
 			]);
 

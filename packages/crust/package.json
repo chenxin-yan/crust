@@ -69,7 +69,8 @@
 		"tsdown": "0.23.7"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "^0.6.0"
+		"@crustjs/core": "^0.6.0",
+		"typescript": ">=5.9.0"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",

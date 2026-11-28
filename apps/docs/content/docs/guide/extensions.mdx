@@ -310,7 +310,7 @@ An Extension that needs `version` can require it with `defineExtension<"version"
   ../../../examples/guide/extensions-metadata.ts
 </include>
 
-TypeScript rejects `.extend(stamp)` unless the root declares `version`. Only TypeScript checks this: `bun`, `node`, and `crust build` don't type-check and the runtime [doesn't repeat it](/docs/api/crust#chaining-semantics), so run `tsc --noEmit` first.
+TypeScript rejects `.extend(stamp)` unless the root declares `version`. Only TypeScript checks this: the runtime [doesn't repeat it](/docs/api/crust#chaining-semantics), and `bun` and `node` don't type-check, so run `tsc --noEmit` before running from source. [`crust build`](/docs/guide/build-and-distribution#build) type-checks the project itself.
 
 If a factory argument can supply the value instead, build the factory without a metadata requirement and annotate it with overloads. Only calls that omit the argument then require root metadata, so code that type-checks can rely on one of the two being set:
 

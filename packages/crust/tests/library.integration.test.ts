@@ -82,7 +82,7 @@ beforeAll(async () => {
 		}),
 	);
 	cpSync(distDir, join(libraryProject, "dist"), { recursive: true });
-	await build({ cwd: libraryProject, validate: false });
+	await build({ cwd: libraryProject, validate: false, typecheck: false });
 
 	const pack = await runBoundedProcess(which("bun")!, ["pm", "pack", "--destination", root], {
 		cwd: stagedRoot,
@@ -131,7 +131,7 @@ describe("carried CommonJS exports", () => {
 		expect(before.exitCode, before.stderr).toBe(0);
 		expect(before.stdout.trim()).toBe("1");
 
-		await expect(build({ cwd: project, validate: false })).rejects.toThrow(
+		await expect(build({ cwd: project, validate: false, typecheck: false })).rejects.toThrow(
 			"would change module format",
 		);
 		expect(existsSync(join(project, ".crust", "manifest.json"))).toBe(false);
@@ -140,13 +140,13 @@ describe("carried CommonJS exports", () => {
 			join(project, "package.json"),
 			JSON.stringify({ ...pkg, exports: { types: "./dist/index.d.ts", default: pkg.exports } }),
 		);
-		await expect(build({ cwd: project, validate: false })).rejects.toThrow(
+		await expect(build({ cwd: project, validate: false, typecheck: false })).rejects.toThrow(
 			'target "./dist/index.d.ts"',
 		);
 
 		// An included package scope preserves CommonJS without changing the ESM CLI scope.
 		writeFileSync(join(project, "dist", "package.json"), JSON.stringify({ type: "commonjs" }));
-		await build({ cwd: project, validate: false });
+		await build({ cwd: project, validate: false, typecheck: false });
 		const staged = join(project, ".crust", "root");
 		const after = await runBoundedProcess(nodePath!, ["--input-type=module", "-e", consume], {
 			cwd: staged,
@@ -168,7 +168,7 @@ describe("carried CommonJS exports", () => {
 			join(project, "package.json"),
 			JSON.stringify({ ...pkg, exports: "./dist/index.cjs" }),
 		);
-		await build({ cwd: project, validate: false });
+		await build({ cwd: project, validate: false, typecheck: false });
 		const explicit = await runBoundedProcess(nodePath!, ["--input-type=module", "-e", consume], {
 			cwd: staged,
 			timeout: 4_000,
@@ -260,6 +260,7 @@ const logged = [];
 const result = await build({
 	cwd,
 	artifact: "binary",
+	typecheck: false,
 	...(withLog ? { onLog: (line, stream) => logged.push([line, stream]) } : {}),
 });
 writeFileSync(resultPath, JSON.stringify({ ...result, logged }));
