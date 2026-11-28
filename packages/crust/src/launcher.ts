@@ -1,3 +1,5 @@
+import { LAUNCHER_ENV } from "@crustjs/core/tooling";
+
 import type { DistributionTarget } from "./distribute.ts";
 
 /** Node.js the launcher needs for `process.execve`: the same floor as every Crust package. */
@@ -72,10 +74,11 @@ if (!target) {
 }
 
 const candidates = [
-\t// Hoisted install: the platform package beside this one in node_modules.
-\tresolve(dir, "..", "..", target.packagePathSegment, "bin", target.binaryFilename),
+\t// Nested before hoisted, so another version beside this package never wins over this one's.
 \t// Nested install: the platform package under this package's node_modules.
 \tresolve(dir, "..", "node_modules", target.packageName, "bin", target.binaryFilename),
+\t// Hoisted install: the platform package beside this one in node_modules.
+\tresolve(dir, "..", "..", target.packagePathSegment, "bin", target.binaryFilename),
 \t// In place: the .crust/ tree crust build staged, before any install.
 \tresolve(dir, "..", "..", target.targetAlias, "bin", target.binaryFilename),
 ];
@@ -90,6 +93,9 @@ if (!binPath) {
 \t);
 \tprocess.exit(1);
 }
+
+// The binary reads its artifacts from this package, so the paths it records do not name a platform.
+process.env.${LAUNCHER_ENV} = JSON.stringify([binPath, resolve(dir, "..")]);
 
 if (process.platform === "win32") {
 \tlaunchWindows(binPath);

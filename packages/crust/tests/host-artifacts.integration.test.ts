@@ -10,9 +10,18 @@
 // run from an unrelated cwd after its source project is deleted. Missing tools
 // or unbuilt workspace dists fail the tests instead of skipping them.
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
@@ -45,6 +54,7 @@ await new Crust("greet", { version: "0.1.0" })
 			greeting: flags.shout ? greeting.toUpperCase() : greeting,
 			runtime,
 			asset: readFileSync(artifactPath("assets/greeting.txt"), "utf8").trim(),
+			assets: artifactPath("assets"),
 			publicMessage: process.env.PUBLIC_MESSAGE ?? null,
 			secretMessage: process.env.SECRET_MESSAGE ?? null,
 		}));
@@ -294,16 +304,17 @@ describe("host artifact acceptance", () => {
 			".bin",
 			process.platform === "win32" ? "greet.cmd" : "greet",
 		);
+		const installedBundle = join(consumer, "node_modules", "@crust-fixture", "node-package");
 		expect(await greet(bin, [])).toEqual({
 			greeting: "HELLO WORLD!",
 			runtime: `node ${nodeVersion}`,
 			asset: "hello from assets",
+			assets: join(installedBundle, "assets"),
 			publicMessage: "hello-from-build",
 			secretMessage: null,
 		});
 		await expectUnknownFlag(bin, []);
 		// Same installed bundle through the consumer's node, as a package-manager-free entry.
-		const installedBundle = join(consumer, "node_modules", "@crust-fixture", "node-package");
 		expect(await greet(node, [join(installedBundle, "bin", "greet.js")])).toMatchObject({
 			greeting: "HELLO WORLD!",
 			asset: "hello from assets",
@@ -338,18 +349,26 @@ describe("host artifact acceptance", () => {
 			publicMessage: null,
 			secretMessage: null,
 		};
-		// In place, as a project's `start` script runs it: the launcher finds the sibling stage.
-		expect(await greet(node, [join(project, ".crust", "root", "bin", "greet.js")])).toEqual(
-			expected,
-		);
+		// In place, as a project's `start` script runs it: the launcher finds the sibling stage,
+		// and the binary reads the launcher's package.
+		expect(await greet(node, [join(project, ".crust", "root", "bin", "greet.js")])).toEqual({
+			...expected,
+			assets: join(project, ".crust", "root", "assets"),
+		});
 
+		// A release archive is the staged `bin/` folder: the binary with the artifacts beside it.
+		const archive = join(root, "bun-binary", "archive");
+		cpSync(join(project, ".crust", platform!.dir, "bin"), archive, { recursive: true });
 		const consumer = await installStaged("bun-binary", project, manifest);
 		const platformDir = join(consumer, "node_modules", platform!.name);
 		// The platform package provides no command: only the root's launcher is on PATH.
 		expect(readJson<object>(join(platformDir, "package.json"))).not.toHaveProperty("bin");
 		const platformBin = platform!.bins.greet!;
 		expect(platformBin).toBe(`bin/greet-${target}${process.platform === "win32" ? ".exe" : ""}`);
-		const binary = join(platformDir, platformBin);
+		// It ships the executable alone: the root package holds the artifacts the launcher's
+		// binary reads.
+		expect(readdirSync(join(platformDir, "bin"))).toEqual([basename(platformBin)]);
+		const binary = join(archive, basename(platformBin));
 		const launcher = join(
 			consumer,
 			"node_modules",
@@ -358,8 +377,16 @@ describe("host artifact acceptance", () => {
 			"bin",
 			"greet.js",
 		);
-		expect(await greet(binary, [])).toEqual(expected);
-		expect(await greet(node, [launcher])).toEqual(expected);
+		// On its own the binary reads beside itself; through the launcher, the root package, so a
+		// path it records (a skill link) is the same on every platform.
+		expect(await greet(binary, [])).toEqual({
+			...expected,
+			assets: join(archive, "assets"),
+		});
+		expect(await greet(node, [launcher])).toEqual({
+			...expected,
+			assets: join(consumer, "node_modules", "@crust-fixture", "bun-binary", "assets"),
+		});
 		await expectUnknownFlag(binary, []);
 		await expectUnknownFlag(node, [launcher]);
 	}, 240_000);

@@ -170,11 +170,12 @@ Node.js targets use Node.js's own release names. Cross-platform builds download 
 
 ### Platform packages and the npm launcher
 
-Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. It declares no `bin` of its own: the root package provides the commands, and users install the root. See [choose an artifact to ship](/docs/guide/build-and-distribution#choose-an-artifact-to-ship).
+Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command and nothing else. It declares no `bin` of its own: the root package provides the commands, and users install the root. The artifact directories staged beside the executable in `.crust/<target>/bin/` are for [release archives](/docs/guide/build-and-distribution#release-downloads) and are not published: the launcher's binary reads the root package's. See [choose an artifact to ship](/docs/guide/build-and-distribution#choose-an-artifact-to-ship).
 
 The root package's launcher selects the platform package for the host:
 
 - It supports only the targets included in the build.
+- It checks the root package's own `node_modules` first, then looks beside the root package. A nested platform package takes precedence over a hoisted copy.
 - On POSIX it replaces itself with the binary (`process.execve`), so signals sent to the command reach the binary and the exit status is the binary's. This needs Node.js `>=24`, which binary-only root packages declare in `engines.node`; roots that also publish library `exports` keep the project's range.
 - Signals ignored by whatever starts the command are not passed on: Node.js resets inherited ignores (except `SIGPIPE` and `SIGXFSZ`) before the launcher runs. Under `nohup` the binary still ends on `SIGHUP`, and as a background job of a non-interactive shell (`my-cli &` in a script) it still takes `SIGINT`. Run the platform binary directly when those ignores matter.
 - On Windows, which has no `execve`, it starts the binary, forwards `SIGTERM` and `SIGHUP`, and exits with the binary's exit code or signal. `SIGINT` is never forwarded: the console delivers Ctrl-C to the binary directly.
@@ -225,7 +226,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 | `crust.artifact`   | `package` (a root-only runtime package for `bun` or `node`) or `binary` (standalone executables for `bun` or `node`). `--artifact` overrides it.                                                                                                                                                                                                               |
 | `crust.targets`    | The [targets](#supported-targets) of a binary release: staged when a binary build runs without `--target`, and required by `crust publish`, which needs every one staged. Without it a build stages this machine's target, and publishing binaries fails. Rejected with `"artifact": "package"`; ignored when `--artifact package` overrides `crust.artifact`. |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun builds and Node runtime packages, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Node binaries.                                                                                         |
-| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                                                                                                                                            |
+| `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and beside each binary in `.crust/<target>/bin/`.                                                                                                                                                                                                   |
 | `crust.external`   | Packages a Node or Bun runtime package leaves out of its bundles and ships as `dependencies` of the staged root package, with their `dependencies` ranges, in this order. See [Keep dependencies external](/docs/guide/build-and-distribution#keep-dependencies-external). Rejected with `"artifact": "binary"`; ignored when `--artifact binary` is passed.   |
 
 `crust.include` rules:
@@ -260,7 +261,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 └── completions/
 ```
 
-Registered Extensions such as [`man()`](/docs/modules/man), [`skills()`](/docs/modules/skills), and [`completion()`](/docs/modules/completion) contribute build hooks. `crust build` runs those hooks while preparing each entry, writes the files they return, and copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`artifactPath(name)`](/docs/api/crust#artifactpathpath).
+Registered Extensions such as [`man()`](/docs/modules/man), [`skills()`](/docs/modules/skills), and [`completion()`](/docs/modules/completion) contribute build hooks. `crust build` runs those hooks while preparing each entry, writes the files they return, and copies each top-level directory into `.crust/root/` and beside each binary in `.crust/<target>/bin/`. A CLI reads them back with [`artifactPath(name)`](/docs/api/crust#artifactpathpath): from the root package, or from beside a binary that runs without the launcher.
 
 - Each hook's returned paths are recorded per `bin` entry under `build` in `.crust/manifest.json`. Loose top-level files are recorded but not copied into packages.
 - With several `bin` entries, same-named directories merge, so `man/greet.1` and `man/admin.1` coexist, and a file two entries write at the same path with the same bytes is kept once, so bins can share data such as one API's. A path two entries both write with different bytes fails the build naming both commands; collisions are compared case-insensitively.

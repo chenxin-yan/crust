@@ -8,7 +8,7 @@
 // and the mapping between a command and its flat JSON input.
 // ────────────────────────────────────────────────────────────────────────────
 
-export { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
+export { BUILD_OUT_DIR_ENV, LAUNCHER_ENV } from "@crustjs/utils/artifacts";
 export { SNAPSHOT_PATH_ENV } from "./command/invocation.ts";
 export {
 	commandInputFields,

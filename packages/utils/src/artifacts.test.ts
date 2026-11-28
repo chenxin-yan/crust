@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { BUILD_OUT_DIR_ENV, isSourceRun, artifactPath } from "./artifacts.ts";
+import { BUILD_OUT_DIR_ENV, LAUNCHER_ENV, isSourceRun, artifactPath } from "./artifacts.ts";
 
 let tmpDir: string;
 let originalArgv1: string | undefined;
@@ -84,6 +84,33 @@ describe("artifactPath", () => {
 			withBunMain("/$bunfs/root/cli", () => artifactPath("skills")),
 		);
 		expect(result).toBe(join(tmpDir, "bin", "skills"));
+	});
+
+	it("resolves in the root package that launched a compiled binary, and only for that binary", async () => {
+		process.argv[1] = join(tmpDir, "elsewhere", "cli.ts");
+		const binary = join(tmpDir, "platform", "bin", "cli");
+		await mkdir(join(tmpDir, "platform", "bin"), { recursive: true });
+		await writeFile(binary, "");
+		const rootPackage = join(tmpDir, "node_modules", "cli");
+		const resolveSkills = () =>
+			withExecPath(binary, () => withBunMain("/$bunfs/root/cli", () => artifactPath("skills")));
+		const beside = join(tmpDir, "platform", "bin", "skills");
+
+		vi.stubEnv(LAUNCHER_ENV, JSON.stringify([binary, rootPackage]));
+		expect(resolveSkills()).toBe(join(rootPackage, "skills"));
+		// Inherited from another program's launcher, or not what a launcher writes: beside the executable.
+		for (const value of [
+			JSON.stringify([join(tmpDir, "other", "bin", "tool"), rootPackage]),
+			JSON.stringify([binary]),
+			JSON.stringify([binary, "relative"]),
+			JSON.stringify([binary, ""]),
+			JSON.stringify({ binary, rootPackage }),
+			"not json",
+			"",
+		]) {
+			vi.stubEnv(LAUNCHER_ENV, value);
+			expect(resolveSkills()).toBe(beside);
+		}
 	});
 
 	it("detects a Windows Bun compiled binary even when the crust build marker is set", () => {

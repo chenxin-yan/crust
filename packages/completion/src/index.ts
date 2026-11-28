@@ -322,7 +322,7 @@ const completionFactory: ExtensionFactory<
  *
  * **Build hook.** Returns the same four files under `completions/`; `crust build`
  * writes them to `.crust/artifacts/completions/` and copies that directory into
- * the root package and each platform package's `bin/`. Scripts target the
+ * the root package and beside each binary. Scripts target the
  * root command name as the installed binary.
  */
 // SAFETY: the runtime command name is `options.command ?? "completion"`, which each overload's name restates.

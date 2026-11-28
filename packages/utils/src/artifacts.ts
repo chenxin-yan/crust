@@ -8,6 +8,13 @@ import { findNearestPackageRoot } from "./source.ts";
  */
 export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
 
+/**
+ * Set by the npm launcher of a binary release to `[<binary it starts>, <its root package>]`
+ * as JSON, so that binary reads its artifacts from the root package. A path it records, such
+ * as a skill link, is then the same on every platform.
+ */
+export const LAUNCHER_ENV = "CRUST_INTERNAL_LAUNCHER";
+
 type StandaloneGlobals = {
 	Bun?: { main?: string };
 };
@@ -58,13 +65,38 @@ export function isSourceRun(): boolean {
 }
 
 /**
+ * The root package whose launcher started this executable. The variable is inherited by
+ * every program this one starts, so it counts only when it names this executable.
+ */
+function launcherRoot(): string | undefined {
+	const value = process.env[LAUNCHER_ENV];
+	if (!value) return undefined;
+	try {
+		const [binary, root] = JSON.parse(value) as unknown[];
+		// A launcher writes an absolute root; any other would follow the working directory.
+		const { isAbsolute } = process.getBuiltinModule("node:path");
+		if (typeof binary !== "string" || typeof root !== "string" || !isAbsolute(root)) {
+			return undefined;
+		}
+		// Real paths: a package manager may link the platform package into place.
+		const { realpathSync } = process.getBuiltinModule("node:fs");
+		return realpathSync.native(binary) === realpathSync.native(process.execPath) ? root : undefined;
+	} catch {
+		// Not JSON, or a binary that is gone: not this executable's launcher.
+		return undefined;
+	}
+}
+
+/**
  * Absolute path of a file or directory shipped with this CLI. `path` starts with
  * a build artifact or `crust.include` directory name and may continue below it,
  * such as `"skills"` or `"templates/base"`.
  *
  * The shipped root is computed from how the CLI is running — never probed:
- * - Compiled executable (Bun or Node SEA): `<dir of the executable>/<path>`, which
- *   is a platform package's `bin/` or wherever the binary was placed.
+ * - Compiled executable (Bun or Node SEA) started by its npm launcher: `<path>` in the
+ *   launcher's root package, which {@link LAUNCHER_ENV} names.
+ * - Compiled executable started on its own: `<dir of the executable>/<path>`, which is a
+ *   release archive's folder or wherever the binary was placed.
  * - Crust-built Bun/Node bundle: `<path>` next to the bundle's `bin/` directory,
  *   i.e. `.crust/root/<path>` in place and `<installed root>/<path>` after install.
  *   Build-only environment is ignored.
@@ -93,7 +125,7 @@ export function artifactPath(path: string): string {
 
 	const { dirname, join, relative, resolve, sep } = process.getBuiltinModule("node:path");
 	if (isCompiledExecutable()) {
-		return join(dirname(process.execPath), ...segments);
+		return join(launcherRoot() ?? dirname(process.execPath), ...segments);
 	}
 
 	if (isCrustBundle()) {

@@ -376,17 +376,20 @@ function validatePeerDependencies(
 /**
  * A platform package holds the binary for the root package's launcher and is not installed on its
  * own, so it declares no `bin`: the root provides the commands. (A `bin` of the same name in an
- * optional package npm skips also makes npm 10 drop the root's command.)
+ * optional package npm skips also makes npm 10 drop the root's command.) It ships the executables
+ * alone: the launcher's binary reads the root package's artifacts, and the copies staged beside
+ * the executable are for release archives.
  */
 function buildDistributionPlatformPackageJson(
 	metadata: DistributionMetadata,
+	commands: readonly string[],
 	target: DistributionTarget,
 ): PlatformPublishPackageJson {
 	return {
 		...metadata.rootPackageJson,
 		name: target.packageName,
 		version: metadata.version,
-		files: ["bin"],
+		files: Object.values(platformBinMap(commands, target)),
 		os: [target.os],
 		cpu: [target.cpu],
 		...(target.libc ? { libc: [target.libc] } : {}),
@@ -568,7 +571,7 @@ function stageDistributionPackages(
 		mkdirSync(join(target.packageDir, "bin"), { recursive: true });
 		writeJson(
 			join(target.packageDir, "package.json"),
-			buildDistributionPlatformPackageJson(platformMetadata, target),
+			buildDistributionPlatformPackageJson(platformMetadata, commands, target),
 		);
 	}
 
@@ -713,10 +716,11 @@ export async function runDistributeBuild<T extends string>(
 	for (const { name, sourceDir, dereference } of copies) {
 		const options = { recursive: true, dereference, verbatimSymlinks: !dereference };
 		cpSync(sourceDir, join(rootDir, name), options);
-		// artifactPath (core) computes `<root>/<name>` from a Node bundle but
-		// `dirname(process.execPath)/<name>` from a compiled binary, which is a
-		// platform package's bin dir — the root package is unreachable from there,
-		// so each platform package ships its own copy of the artifacts.
+		// artifactPath (core) computes `<root>/<name>` from a Node bundle, and from a
+		// compiled binary its launcher started. A binary started on its own, from a
+		// release archive, has no root package and reads `dirname(process.execPath)/<name>`,
+		// so each target's `bin/` holds a copy beside the executable. The platform package
+		// leaves it out of its `files`.
 		for (const targetPackage of distributionTargets) {
 			cpSync(sourceDir, join(targetPackage.packageDir, "bin", name), options);
 		}
