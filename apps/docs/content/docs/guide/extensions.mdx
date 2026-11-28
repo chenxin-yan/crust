@@ -151,7 +151,7 @@ Two rules keep an owned key safe for every app that uses it:
 After routing and parsing, an invocation runs these hooks:
 
 ```text
-setup → handle → preRun → validation → action → postRun
+setup → handle → defaults → preRun → validation → action → postRun
             └─ no handler and no action → validation → noAction
 ```
 
@@ -159,17 +159,18 @@ setup → handle → preRun → validation → action → postRun
   ../../../examples/guide/extensions-hooks.ts
 </include>
 
-| Hook        | Runs                                                                                                                | Use it for                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `setup`     | Every invocation, in `.extend()` order, before any handler                                                          | Process settings such as color or log level                                                  |
-| `.handle()` | When its flag is passed; ends the invocation as `handled`                                                           | Flags that take over, like `--help`                                                          |
-| `noAction`  | The command has no action and no handler took over, after validation (skipped for a group run bare); ends `handled` | Fallbacks such as help for a command group                                                   |
-| `preRun`    | Only when the action will run, in `.extend()` order, before validation                                              | Login checks, deprecation warnings                                                           |
-| `postRun`   | After every invocation that reached hooks, in reverse order                                                         | Reporting the outcome                                                                        |
-| `onError`   | `execute()` failures, in `.extend()` order                                                                          | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
+| Hook        | Runs                                                                                                                    | Use it for                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `setup`     | Every invocation, in `.extend()` order, before any handler                                                              | Process settings such as color or log level                                                  |
+| `.handle()` | When its flag is passed; ends the invocation as `handled`                                                               | Flags that take over, like `--help`                                                          |
+| `noAction`  | The command has no action and no handler took over, after validation (skipped for a group run bare); ends `handled`     | Fallbacks such as help for a command group                                                   |
+| `defaults`  | Only when the action will run, in `.extend()` order, after every setup and before every `preRun`                        | Values from a config file or the last run; see [Supply stored values](#supply-stored-values) |
+| `preRun`    | Only when the action will run, in `.extend()` order, before validation; a function it returns runs after every `preRun` | Login checks, deprecation warnings; questions, as a returned function                        |
+| `postRun`   | After every invocation that reached hooks, in reverse order                                                             | Reporting the outcome                                                                        |
+| `onError`   | `execute()` failures, every hook in `.extend()` order; then the first function returned prints the failure              | Custom error output; see [Error handling](/docs/guide/error-handling#customize-error-output) |
 
 - **`setup`:** every setup runs, so setups must not depend on each other. Register cleanup with `ctx.defer()`, as in a Context's setup. It runs after `postRun` hooks, in reverse order together with Context cleanup, including after a failure.
-- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully. It also runs for commands an Extension contributes, such as `help deploy`: a gate that should let one through compares `command.extension`, the id of the Extension that contributed it, with that Extension's `id`:
+- **`preRun`:** never runs for `--help`, `--version`, or `noAction`. Throw to fail the invocation; `preRun` can't end it successfully. Work that must wait until every check passed, such as asking a question, goes in a function the hook returns: once every `preRun` returned without throwing, these functions run in `.extend()` order, still before validation. So a check never sees an answer, and a refused run asks nothing. It also runs for commands an Extension contributes, such as `help deploy`: a gate that should let one through compares `command.extension`, the id of the Extension that contributed it, with that Extension's `id`:
 
 <include lang="ts" meta='title="require-login.ts"'>
   ../../../examples/guide/extensions-gate.ts
@@ -179,13 +180,13 @@ setup → handle → preRun → validation → action → postRun
 - **Early failures:** routing, argv-parse, and typed `run()` input failures happen before the other hooks. Under `execute()`, `onError` still sees routing and argv-parse failures; `run()` never calls `onError` and returns a `failed` outcome.
 - **One per app:** only one Extension may set `noAction`, and only one `.renderer()`. A second is a `DEFINITION` error when the app prepares, from source or in `crust build`.
 
-Only handlers and `noAction` can end an invocation early, and reordering `.extend()` changes neither choice. It only orders setups, `preRun` checks, and `onError` hooks (registration order) and `postRun` hooks and cleanups (reverse).
+Reordering `.extend()` rarely changes what an app does. Only handlers and `noAction` can end an invocation early, and the order changes neither choice. The hooks that give a flag its value (`setup`, then `defaults`) run before the hooks that read it (`preRun`, validation, the action), and a function a `preRun` hook returns waits for every check. Where two Extensions still meet, the one listed first wins: two `defaults` hooks that supply the same flag, and two `onError` hooks that both return a function to print a failure. Otherwise the order only sets the order hooks of one kind run in: registration order for setups, `defaults`, `preRun`, and `onError` hooks, reverse for `postRun` hooks and cleanups.
 
 <Callout type="warn">
   Hook flags are **pre-validation values**, not schema outputs. Check values before using them.
 </Callout>
 
-`ctx.flags` types the flags the Extension owns and those of the Contexts its hooks `.use()`, each of which may be `undefined`; any other name, such as a typo, is a compile error. A Context that owns flags, or uses one that does, can be read only once flags are validated: `setup`, `renderer`, flag handlers, and `preRun` leave it out of `ctx`, while `noAction` and `postRun` have it.
+`ctx.flags` types the flags the Extension owns and those of the Contexts its hooks `.use()`, each of which may be `undefined`; any other name, such as a typo, is a compile error. A Context that owns flags, or uses one that does, can be read only once flags are validated: `setup`, `renderer`, flag handlers, `defaults`, and `preRun` leave it out of `ctx`, while `noAction` and `postRun` have it.
 
 See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
 
@@ -223,6 +224,22 @@ defineExtension("acme:port").preRun((ctx) => {
 - A bound flag never selects a handler.
 - An unknown key or a value that fails conversion throws a `PARSE` error from the calling hook. A count flag or an exclusive group has no text form: bind it with `bindInput`.
 
+### Supply stored values
+
+For values that come from somewhere other than this run, such as a config file, the last run, or a profile, return them from `.defaults()` by argument and flag name:
+
+```ts
+defineExtension("acme:last-used").defaults(async () => ({
+  flags: { region: "eu", replicas: 3, tags: ["a", "b"] },
+  args: { service: "api" },
+}));
+```
+
+- A value is text as typed on the command line: a number or boolean is taken as its text, a list is for a repeatable flag or variadic argument, and `undefined` is no value.
+- Crust keeps only the names the command takes that have no value yet or only their default. The command line, an environment variable, typed `run()` input, anything bound in `setup` (such as `--input`), and an Extension listed earlier all win. A dropped value is never converted, so a bad stored value for a flag the user typed can't fail.
+- The rest is converted as `bindText` converts it, so a bad value is the usual `PARSE` usage error. Kept values report `"bound"` in `ctx.sources`.
+- It runs only when the action will run, after every `setup` and before every `preRun`, under `execute()`, typed `run()`, and MCP alike.
+
 ### Renderers
 
 Core decides when output happens; one Extension can decide how. `.renderer(select)` returns a [`Renderer`](/docs/api/types#renderer) for the invocation, or `undefined` to keep the default:
@@ -236,7 +253,7 @@ Core decides when output happens; one Extension can decide how. `.renderer(selec
 | `text`, `diag`    | Each chunk the action or a Context writes to `stdout` and `stderr`, newline included                          |
 | `result`          | The action's return value, after any `.output()` schema validated it, before `postRun`                        |
 | `stream`, `event` | A signal that the action is an [async generator](/docs/guide/commands#stream-events), then each yielded value |
-| `error`           | In `execute()` only, a failure no `onError` hook claimed; never a cancellation                                |
+| `error`           | In `execute()` only, a failure no `onError` hook returned a function for; never a cancellation                |
 | `cleanup`         | In `execute()` only, each cleanup failure Core would print as `Cleanup failed:`                               |
 
 - An Extension's own `ctx.stdout` and `ctx.stderr` bypass the renderer, so help and notices print as usual.
@@ -354,7 +371,7 @@ Preparing Command Snapshot for my-cli...
 
 - Return file contents; don't write into the build output yourself.
 - Put files under an Extension-specific directory such as `acme-manifest/`. Loose files at the root of `.crust/artifacts/` aren't copied into staged packages.
-- Hooks run in registration order, and section callbacks refresh after each one, so later hooks see sections based on earlier files. For example, register `skills()` before `man()` to list packaged skills in the man page.
+- Hooks run in registration order, and each receives the same snapshot, taken before the first hook runs. A section callback must not read files a build hook writes: compute the section from what the hook will write instead.
 
 See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildFile`](/docs/api/types#buildfile) for output and path rules.
 

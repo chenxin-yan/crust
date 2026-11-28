@@ -34,7 +34,7 @@ It also suggests a flag for an unknown flag, from the flag name in Core's `PARSE
 
 - Candidates are the long spellings the command accepts: flag names, their aliases of two or more characters, the members of an [exclusive group](/docs/guide/arguments-and-flags#one-of-several-flags), and `no-<name>` for a negatable flag (also matched through `no-<alias>`). The same matching rule applies.
 - Hidden flags are never suggested, and neither is anything for a one-character name such as `-x`: every short name is within two edits of it.
-- The suggestion is added to the error's message, which then renders as usual: Core's `Error:` line, or the error JSON under [`--json`](/docs/modules/extensions/json) when `didYouMean()` is registered before `json()`. `mode` does not apply to flags.
+- The suggestion is added to the error's message, which then renders as usual: Core's `Error:` line, or the error JSON under [`--json`](/docs/modules/extensions/json), whatever the `.extend()` order. `mode` does not apply to flags.
 
 ## API
 

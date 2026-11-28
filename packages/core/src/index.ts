@@ -21,6 +21,7 @@ export type {
 	RootMetaKey,
 	ExtensionBuildContext,
 	ExtensionContext,
+	ExtensionDefaults,
 	ExtensionFlagDef,
 	ExtensionFlagsDef,
 	ExtensionHandleOptions,

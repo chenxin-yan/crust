@@ -221,19 +221,29 @@ describe("didYouMean", () => {
 		expect(stderr).not.toContain("Did you mean");
 	});
 
-	it("keeps a flag suggestion in the JSON error under --json", async () => {
-		const app = new Crust("app")
-			.extend(didYouMean(), json())
-			.flags({ template: { type: "string" } })
-			.action(() => {});
+	it.each([
+		["before", [didYouMean(), json()]],
+		["after", [json(), didYouMean()]],
+	] as const)(
+		"keeps a flag suggestion in the JSON error under --json, listed %s json()",
+		async (_, extensions) => {
+			const app = new Crust("app")
+				.extend(...extensions)
+				.command("deploy", (c) => c.flags({ region: { type: "string" } }).action(() => {}));
 
-		const { stderr, exitCode } = await captureExecute(app, ["--json", "--tempalte", "vue"]);
+			const { stderr, exitCode } = await captureExecute(app, [
+				"deploy",
+				"--regoin",
+				"eu",
+				"--json",
+			]);
 
-		expect(JSON.parse(stderr)).toEqual({
-			code: "PARSE",
-			message: 'Unknown flag "--tempalte". Did you mean "--template"?',
-			details: { flag: "tempalte", reason: "unknown-flag" },
-		});
-		expect(exitCode).toBe(2);
-	});
+			expect(JSON.parse(stderr)).toEqual({
+				code: "PARSE",
+				message: 'Unknown flag "--regoin". Did you mean "--region"?',
+				details: { flag: "regoin", reason: "unknown-flag" },
+			});
+			expect(exitCode).toBe(2);
+		},
+	);
 });

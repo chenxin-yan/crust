@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { getEventListeners } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -190,45 +190,32 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(existsSync(outDir)).toBe(false);
 	});
 
-	it("refreshes sections between build hooks", async () => {
-		const { path, outDir } = await stubBuildEnv();
-		const marker = join(outDir, "generated-source", "marker.txt");
-		const calls: string[] = [];
+	it("gives every build hook the one snapshot taken before the first", async () => {
+		const { path } = await stubBuildEnv();
+		const seen: unknown[] = [];
 		const app = new Crust("build-subprocess").extend(
-			defineExtension("producer").build(async () => {
-				expect(existsSync(path)).toBe(false);
-				calls.push("producer");
+			defineExtension("producer").build(({ snapshot }) => {
+				seen.push(snapshot);
 				return [{ path: "generated-source/marker.txt", content: "ready" }];
 			}),
 			defineExtension("consumer")
-				// Reads the earlier hook's file from disk, like skills reading artifactPath("skills").
-				.sections(() => [
-					{
-						command: [],
-						title: "Generated source",
-						body: existsSync(marker) ? readFileSync(marker, "utf8") : "missing",
-					},
-				])
+				.sections(() => [{ command: [], title: "Generated source", body: "listed" }])
 				.build(({ snapshot }) => {
-					calls.push("consumer");
-					expect(existsSync(marker)).toBe(true);
-					expect(snapshot.meta.sections).toContainEqual({
-						title: "Generated source",
-						body: "ready",
-					});
+					seen.push(snapshot);
 					return [];
 				}),
 		);
 
 		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(0) was called");
 
-		expect(calls).toEqual(["producer", "consumer"]);
+		expect(seen).toHaveLength(2);
+		expect(seen[1]).toBe(seen[0]);
 		expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
-			meta: { sections: [{ title: "Generated source", body: "ready" }] },
+			meta: { sections: [{ title: "Generated source", body: "listed" }] },
 		});
 	});
 
-	it("runs Extension command recipes once across build hook refreshes", async () => {
+	it("runs Extension command recipes once across build hooks", async () => {
 		await stubBuildEnv();
 		let recipeRuns = 0;
 		const app = new Crust("build-subprocess").extend(
@@ -295,7 +282,7 @@ describe("Invocation pipeline — snapshot projection", () => {
 			.preRun((ctx) => void roots.push(ctx.rootCommand))
 			.onError((_error, ctx) => {
 				roots.push(ctx.rootCommand);
-				return true;
+				return () => {};
 			});
 		return { observer, roots };
 	}
@@ -491,7 +478,7 @@ describe("Invocation pipeline — commandPathOf", () => {
 			})
 			.onError((_error, ctx) => {
 				for (const definition of definitions) found.push(ctx.commandPathOf(definition));
-				return true;
+				return () => {};
 			});
 		return { found, observer };
 	}
@@ -729,7 +716,7 @@ describe("Invocation pipeline — exit status", () => {
 		const hooks = defineExtension("hooks")
 			.onError(() => {
 				process.exitCode = 0;
-				return true;
+				return () => {};
 			})
 			.postRun(() => {
 				process.exitCode = 9;

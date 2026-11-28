@@ -379,7 +379,7 @@ Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/
 `defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
 - Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume; every command parses the flags they own. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`, and their flags are parsed only by the root, its inline children, and commands that `.use()` them. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
-- Lifecycle setters replace the previous callback: `.setup()`, `.renderer()`, `.noAction()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
+- Lifecycle setters replace the previous callback: `.setup()`, `.renderer()`, `.noAction()`, `.defaults()`, `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.handle(flag, run, options)` sets the [handler](#extensionhandleoptions) for one owned flag; `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
 - Each callback is typed by the declarations made before it in the chain.
 - Flag spellings are checked for collisions when the method runs, and contributed command names when the app prepares, by the [definition checks](/docs/api/crust#definition-checks).
 - `.owns(...keys)` declares the keys the Extension owns among those packages add through [`ArgExtras`, `FlagExtras`, and `CommandExtras`](#argextras-flagextras-and-commandextras); repeated calls append. It refuses `toJSON`, `inputSchema`, `extension`, and `inherited` with a `DEFINITION` error (`reserved-name`). A definition that sets a key no installed Extension owns fails preparation with a `DEFINITION` error (`unowned-key`) from the definition checks.
@@ -444,7 +444,7 @@ Binds structured input from `setup` or `preRun`, with the conversion typed `run(
 - Keys given explicitly on argv are kept, and their supplied values are never converted. A flag counts as given whenever it appears on argv (including `--no-<name>`, a value equal to its default, or `--tags ""`), and a positional argument when argv supplied it.
 - Supplied values replace environment values (including an invalid one) and defaults; an empty array is a supplied empty list. Values that are not replaced are kept as bound, without re-running defaults or `parse`.
 - Positional arguments follow typed `run()` order: kept argv or `run()` positionals count as supplied, and bound input cannot skip one.
-- Calls add up, together with `bindText`: a key bound again takes the later value, and the keys a call leaves out keep theirs. Bound values are visible to every later hook; binding in `setup` lets each `preRun` see them whatever the `.extend()` order.
+- Calls add up, together with `bindText`: a key bound again takes the later value, and the keys a call leaves out keep theirs. Bound values are visible to every later hook; binding in `setup` lets each `defaults` and `preRun` hook see them whatever the `.extend()` order.
 - Flag handlers are chosen from the original input, so a bound flag never selects one, even when bound in `setup`.
 - A failure fails the invocation as an error thrown from the calling hook would.
 
@@ -466,7 +466,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
 | `run`     | Typed `run()` input, an empty array for a variadic argument or a `multiple` flag included                                                           |
 | `env`     | The flag's `env` variable                                                                                                                           |
-| `bound`   | Supplied by `bindInput` or `bindText`                                                                                                               |
+| `bound`   | Supplied by `bindInput`, `bindText`, or a `defaults` hook                                                                                           |
 | `default` | The definition's default                                                                                                                            |
 
 - It reads live: after `bindInput` or `bindText`, the keys it supplied report `bound`.
@@ -486,13 +486,23 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 
 - `setup` runs for every Extension in `.extend()` order after routing and input binding, before any flag handler. Its context adds `defer(cleanup)`; cleanups run after `postRun` hooks, in reverse registration order together with Context disposal, including when a later setup throws. Calling `defer` once setups have finished throws a `DEFINITION` error (`extension-defer-after-setup`). A setup can fail the invocation by throwing but cannot end it successfully.
 - `renderer` runs once after every setup, before any flag handler, with the same context, and returns (or resolves to) the invocation's [`Renderer`](#renderer) or `undefined` for the default. Core awaits it, so it can load a formatter lazily; a throw or rejection fails the invocation, rendered by default. It also runs when a setup throws, so that failure goes through the chosen renderer; if the selector then fails too, the setup failure renders by default. A selector or renderer that throws there never replaces the setup failure. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-renderer`).
-- Flag handlers registered with [`.handle()`](#extensionbuilder) run after every setup. The selected handler ends the invocation as `handled`; `preRun`, validation, and the Command Action don't run.
+- Flag handlers registered with [`.handle()`](#extensionbuilder) run after every setup. The selected handler ends the invocation as `handled`; `defaults`, `preRun`, validation, and the Command Action don't run.
 - `noAction` runs when the routed command has no Command Action and no flag handler took over, after validation, with the same context, and ends the invocation as `handled`. At most one Extension in an application may set it; a second fails preparation with a `DEFINITION` error (`duplicate-no-action`). Without one, validation runs too; then a command with subcommands fails with a `VALIDATION` error (`Missing command. Available: …`), and any other command completes without a result. A command with subcommands given nothing after its path by `execute()` skips validation, so it reaches `noAction` or `Missing command` even when a required flag is unset.
-- `preRun` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet, so the `ctx` of `setup`, `renderer`, flag handlers, and `preRun` leaves out the Contexts that own flags or use one that does, even one whose setup catches that rejection. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, and `preRun` (not its default); its error surfaces at validation.
-- `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to the selected [renderer's `error`](#renderer), or Core's default rendering without one. A hook that throws ends the chain and the original failure falls through the same way.
-- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, argv-parse, and typed `run()` input-binding failures skip it; a `bindInput` or `bindText` failure is a failure of the `setup` or `preRun` hook that called it and does not.
+- `defaults` runs in `.extend()` order only when the Command Action will run: after setups, when no flag handler took over, before every `preRun`, under `execute()`, typed `run()`, and MCP alike. It returns `{ args?, flags? }`, values by argument and flag name, or nothing. A value is text as typed on the command line: a number or boolean is taken as its text, an array is one word per occurrence for a variadic argument or a `multiple` flag, and `undefined` is no value. Core keeps only the names the command takes whose [source](#sources) is absent or `default`, so argv, an environment variable, typed `run()` input, a value bound in `setup`, and an earlier `defaults` hook all win; a dropped value is never converted. It binds the rest as `bindText` does, so a bad value fails with the same `PARSE` error, and kept values report `bound`.
+- `preRun` runs in `.extend()` order only when the Command Action will run: after every `defaults`, when no flag handler took over, before validation. Throw to fail the invocation; it cannot end it successfully. It may return a function: once every `preRun` returned without throwing, Core calls the returned functions in `.extend()` order, still before validation, so work such as asking a question waits until every check passed, and a check never sees an answer. Pulling a flag-owning Context here rejects, because its flags are not validated yet, so the `ctx` of `setup`, `renderer`, flag handlers, `defaults`, and `preRun` leaves out the Contexts that own flags or use one that does, even one whose setup catches that rejection. An argv or environment value that fails conversion, `choices`, or `parse` reads as `undefined` in setups, handlers, `defaults`, and `preRun` (not its default); its error surfaces at validation.
+- `onError` runs for `execute()` only, for every Extension in `.extend()` order, so each sees the failure and may add to it, such as a suggestion in its message. It may return the function that prints the failure: once every hook ran, Core calls the first function returned, and that Extension is the outcome's `by`. Without one, the failure goes to the selected [renderer's `error`](#renderer), or Core's default rendering without one. A hook that throws ends the chain, skipping the remaining hooks, and the original failure falls through the same way; so does a returned function that throws.
+- `postRun` runs in reverse `.extend()` order after every completed, handled, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, argv-parse, and typed `run()` input-binding failures skip it; a `bindInput`, `bindText`, or `defaults` value failure is a failure of the hook that caused it and does not.
 
 See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
+
+### `ExtensionDefaults`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionDefaults"
+/>
+
+What a [`defaults`](#extensionhooks) hook returns: values by argument name (`args`) and canonical flag name (`flags`), as the text typed on the command line.
 
 ### `Renderer`
 
@@ -503,7 +513,7 @@ Returned by an Extension's [`.renderer()`](/docs/guide/extensions#renderers) sel
 - what the Command Action and Contexts write to `stdout` as `text`, and to `stderr` as `diag`, one chunk per write exactly as written: `stdout(text)` arrives as `text` and a newline, `stdout.write(chunk)` as `chunk`. Pass a chunk on with `ctx.stdout.write`, not `ctx.stdout`, which would add a newline;
 - the completed action's `result`;
 - a `stream` signal and each `event` of an [async generator action](/docs/guide/commands#stream-events);
-- in `execute()` only, an `error` no `onError` hook claimed, and each `cleanup` failure Core would otherwise write as `Cleanup failed:` lines, including cleanup that fails while a cancellation unwinds.
+- in `execute()` only, an `error` no `onError` hook returned a function for, and each `cleanup` failure Core would otherwise write as `Cleanup failed:` lines, including cleanup that fails while a cancellation unwinds.
 
 Behavior:
 
@@ -549,7 +559,7 @@ The context `setup` receives: the same [`ExtensionContext`](#extensioncontext) o
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed` with the `result` `run()` returns (the awaited [`.output()`](/docs/api/crust#outputschema) schema output when the command declares one, otherwise the action's awaited return value, `undefined` for a command without an action); `handled` with `by` naming the Extension whose flag handler or `noAction` ended the invocation; or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
+`postRun` receives `completed` with the `result` `run()` returns (the awaited [`.output()`](/docs/api/crust#outputschema) schema output when the command declares one, otherwise the action's awaited return value, `undefined` for a command without an action); `handled` with `by` naming the Extension whose flag handler or `noAction` ended the invocation; or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` returned the function that printed the failure.
 
 After an [async generator action](/docs/guide/commands#stream-events), `completed` and `failed` also carry its yielded values as frozen `events` (`[]` when it yielded none); `events` is absent for any other action, a command without one, and failures before the action ran. Its presence tells a streaming action from an ordinary one.
 
@@ -569,7 +579,7 @@ One entry returned by `.sections(snapshot)`: a section plus the canonical `comma
   name="ExtensionBuildContext"
 />
 
-Build hooks run in registration order, and each receives a snapshot refreshed after earlier hooks' files were written; a hook does not see its own outputs. There is no output directory: return files instead. During this phase, [`artifactPath(path)`](/docs/api/crust#artifactpathpath) points at the entry's build output directory, except under a `crust.include` folder, which it reads from the project.
+Build hooks run in registration order, and each receives the same snapshot, taken before the first hook runs, so a section callback must not read files a build hook writes. There is no output directory: return files instead. During this phase, [`artifactPath(path)`](/docs/api/crust#artifactpathpath) points at the entry's build output directory, except under a `crust.include` folder, which it reads from the project.
 
 ### `BuildFile`
 

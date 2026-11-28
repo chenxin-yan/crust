@@ -208,7 +208,7 @@ describe("captureExecute", () => {
 
 		const delayedRenderer = defineExtension("delayed-renderer").onError(async () => {
 			await errorRendererGate;
-			return true;
+			return () => {};
 		});
 		const failingApp = new Crust("test-cli").extend(delayedRenderer).action(() => {
 			throw new Error("boom");

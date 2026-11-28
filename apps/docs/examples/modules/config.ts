@@ -65,7 +65,7 @@ const pager = defineCommand("pager", { description: "Print the pager" }, (comman
 
 //#region chdir
 // `acme -C ../other deploy` runs as if started in ../other, so that folder's project file applies.
-// Listed before config.extension: setups run in .extend() order.
+// A setup: the config's files are read after every setup, wherever this is listed.
 const chdir = defineExtension("acme:chdir")
 	.flags({ dir: { type: "path", short: "C", description: "Run as if started in this folder" } })
 	.setup((ctx) => {

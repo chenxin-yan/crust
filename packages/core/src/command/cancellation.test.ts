@@ -491,7 +491,7 @@ describe("invocation cancellation signal", () => {
 			})
 			.onError((_error, ctx) => {
 				seen.push(ctx.signal);
-				return true;
+				return () => {};
 			});
 		const app = new Crust("cli")
 			.extend(probe)

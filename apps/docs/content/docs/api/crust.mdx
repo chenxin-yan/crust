@@ -309,7 +309,7 @@ Resolves to a frozen [`CommandSnapshot`](/docs/api/types#commandsnapshot) for to
 const snapshot = await app.snapshot();
 ```
 
-During `crust build`, section callbacks are re-evaluated after each build hook, so later hooks see refreshed snapshots.
+During `crust build`, every build hook receives the snapshot taken before the first one runs.
 
 ## `.run(path, input?, options?)`
 
@@ -359,7 +359,7 @@ Runs the terminal boundary: parses `process.argv.slice(2)` (or `options.argv`), 
 
 - The exit code is `0` on success, or the code the action set with `exitCode(n)`; `1` on failure, or the thrown value's non-zero integer `exitCode`; `2` for a `PARSE`, `VALIDATION`, or `COMMAND_NOT_FOUND` error; `130` for cancellation (`143` when `SIGTERM` cancelled it, `141` when the reader of stdout went away). See [exit status](/docs/guide/error-handling#exit-status).
 - `execute()` sets `process.exitCode` once, when the invocation ends, and does not take the exit code from it: a value an action or hook assigns is overwritten.
-- A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks; if none claims it, the abort itself renders nothing, but cleanup failures that accompany it still render. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
+- A failure renders once, through Extension `onError` hooks and then the selected [renderer's `error`](/docs/api/types#renderer) or Core's default rendering. Cancellation is offered to `onError` hooks; if none returns a function that prints it, the abort itself renders nothing, but cleanup failures that accompany it still render. See [propagation boundaries](/docs/api/errors#propagation-boundaries).
 - On macOS and Linux, each write to the default stdout or stderr is made synchronously to file descriptor 1 or 2, so it arrives complete even when the action calls `process.exit()` right after, and patching `process.stdout.write` does not capture it. On Windows, default output goes through `process.stdout` / `process.stderr`.
 - On macOS and Linux, a failed write to the default stdout throws from `stdout(text)` and `stdout.write(chunk)`. Once the reader is gone (`app | head -1`, `EPIPE`), it throws an `AbortError` whose `cause` is `"SIGPIPE"` and aborts the invocation's `signal` with it: nothing renders, and the exit code is `141` whatever the action did. No signal is re-raised: Node.js and Bun ignore `SIGPIPE`. Any other error, such as `ENOSPC` from `app > /dev/full`, is thrown as it is and fails the run with exit code `1`. A failed write to the default stderr is ignored.
 - `options.io` replaces the process's streams, such as in tests: `stdout` and `stderr` take an [`OutputSink`](/docs/api/types#outputsink) that receives each write and may report `isTTY` and `columns`, and `stdin` takes an async iterable of text or bytes, such as a Node.js readable stream. An iterable the action did not read to its end is closed when the invocation ends (its `return()` is called), as leaving a `for await` loop does; a Node.js readable is left open and paused. Each one omitted stays the process's. The injected `stderr` also receives default prompt and progress output. It does not provide prompt input. With `io` set, even to `stdin` alone, a cancelling signal only sets the exit code and never re-raises, so an in-process host keeps running.
@@ -382,7 +382,7 @@ Ctrl-C (`SIGINT`) and `SIGTERM` (sent by `docker stop`, Kubernetes, systemd, `ti
 3. Parse argv (`execute()`) or bind structured input (`run()`).
 4. Run Extension `setup` hooks in registration order, then choose the [renderer](/docs/guide/extensions#renderers) for action and Context output.
 5. If the user passed a flag with an Extension handler, run the selected handler (eager handlers first, then the flag given first) and end the invocation with a `handled` outcome. Otherwise, if the routed command has no Command Action, run steps 7 and 8 (skipped for a command with subcommands when `execute()` got nothing after its path), then the application's `noAction` hook, if any, and end it the same way. Without a `noAction` hook, a command with subcommands fails with `Missing command. Available: …` (`VALIDATION`).
-6. Run Extension `preRun` hooks in registration order. They run only before a Command Action.
+6. Run Extension `defaults` hooks in registration order and bind the values they supply that the run left out, then `preRun` hooks in registration order, then the functions `preRun` hooks returned. They run only before a Command Action.
 7. Check required values and positional structure.
 8. Apply Standard Schemas and aggregate their issues.
 9. Construct Contexts as they are first pulled.

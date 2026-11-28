@@ -51,9 +51,9 @@ deploying env-org to us
 
 Each setting is settled on its own: here `org` comes from the user's file and `region` from the project file. Core resolves the command line and the variable as for any flag; the Extension binds a file's value only into a flag the run left without one, or with only its default. So `--help` shows the flag's `default` and `env`, `required` is checked after the files, and [`prompts()`](/docs/modules/prompts#ask-for-missing-values) does not ask for a value a file gave.
 
-List `config.extension` after [`jsonInput()`](/docs/modules/extensions/json-input) and before `prompts()`: `.extend(jsonInput(), config.extension, prompts())`. An error in a file surfaces in that order, so a broken file then fails before anything is asked, and a flag given in `--input` does not fail on the file.
+The Extension supplies the files' values through the [`defaults` hook](/docs/guide/extensions#supply-stored-values), so where it is listed in `.extend()` does not matter: the files are read after [`--input`](/docs/modules/extensions/json-input) is bound, so a flag given there does not fail on a file, and before [`prompts()`](/docs/modules/prompts#ask-for-missing-values) asks, so a broken file fails the run before any question.
 
-The files are read when the command has such a flag, and not for `--help` output to fail on: an error in a file waits for the action.
+The files are read only when the command's action will run and the command has such a flag: `--help` reads none.
 
 ## Settings
 
@@ -183,7 +183,7 @@ Removed org from /home/me/.config/acme/config.json
 
 ## Run in another folder
 
-There is no option for the folder the project file is searched from. A `-C <dir>` flag, "run as if started in `<dir>`" as in `git -C` and `make -C`, is an Extension that changes the working directory in its `setup`, listed before `config.extension`:
+There is no option for the folder the project file is searched from. A `-C <dir>` flag, "run as if started in `<dir>`" as in `git -C` and `make -C`, is an Extension that changes the working directory in its `setup`. Every `setup` runs before the files are read, so it may be listed anywhere:
 
 <include lang="ts">../../../examples/modules/config.ts#chdir</include>
 

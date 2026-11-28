@@ -334,6 +334,15 @@ function _handleCallbacks() {
 	owned.handle("preview", () => "done");
 	// @ts-expect-error preRun cannot end the invocation with a token.
 	owned.preRun(() => ({ status: "handled" }));
+	// What must wait for every check is returned as a function.
+	owned.preRun(() => async () => {});
+	// @ts-expect-error onError returns the function that prints the failure, not `true`.
+	owned.onError(() => true);
+	owned.onError((_error, ctx) => () => ctx.stderr("failed"));
+	// @ts-expect-error defaults returns values by name.
+	owned.defaults(() => ["fast"]);
+	// @ts-expect-error A value is text, a number, or a boolean, as typed on the command line.
+	owned.defaults(() => ({ flags: { mode: { fast: true } } }));
 	owned.setup(({ defer, flags }) => {
 		type _preview = Expect<Equal<typeof flags.preview, boolean | undefined>>;
 		defer(() => {});
@@ -417,6 +426,13 @@ function _hookFlagsAreTheOwnedAndUsedContextFlags() {
 		.handle("trace", (ctx) => {
 			// @ts-expect-error -- handlers run before validation too
 			void ctx.ctx.settings;
+		})
+		.defaults(async ({ flags, ctx }) => {
+			type _level = Expect<Equal<typeof flags.level, "info" | "warn" | undefined>>;
+			// @ts-expect-error -- defaults run before validation too
+			void ctx.settings;
+			const _plain: string = await ctx.plain;
+			return { flags: { level: "warn", trace: true, tags: ["a", 1] }, args: { name: undefined } };
 		})
 		.postRun(async ({ ctx }) => {
 			const _level: "info" | "warn" = await ctx.settings;

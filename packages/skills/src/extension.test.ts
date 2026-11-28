@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { type AnyCrust, Crust } from "@crustjs/core";
+import { type AnyCrust, Crust, defineExtension } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
@@ -246,6 +246,52 @@ describe("skills extension packaged directory", () => {
 			"description: Generated command reference",
 		);
 	});
+
+	it("lists the skills the build writes to a build hook listed before it", async () => {
+		const authored = join(tempRoot, "authored", "guide");
+		await mkdir(authored, { recursive: true });
+		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
+		let body: string | undefined;
+		const reader = defineExtension("reader").build(({ snapshot }) => {
+			body = snapshot.meta.sections?.find((section) => section.title === "Agent skills")?.body;
+			return [];
+		});
+		const app = new Crust("demo", { description: "Demo" }).extend(
+			reader,
+			skills({ extras: [authored] }),
+		);
+
+		await buildArtifacts(app);
+
+		expect(body).toMatch(
+			/^demo — Demo\n {2}Source: .*skills[\\/]demo\n\nguide — Guide\n {2}Source: .*skills[\\/]guide$/,
+		);
+	});
+
+	// POSIX-only: a symbolic link needs a privilege on Windows.
+	it.skipIf(process.platform === "win32")(
+		"does not read an authored SKILL.md that links out of its skill for the docs section",
+		async () => {
+			const authored = join(tempRoot, "authored", "guide");
+			await mkdir(authored, { recursive: true });
+			const outside = join(tempRoot, "outside.md");
+			await writeFile(outside, "---\nname: stolen\ndescription: Outside\n---\n");
+			await symlink(outside, join(authored, "SKILL.md"));
+			let body: string | undefined;
+			const reader = defineExtension("reader").build(({ snapshot }) => {
+				body = snapshot.meta.sections?.find((section) => section.title === "Agent skills")?.body;
+				return [];
+			});
+			const app = new Crust("demo", { description: "Demo" }).extend(
+				reader,
+				skills({ extras: [authored] }),
+			);
+
+			// The build hook still refuses the link with its own error.
+			await expect(buildArtifacts(app)).rejects.toThrow();
+			expect(body).not.toContain("stolen");
+		},
+	);
 
 	it.each(["skills", "skills install"])("installs every packaged skill via %s", async (command) => {
 		await writeSource("demo");

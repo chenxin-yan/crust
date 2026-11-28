@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 import {
@@ -8,15 +8,17 @@ import {
 	type Extension,
 	type ExtensionBuildContext,
 	type ExtensionFactory,
+	type ExtensionSectionContribution,
 	type InvocationIO,
+	type CommandSnapshot,
 	CrustError,
 	defineCommand,
 	defineExtension,
 } from "@crustjs/core";
 // @crustjs/prompts and @crustjs/progress load inside the `skills` command so other commands skip their import cost.
 import { bold, dim, yellow } from "@crustjs/style";
-import { isSourceRun } from "@crustjs/utils/artifacts";
-import { isWithin } from "@crustjs/utils/path";
+import { BUILD_OUT_DIR_ENV, artifactPath, isSourceRun } from "@crustjs/utils/artifacts";
+import { isWithin, resolvePathLike } from "@crustjs/utils/path";
 
 import {
 	AGENT_LABELS,
@@ -28,6 +30,7 @@ import {
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
 import { renderSkills } from "./build.ts";
+import { SKILL_MD } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
 import { SKILLS } from "./id.ts";
 import {
@@ -42,6 +45,7 @@ import {
 	SKILLS_ARTIFACT,
 	SkillSourceUnavailableError,
 	loadPackagedSkills,
+	readSkillFrontmatter,
 	type PackagedSkill,
 } from "./source.ts";
 import type { SkillOptions, SkillStatusResult } from "./types.ts";
@@ -215,9 +219,13 @@ async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<voi
 	}
 }
 
-function formatSkillDocumentation(commandName: string, appName: string): string {
+function formatSkillDocumentation(
+	commandName: string,
+	appName: string,
+	load: () => readonly PackagedSkill[],
+): string {
 	try {
-		return loadPackagedSkills()
+		return load()
 			.map((packagedSkill) => {
 				// Relativizing across unrelated roots yields ../ chains that still spell
 				// out the absolute path; keep the absolute form when outside the cwd.
@@ -237,6 +245,33 @@ function formatSkillDocumentation(commandName: string, appName: string): string 
 		// message once per invocation, and the explicit skill command fails loudly.
 		return `Packaged skills could not be read. Run \`${appName} ${commandName}\` for details.`;
 	}
+}
+
+/**
+ * The skills {@link buildSkills} writes, read from the options and the authored `SKILL.md` files
+ * instead of the build output, so the docs section is the same whatever the build hooks' order.
+ */
+function plannedSkills(options: SkillOptions, snapshot: CommandSnapshot): readonly PackagedSkill[] {
+	const skills = new Map<string, string>();
+	for (const extra of options.extras ?? []) {
+		const dir = resolvePathLike(extra);
+		// The bundle's rule for an authored file, before the file is read: a regular file inside
+		// the skill. A link out of it is not followed, and a pipe cannot stall the build.
+		const entry = realpathSync(join(dir, SKILL_MD));
+		if (!isWithin(realpathSync(dir), entry) || !statSync(entry).isFile()) {
+			throw new Error(`"${join(dir, SKILL_MD)}" is not a file inside its skill directory.`);
+		}
+		const { name, description } = readSkillFrontmatter(dir);
+		skills.set(name, description);
+	}
+	const generated = options.name ?? snapshot.meta.name;
+	if (options.generated !== false && !skills.has(generated)) {
+		skills.set(generated, options.description ?? snapshot.meta.description ?? "");
+	}
+	const root = artifactPath(SKILLS_ARTIFACT);
+	return [...skills]
+		.map(([name, description]) => ({ name, description, sourceDir: join(root, name) }))
+		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function buildSkills(
@@ -341,31 +376,41 @@ const skillFactory: ExtensionFactory<
 	readonly [SkillCommandDefinition<string, readonly string[]>]
 > = defineExtension(SKILLS).factory((extension, options) => {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	const runtime = extension
-		.add(buildSkillCommand(commandName, options))
-		.preRun(async (context) => {
-			if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
-			// Only an installed CLI repairs its links. From source, the packaged directory is a
-			// checkout's last build, and repairing would move every link away from the installed
-			// CLI, which then moves them back on its next run.
-			if (isSourceRun()) return;
-			await autoRepairSkills(options, context);
-		})
-		// Skills are loaded when a snapshot is prepared, not at construction, so
-		// help and man pages reflect the packaged directory as it exists at render time.
-		.sections((snapshot) => [
-			{
-				command: [],
-				title: SKILLS_SECTION_TITLE,
-				body: formatSkillDocumentation(commandName, snapshot.meta.name),
-				except: [extension],
-			},
-		]);
+	const runtime = extension.add(buildSkillCommand(commandName, options)).preRun(async (context) => {
+		if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
+		// Only an installed CLI repairs its links. From source, the packaged directory is a
+		// checkout's last build, and repairing would move every link away from the installed
+		// CLI, which then moves them back on its next run.
+		if (isSourceRun()) return;
+		await autoRepairSkills(options, context);
+	});
+	// Skills are loaded when a snapshot is prepared, not at construction, so
+	// help and man pages reflect the packaged directory as it exists at render time.
+	const section = (
+		appName: string,
+		load: () => readonly PackagedSkill[],
+	): readonly ExtensionSectionContribution[] => [
+		{
+			command: [],
+			title: SKILLS_SECTION_TITLE,
+			body: formatSkillDocumentation(commandName, appName, load),
+			except: [extension],
+		},
+	];
 	// `crust build` runs build hooks from source; literal property access lets a Crust-built
 	// bundle fold this and drop the skill renderer.
 	return process.env.CRUST_INTERNAL_BUILD === "1"
-		? runtime
-		: runtime.build((context) => buildSkills(options, context));
+		? runtime.sections((snapshot) => section(snapshot.meta.name, loadPackagedSkills))
+		: runtime
+				// `crust build` prepares the snapshot before this hook writes the skills.
+				.sections((snapshot) =>
+					section(snapshot.meta.name, () =>
+						process.env[BUILD_OUT_DIR_ENV]
+							? plannedSkills(options, snapshot)
+							: loadPackagedSkills(),
+					),
+				)
+				.build((context) => buildSkills(options, context));
 });
 
 // SAFETY: the runtime command name is `options.command ?? "skills"`, which each overload's name restates,

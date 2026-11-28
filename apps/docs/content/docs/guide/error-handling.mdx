@@ -99,7 +99,7 @@ Error: Missing required argument "<pattern>"
 
 ## Customize error output
 
-To change how failures are presented, write an Extension with an [`onError`](/docs/api/types#extensionhooks) hook. The first hook that returns `true` claims the failure and replaces the default `Error:` line; the exit status doesn't change. A [renderer's `error`](/docs/guide/extensions#renderers) handles failures no hook claimed.
+To change how failures are presented, write an Extension with an [`onError`](/docs/api/types#extensionhooks) hook that returns the function that prints the failure. Every hook sees the failure first, so one can add to it, such as a suggestion, before anything prints; then the function the first of them returned prints in place of the default `Error:` line. The exit status doesn't change. A [renderer's `error`](/docs/guide/extensions#renderers) prints failures no hook returned a function for.
 
 ### Print stack traces
 
@@ -121,7 +121,7 @@ Caused by: Error: ENOENT: no such file or directory, open 'app.config.json'
 - The hook prints only stacks, not other fields of the errors: a field such as a failed request's headers can hold a token. A `cause` cycle prints each error once.
 - The hook skips cancellations, so Ctrl+C stays silent with `--debug`.
 - Failures to route or parse argv, such as an unknown flag, reach `onError` before flags are parsed, so they print only the message.
-- A claimed failure skips the renderer's `error`: under [`--json`](/docs/modules/extensions/json), `--debug` prints the stack instead of the JSON error line.
+- A failure the hook prints skips the renderer's `error`: under [`--json`](/docs/modules/extensions/json), `--debug` prints the stack instead of the JSON error line.
 
 ## Quiet output
 

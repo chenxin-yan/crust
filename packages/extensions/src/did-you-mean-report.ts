@@ -117,7 +117,7 @@ export async function reportUnknownCommand(
 		path: readonly string[],
 		options: RenderHelpOptions,
 	) => Promise<string>,
-): Promise<true> {
+): Promise<void> {
 	const details = error.details;
 	const suggestion = findSuggestion(
 		details.input,
@@ -137,13 +137,12 @@ export async function reportUnknownCommand(
 				columns: context.stdout.columns,
 			}),
 		);
-		return true;
+		return;
 	}
 
 	if (details.available.length > 0) {
 		message += `\n\nAvailable commands: ${details.available.join(", ")}`;
 	}
-	context.stderr(message);
 	// Core preserves the nonzero exit code — rendering only here.
-	return true;
+	context.stderr(message);
 }
