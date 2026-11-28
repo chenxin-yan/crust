@@ -134,17 +134,17 @@ Bun binaries are precompiled to [bytecode](https://bun.com/docs/compiler/bytecod
 
 A binary installed from the root npm package runs through the launcher, `root/bin/my-cli.js`. This small Node.js script finds the platform package npm installed for the user's OS, CPU, and C library, then replaces itself with that binary (Windows starts it as a child process). Every run pays for one extra Node.js start, roughly 20 ms on Linux x64.
 
-| Situation                                               | Ship                                                                                                                                                                                                              |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Users install from npm; your CLI needs no Bun-only APIs | A Node.js runtime package (`"runtime": "node", "artifact": "package"`). No launcher, often faster to start than a launched binary, and kilobytes instead of a ~100 MB binary.                                     |
-| Users want a binary                                     | [Release downloads](#release-downloads) or [Homebrew, Scoop, and other installers](#homebrew-scoop-and-other-installers): no launcher, no Node.js. On npm, users can install a platform package directly (below). |
-| Your CLI needs Bun's runtime and users may not have Bun | Binaries through the root npm package. Users need only Node.js `>=24` and accept the launcher's startup cost.                                                                                                     |
+| Situation                                               | Ship                                                                                                                                                                          |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Users install from npm; your CLI needs no Bun-only APIs | A Node.js runtime package (`"runtime": "node", "artifact": "package"`). No launcher, often faster to start than a launched binary, and kilobytes instead of a ~100 MB binary. |
+| Users want a binary                                     | [Release downloads](#release-downloads) or [Homebrew, Scoop, and other installers](#homebrew-scoop-and-other-installers): no launcher, no Node.js.                            |
+| Your CLI needs Bun's runtime and users may not have Bun | Binaries through the root npm package. Users need only Node.js `>=24` and accept the launcher's startup cost.                                                                 |
 
-A platform package, such as `npm install -g my-cli-linux-x64`, runs the binary without the launcher:
+Users always install the root package. A platform package only holds the binary for its launcher:
 
 - It is [named](/docs/modules/crust#staged-packagejson-files) after your package plus the [platform alias](/docs/modules/crust#supported-targets).
-- Its `bin` points straight at the executable, and its `os`, `cpu`, and `libc` fields make npm reject the wrong platform.
-- Users pick it themselves, such as `my-cli-linux-x64-musl` on Alpine, and install either it or the root package: both provide the same command.
+- Its `os`, `cpu`, and `libc` fields make the package manager install only the one that matches, such as `my-cli-linux-x64-musl` on Alpine.
+- It declares no `bin`, so installing one on its own provides no command.
 
 ### Node.js binaries
 
@@ -216,7 +216,7 @@ npm install -g my-cli
 my-cli --help
 ```
 
-For binaries, the package manager selects the matching platform dependency. See the [npm installation caveat](/docs/modules/crust#npm-installation-caveat) for an affected npm version and a verified alternative.
+For binaries, the package manager selects the matching platform dependency.
 
 ### Publishing from CI
 

@@ -126,8 +126,8 @@ describe.each(["bun", "npm", "pnpm"] as const)("package manager smoke (%s)", (pa
 		expect(exec.exitCode).toBe(0);
 		expect(exec.stdout.trim()).toBe("smoke-ok");
 
-		// Both direct dependencies advertise the same bin; .bin may select the platform
-		// binary. Also execute the installed root launcher to prove its resolver works.
+		// Only the root advertises the bin, so `.bin` is its launcher. Also execute the installed
+		// launcher by path.
 		const launcherPath = join(
 			installDir,
 			"node_modules",
