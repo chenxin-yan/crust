@@ -57,7 +57,7 @@ The files are read when the command has such a flag, and not for `--help` output
 
 ## Settings
 
-A setting is the [flag definition](/docs/api/types#flagdef) of a string, number or boolean flag: `type`, `description`, `short`, `aliases`, `env`, `multiple`, `delimiter`, `choices`, `negatable`, `min`, `max`, `parse`, `default`, `required`, `valueName`, `hidden` and `deprecated`. Other types, `schema` and `requires` are not settings, and an unknown property is a compile error.
+A setting is the [flag definition](/docs/api/types#flagdef) of a string, number, integer or boolean flag: `type`, `description`, `short`, `aliases`, `env`, `multiple`, `delimiter`, `choices`, `negatable`, `min`, `max`, `parse`, `default`, `required`, `valueName`, `hidden` and `deprecated`. Other types, `schema` and `requires` are not settings, and an unknown property is a compile error.
 
 `config.flag(key)` returns that definition with the config's name and the setting's key in a `config` property (`"acme:region"`), which only `config.flag()` can write, so two configs with a same-named setting each fill their own flag. A command gives the flag any name, and two commands can give two settings the same flag name:
 

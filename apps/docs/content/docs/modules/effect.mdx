@@ -46,6 +46,7 @@ Each `handler()` invocation runs one Effect program, provided with every `layer(
 
 The program and Layer builds run with the invocation's `signal`, so caller cancellation, Ctrl-C, or `SIGTERM` interrupts them.
 
+- A `Data.TaggedError` without a `message` field has an empty message, so it prints its tag (`Error: NotFound`, `{"message":"NotFound"}` under `--json`). Declare a `message` field to say what went wrong.
 - Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`.
 - Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
 
@@ -74,7 +75,7 @@ Each invocation builds the Layer in a fresh `Scope`, closed with the other Conte
 
 `fn` receives the same input as a plain action, with the same inference. The action resolves with the program's success value.
 
-The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path. Requiring any other service is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, provides nothing.
+The program's requirements are checked against `ServicesOf<Input>`: the services of the `layer()` Contexts on the path, and each Context in the action's `ctx`, for `service()`. Requiring any other service, or pulling a Context the command does not have, is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, provides nothing.
 
 ## `service(factory)`
 
@@ -83,8 +84,10 @@ The program's requirements are checked against `ServicesOf<Input>`, the services
 Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value.
 
 - It is lazy like `ctx.<name>`, and repeated pulls share one build.
-- It works only inside `handler()`: its Effect requires `HandlerInput`, which is exported for annotating reusable programs.
-- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing provider, or a different factory with the same name, fails with a `CrustDefinitionError` at runtime, not compile time.
+- It works only inside `handler()`: its Effect requires `HandlerInput` and `ContextService<Name, Value>`, both exported for annotating reusable programs.
+- The command's `ctx` must hold a Context of that name and exactly that value type, provided or used on its path; otherwise the `handler()` call is a compile error.
+- A `handler()` defined outside `.action()` cannot see the command's `ctx`, so annotate its input with the Contexts it pulls: `handler(function* (input: CrustCommandContext<any, any, { config: Config }>) { … })`. Passing it to a command without that Context is then a compile error. That check is assignability: a command whose Context of that name holds a value with extra properties still compiles.
+- The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A different factory with the same name compiles when its value type is the same, or for a handler defined outside `.action()` one with extra properties, and fails with a `CrustDefinitionError` at runtime.
 
 ## Environment variables
 

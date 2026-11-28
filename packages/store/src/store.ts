@@ -9,7 +9,7 @@ import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/sch
 
 import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
 import { checkDirectory, checkLockTimeout, withOperationLock } from "./lock.ts";
-import { applyFieldDefaults, setDocumentValue, withUnknownKeys } from "./merge.ts";
+import { applyFieldDefaults, inFileOrder, setDocumentValue, withUnknownKeys } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import {
 	deleteJson,
@@ -502,11 +502,13 @@ export function createStore<const F extends FieldsDef>(
 	): Promise<Config> {
 		const normalized = normalizeStateTypes(document);
 		await runFieldValidators(normalized, operation);
-		const output =
-			pruneUnknown === true ? normalized : withUnknownKeys(normalized, persisted, fields);
+		const output = inFileOrder(
+			pruneUnknown === true ? normalized : withUnknownKeys(normalized, persisted, fields),
+			persisted,
+		);
 		const json =
 			format === undefined
-				? JSON.stringify(output, null, "\t")
+				? `${JSON.stringify(output, null, "\t")}\n`
 				: // An unset field is not in the file: a format need not skip `undefined` as JSON does.
 					format.stringify(
 						Object.fromEntries(Object.entries(output).filter(([, value]) => value !== undefined)),

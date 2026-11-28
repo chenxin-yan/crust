@@ -215,6 +215,20 @@ describe("json", () => {
 		});
 	});
 
+	it("renders a message-less Error by its name, as the text line does", async () => {
+		class NotFound extends Error {
+			override name = "NotFound";
+		}
+		const app = appReturning(() => {
+			throw new NotFound();
+		});
+
+		expect(await captureExecute(app, ["--json"])).toMatchObject({
+			stderr: 'working\n{"message":"NotFound"}\n',
+		});
+		expect(await captureExecute(app, [])).toMatchObject({ stderr: "Error: NotFound\n" });
+	});
+
 	it.each([
 		["a string", "plain failure", '{"message":"plain failure"}'],
 		["undefined", undefined, '{"message":"undefined"}'],

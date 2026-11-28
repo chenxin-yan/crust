@@ -4,6 +4,7 @@ import { z } from "zod";
 import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import type { FlagsDef } from "../types.ts";
 import { commandInputSchema } from "./command-input.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
@@ -51,6 +52,27 @@ function buildTree() {
 }
 
 describe("snapshotCommand", () => {
+	it("gives its records no prototype, so a name like `constructor` reads nothing inherited", async () => {
+		const app = (flags: FlagsDef) =>
+			new Crust("cli")
+				.flags(flags)
+				.command("ls", (cmd) => cmd.action(() => {}))
+				.snapshot();
+		const group = { type: "exclusive", flags: { quiet: { type: "boolean" } } } as const;
+		const snapshots = [
+			snapshotCommand(buildTree()),
+			await app({ level: group }),
+			// A mutable default keeps the projection local to the invocation.
+			await app({ level: group, home: { type: "url", default: new URL("https://a.example/") } }),
+		];
+		for (const snapshot of snapshots) {
+			expect(snapshot.subCommands.constructor).toBeUndefined();
+			expect(snapshot.flags.constructor).toBeUndefined();
+			expect(Object.values(snapshot.subCommands)[0]?.flags.toString).toBeUndefined();
+		}
+		expect(snapshots[1]!.flags.level?.flags?.constructor).toBeUndefined();
+	});
+
 	it("projects the input JSON Schema of schema-backed args and flags, not the schema", async () => {
 		const opaque = {
 			"~standard": {

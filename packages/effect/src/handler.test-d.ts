@@ -1,9 +1,9 @@
-import { Crust, defineContext } from "@crustjs/core";
+import { Crust, type CrustCommandContext, defineContext } from "@crustjs/core";
 import { defineEnv } from "@crustjs/env";
 import { Context, Effect, Layer } from "effect";
 
 import { type CrustEnvError, type CrustTaggedError, tryCrust } from "./errors.ts";
-import { handler, type ServicesOf, service } from "./handler.ts";
+import { type ContextService, handler, type ServicesOf, service } from "./handler.ts";
 import type { HandlerInput } from "./index.ts";
 import { layer, type LayerValue } from "./layer.ts";
 
@@ -61,15 +61,38 @@ const adaptedGenerator = handler(function* () {
 });
 type _GeneratorResult = Expect<Equal<ReturnType<typeof adaptedGenerator>, Promise<number>>>;
 
-// ServicesOf counts branded layer() values only.
+// ServicesOf provides the services of branded layer() values, and each Context in ctx by name.
 type _Services = Expect<
 	Equal<
 		ServicesOf<{
 			ctx: { db: Promise<LayerValue<Db>>; unbranded: Promise<Context.Context<Cache>> };
 		}>,
-		Db
+		Db | ContextService<"db", LayerValue<Db>> | ContextService<"unbranded", Context.Context<Cache>>
 	>
 >;
+// A value that is only sometimes a layer() value provides no service.
+type _NullableLayer = Expect<
+	Equal<
+		ServicesOf<{ ctx: { db: Promise<LayerValue<Db> | null> } }>,
+		ContextService<"db", LayerValue<Db> | null>
+	>
+>;
+// A `never` or `any` value (a setup that only throws, an untyped parse) provides no service.
+type _NeverValue = Expect<
+	Equal<ServicesOf<{ ctx: { broken: Promise<never> } }>, ContextService<"broken", never>>
+>;
+type _AnyValue = Expect<
+	Equal<ServicesOf<{ ctx: { loose: Promise<any> } }>, ContextService<"loose", any>>
+>;
+const broken = defineContext("broken").setup(async () => {
+	throw new Error("setup failed");
+});
+new Crust("cli").provide(broken()).action(
+	// @ts-expect-error -- a Context whose setup only throws does not provide Db.
+	handler(function* () {
+		return yield* Db;
+	}),
+);
 
 // A layer() with a non-literal name provides nothing: its entry cannot be tied to the path.
 declare const dynamicName: string;
@@ -109,7 +132,58 @@ layer("needsCache", needsCache);
 type ConfigService = ReturnType<typeof service<typeof config>>;
 type _ServiceValue = Expect<Equal<Effect.Success<ConfigService>, { prefix: string }>>;
 // Its requirement is nameable, so reusable programs can be annotated.
-type _ServiceRequirement = Expect<Equal<Effect.Services<ConfigService>, HandlerInput>>;
+type _ServiceRequirement = Expect<
+	Equal<Effect.Services<ConfigService>, HandlerInput | ContextService<"config", { prefix: string }>>
+>;
+
+// service() of a Context the command's ctx does not hold is rejected, in both forms.
+new Crust("cli").provide(db()).action(
+	// @ts-expect-error -- no config Context on the path.
+	handler(function* () {
+		return yield* service(config);
+	}),
+);
+new Crust("cli").provide(db()).action(
+	handler(() =>
+		// @ts-expect-error -- no config Context on the path.
+		Effect.gen(function* () {
+			return yield* service(config);
+		}),
+	),
+);
+// A Context of the same name with another value type is rejected too.
+const otherConfig = defineContext("config").setup(() => ({ prefix: 1 }));
+new Crust("cli").provide(config()).action(
+	// @ts-expect-error -- ctx.config holds { prefix: string }.
+	handler(function* () {
+		return yield* service(otherConfig);
+	}),
+);
+// A same-name factory with a wider value is rejected too: the brand is invariant.
+const widerConfig = defineContext("config").setup(() => ({ prefix: "cfg", extra: 1 }));
+new Crust("cli").provide(config()).action(
+	// @ts-expect-error -- ctx.config holds { prefix: string }.
+	handler(function* () {
+		return (yield* service(widerConfig)).extra;
+	}),
+);
+// A handler defined outside .action() annotates its input with the Contexts it pulls.
+const standalone = handler(function* (
+	_input: CrustCommandContext<any, any, { config: { prefix: string } }>,
+) {
+	return (yield* service(config)).prefix;
+});
+new Crust("cli").provide(config()).action(standalone);
+// @ts-expect-error -- no config Context on the path.
+new Crust("cli").provide(db()).action(standalone);
+// A Context the command uses (not only provides) satisfies service().
+new Crust("cli").provide(config()).command("show", (cmd) =>
+	cmd.use(config).action(
+		handler(function* () {
+			return (yield* service(config)).prefix;
+		}),
+	),
+);
 
 const env = defineEnv("env", {
 	PORT: { type: "number", default: 3000 },

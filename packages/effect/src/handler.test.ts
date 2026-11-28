@@ -1,6 +1,6 @@
 import { Crust, CrustError, defineContext } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { Cause, Context, Effect, Exit, Layer } from "effect";
+import { Cause, Context, Data, Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 import { CrustDefinitionError } from "./errors.ts";
@@ -238,6 +238,7 @@ describe("handler with layer", () => {
 		const config = defineContext("config").setup(() => ({ limit: 3 }));
 		const app = new Crust("cli").action(
 			handler(() =>
+				// @ts-expect-error -- no config on the path; the runtime check backs the type.
 				service(config).pipe(
 					Effect.map(() => "unreachable"),
 					Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
@@ -264,15 +265,14 @@ describe("handler with layer", () => {
 				builds++;
 				return compatible ? { port: 80 } : { label: "wrong" };
 			});
-			const app = new Crust("cli")
-				.provide(actual())
-				.action(
-					handler(() =>
-						service(expected).pipe(
-							Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
-						),
+			const app = new Crust("cli").provide(actual()).action(
+				handler(() =>
+					// @ts-expect-error -- ctx.config is another value type; the runtime check backs it.
+					service(expected).pipe(
+						Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
 					),
-				);
+				),
+			);
 			const outcome = await app.run([]);
 			expect(outcome.status === "completed" && outcome.result).toBeInstanceOf(CrustDefinitionError);
 			expect(builds).toBe(0);
@@ -286,19 +286,16 @@ describe("handler with layer", () => {
 			builds++;
 			return { label: "replacement" };
 		});
-		const app = new Crust("cli")
-			.provide(expected())
-			.command("child", (child) =>
-				child
-					.provide(replacement())
-					.action(
-						handler(() =>
-							service(expected).pipe(
-								Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
-							),
-						),
+		const app = new Crust("cli").provide(expected()).command("child", (child) =>
+			child.provide(replacement()).action(
+				handler(() =>
+					// @ts-expect-error -- the descendant's config is another value type; the runtime check backs it.
+					service(expected).pipe(
+						Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
 					),
-			);
+				),
+			),
+		);
 		const outcome = await app.run(["child"]);
 		expect(outcome.status === "completed" && outcome.result).toBeInstanceOf(CrustDefinitionError);
 		expect(builds).toBe(0);
@@ -363,6 +360,15 @@ describe("handler under execute()", () => {
 		expect(captured.stderr).toContain("Error: boom");
 		expect(captured.stderr).toContain("Cleanup failed: ");
 		expect(captured.stderr).toContain("db release failed");
+	});
+
+	it("names a message-less tagged error by its tag", async () => {
+		class NotFound extends Data.TaggedError("NotFound")<{}> {}
+		const app = new Crust("cli").action(handler(() => Effect.fail(new NotFound())));
+
+		const captured = await captureExecute(app, []);
+
+		expect(captured).toMatchObject({ exitCode: 1, stderr: "Error: NotFound\n" });
 	});
 
 	it.each([new DOMException("Caller cancelled.", "AbortError"), new Error("deadline exceeded")])(

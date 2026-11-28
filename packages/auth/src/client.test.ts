@@ -1138,6 +1138,9 @@ describe("without profiles", () => {
 		expect(await goldenFiles(JSON.stringify(existing))).toMatchInlineSnapshot(`
 			[
 			  "{
+				"currentProfile": {
+					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
+				},
 				"version": 1,
 				"storeId": "id-1",
 				"encryption": {
@@ -1163,12 +1166,13 @@ describe("without profiles", () => {
 							"refreshToken": "RT"
 						}
 					}
-				},
+				}
+			}
+			",
+			  "{
 				"currentProfile": {
 					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
-				}
-			}",
-			  "{
+				},
 				"version": 1,
 				"storeId": "id-1",
 				"encryption": {
@@ -1194,12 +1198,13 @@ describe("without profiles", () => {
 							"refreshToken": "RT"
 						}
 					}
-				},
+				}
+			}
+			",
+			  "{
 				"currentProfile": {
 					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
-				}
-			}",
-			  "{
+				},
 				"version": 1,
 				"storeId": "id-1",
 				"encryption": {
@@ -1218,11 +1223,9 @@ describe("without profiles", () => {
 						},
 						"tombstone": true
 					}
-				},
-				"currentProfile": {
-					"qoqhgI6SdnPNKWNZ1a3M8AuWgbwS7niCcqo8mRUmu-k": "default"
 				}
-			}",
+			}
+			",
 			]
 		`);
 	});
@@ -1257,7 +1260,8 @@ describe("without profiles", () => {
 						}
 					}
 				}
-			}",
+			}
+			",
 			  "{
 				"version": 1,
 				"storeId": "id-1",
@@ -1285,7 +1289,8 @@ describe("without profiles", () => {
 						}
 					}
 				}
-			}",
+			}
+			",
 			  "{
 				"version": 1,
 				"storeId": "id-1",
@@ -1306,7 +1311,8 @@ describe("without profiles", () => {
 						"tombstone": true
 					}
 				}
-			}",
+			}
+			",
 			]
 		`);
 	});

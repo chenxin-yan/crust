@@ -56,7 +56,7 @@ function acme(options: Pick<Parameters<typeof defineConfig>[0], "files" | "forma
 		both: {
 			region: { type: "string", choices: ["us", "eu"], default: "us", env: "ACME_REGION" },
 			// "value" is the name a file's text is converted under: an alias of it must still work.
-			replicas: { type: "number", min: 1, aliases: ["value"] },
+			replicas: { type: "integer", min: 1, aliases: ["value"] },
 			tags: { type: "string", multiple: true, delimiter: "," },
 		},
 		user: {
@@ -133,10 +133,16 @@ describe("flags take the files' values", () => {
 	});
 
 	it("names the file and the setting for a value that does not convert", async () => {
-		write(projectFile(), { replicas: "many" });
-		const { exitCode, stderr } = await captureExecute(acme().app, ["deploy"]);
-		expect(exitCode).toBe(2);
-		expect(stderr).toBe(`Error: Expected a number for "replicas" in ${projectFile()}.\n`);
+		for (const [replicas, expected] of [
+			["many", "an integer"],
+			[1.5, "an integer"],
+			[0, "an integer of at least 1"],
+		] as const) {
+			write(projectFile(), { replicas });
+			const { exitCode, stderr } = await captureExecute(acme().app, ["deploy"]);
+			expect(exitCode).toBe(2);
+			expect(stderr).toBe(`Error: Expected ${expected} for "replicas" in ${projectFile()}.\n`);
+		}
 		write(projectFile(), { region: { name: "eu" } });
 		expect((await captureExecute(acme().app, ["deploy"])).stderr).toBe(
 			`Error: Expected one value for "region" in ${projectFile()}.\n`,
@@ -585,10 +591,10 @@ describe("get, list and set", () => {
 	it("set() refuses a value the setting's rules refuse, saving nothing", async () => {
 		const { config } = acme();
 		await expect(config.set({ region: "eu", replicas: 0 })).rejects.toThrow(
-			'Expected a number of at least 1 for "replicas".',
+			'Expected an integer of at least 1 for "replicas".',
 		);
 		await expect(config.set({ replicas: Number.NaN })).rejects.toThrow(
-			'Expected a number for "replicas".',
+			'Expected an integer for "replicas".',
 		);
 		expect(existsSync(userFile())).toBe(false);
 	});
@@ -730,7 +736,7 @@ it("describes a JSON file in its JSON Schema", () => {
 	expect(config.jsonSchema()).toMatchObject({
 		properties: {
 			region: { enum: ["us", "eu"], default: "us" },
-			replicas: { type: "number", minimum: 1 },
+			replicas: { type: "integer", minimum: 1 },
 			timeout: { type: "string", default: "30" },
 			tags: { type: "array", items: { type: "string" } },
 		},

@@ -12,11 +12,13 @@ import {
 	groupMeta,
 	groupTree,
 	operationCommand,
+	type OperationMeta,
 	operationMeta,
 } from "./commands.ts";
 import type { CommandPlan } from "./lint.ts";
 import { kebab } from "./names.ts";
 import type { Operation } from "./operations.ts";
+import { commandExtras } from "./overrides.ts";
 import { record } from "./schema.ts";
 import { BUILT_SPEC_FILE } from "./spec-source.ts";
 import { METHODS, isLocalRef, pointerKeys } from "./spec-traversal.ts";
@@ -37,7 +39,8 @@ export interface SpecIndex {
 	/** The generated root commands, in order. */
 	readonly commands: readonly {
 		readonly name: string;
-		readonly meta: Pick<CommandConfig, "description" | "hidden">;
+		/** Its metadata, with the override's package keys (`CommandExtras`) as JSON. */
+		readonly meta: OperationMeta;
 		readonly operationId: string;
 		/** The data file its operation is read from. */
 		readonly file: string;
@@ -382,15 +385,18 @@ function holds(node: CommandSnapshot, plan: CommandPlan): boolean {
 
 /**
  * Whether `command` is the planned command: it declares `.output()` and has the plan's description,
- * hidden state and arguments, and at least its flags.
+ * hidden state, package keys and arguments, and at least its flags. Its `sections` may differ: an
+ * Extension can document a generated command.
  */
 export function isPlannedCommand(command: CommandSnapshot, plan: CommandPlan): boolean {
 	const args = plan.inputs.filter(({ kind }) => kind === "arg").map(({ name }) => name);
+	const { name: _name, description, hidden, sections: _sections, ...extras } = command.meta;
 	const meta = operationMeta(plan);
 	return (
 		command.output === true &&
-		command.meta.description === meta.description &&
-		(command.meta.hidden === true) === (meta.hidden === true) &&
+		description === meta.description &&
+		(hidden === true) === (meta.hidden === true) &&
+		process.getBuiltinModule("node:util").isDeepStrictEqual(extras, commandExtras(plan.fields)) &&
 		command.args.length === args.length &&
 		command.args.every(({ name }, position) => name === args[position]) &&
 		plan.inputs.every(({ kind, name }) => kind === "arg" || Object.hasOwn(command.flags, name))

@@ -11,6 +11,8 @@ import {
 } from "@crustjs/core";
 import type { CommandInputSchema } from "@crustjs/core/tooling";
 
+import { printedOutput } from "./text-output.ts";
+
 const SCHEMA: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:schema");
 
 /** What `schema [path...]` prints for one command, and returns as its result. */
@@ -109,6 +111,7 @@ const schemaFactory: ExtensionFactory<
 							variadic: true,
 							description: PATH_ARG_DESCRIPTION,
 						})
+						.output(printedOutput<CommandSchema>({ type: "object" }))
 						.action(async ({ args, rootCommand, stdout }) => {
 							// The tooling mapping loads only when the command runs.
 							const { commandSchema } = await import("./schema-render.ts");

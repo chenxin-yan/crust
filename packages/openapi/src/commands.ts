@@ -3,6 +3,7 @@ import {
 	type ArgDef,
 	type CommandConfig,
 	type CommandDefinition,
+	type CommandExtras,
 	type CommandDefinitionBuilder,
 	type ContextBag,
 	type ContextFactory,
@@ -19,7 +20,7 @@ import type { DefineApiOptions } from "./define-api.ts";
 import { type CommandPlan, type PlannedInput, boundNames } from "./lint.ts";
 import { kebab } from "./names.ts";
 import type { Param } from "./operations.ts";
-import type { OperationOverride } from "./overrides.ts";
+import { type OperationOverride, commandExtras } from "./overrides.ts";
 import {
 	type OperationRequest,
 	buildRequest,
@@ -34,6 +35,9 @@ import {
  */
 export type GeneratedDefinition = CommandDefinition<any, any, any, any>;
 import { type SchemaField, flagValue, record, standaloneSchema } from "./schema.ts";
+
+/** A generated operation command's metadata. */
+export type OperationMeta = Pick<CommandConfig, "description" | "hidden"> & CommandExtras;
 
 /** A `bind` entry of an override. */
 type Bind = NonNullable<NonNullable<OperationOverride["bind"]>[string]>;
@@ -128,10 +132,11 @@ export function groupMeta(spec: OpenApiSpec, group: string): Pick<CommandConfig,
 	return description === undefined ? {} : { description };
 }
 
-/** The metadata of a planned operation's command. */
-export function operationMeta(plan: CommandPlan): Pick<CommandConfig, "description" | "hidden"> {
+/** The metadata of a planned operation's command: its override's package keys, then description and hidden. */
+export function operationMeta(plan: CommandPlan): OperationMeta {
 	const description = plan.fields.description ?? plan.op.summary;
 	return {
+		...commandExtras(plan.fields),
 		...(description !== undefined && { description }),
 		...(plan.fields.hidden !== undefined && { hidden: plan.fields.hidden }),
 	};
@@ -154,7 +159,7 @@ function tagDescription(spec: OpenApiSpec, group: string): string | undefined {
  */
 export function operationCommand(
 	name: string,
-	meta: Pick<CommandConfig, "description" | "hidden">,
+	meta: OperationMeta,
 	load: () => { readonly plan: CommandPlan; readonly options: GenerateOptions },
 ): GeneratedDefinition {
 	return defineCommand(name, meta, (command) => {

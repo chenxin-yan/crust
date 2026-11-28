@@ -890,10 +890,10 @@ describe("Extension named hooks", () => {
 			expect(received).toMatchObject([{ flags: { port: 1 } }]);
 		});
 
-		it('keeps an explicit `--tags ""` that splits to zero occurrences', async () => {
+		it('keeps an explicit `--tags ""` as an empty list over a bound value', async () => {
 			const { execute, received } = bindingApp({ flags: { tags: ["x"] } });
 			expect(await execute(["--tags", ""])).toEqual({ exitCode: 0, stderr: "" });
-			expect(received).toMatchObject([{ flags: { tags: undefined } }]);
+			expect(received).toMatchObject([{ flags: { tags: [] } }]);
 		});
 
 		it("never converts a structured value that argv overrides", async () => {
@@ -1640,12 +1640,13 @@ describe("Extension setup, flag handlers, and noAction", () => {
 			mode: { type: "string", multiple: true, delimiter: ",", default: ["a"] },
 		});
 		expect((await listed.run([], { flags: { mode: [] } })).stdout).toBe("action");
+		// `--mode ""` is given: an empty list, not an omission.
 		const lines: string[] = [];
 		await listed.execute({
 			argv: ["--mode", ""],
 			io: { stdout: lineSink(lines), stderr: { write() {} } },
 		});
-		expect(lines).toEqual(["action"]);
+		expect(lines).toEqual(["handled"]);
 	});
 
 	it("handles any supplied value of a non-boolean flag, including JSON arrays and false", async () => {

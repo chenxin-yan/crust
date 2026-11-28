@@ -75,3 +75,20 @@ export function withUnknownKeys(
 	}
 	return result;
 }
+
+/**
+ * Returns `document` with the keys `persisted` holds first, in the file's order, then the
+ * others in their order, so a write never reorders the file a person may have arranged.
+ */
+export function inFileOrder(
+	document: Readonly<StoreDocument>,
+	persisted: Readonly<StoreDocument> | undefined,
+): StoreDocument {
+	const result: StoreDocument = {};
+	for (const key of [...Object.keys(persisted ?? {}), ...Object.keys(document)]) {
+		if (Object.hasOwn(document, key) && !Object.hasOwn(result, key)) {
+			setDocumentValue(result, key, document[key]);
+		}
+	}
+	return result;
+}

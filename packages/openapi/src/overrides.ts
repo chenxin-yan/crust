@@ -1,4 +1,4 @@
-import type { ContextBag, ContextMap } from "@crustjs/core";
+import type { CommandExtras, ContextBag, ContextMap } from "@crustjs/core";
 
 import type { ApiRequest } from "./api-command.ts";
 import type { JsonSchema } from "./schema.ts";
@@ -8,8 +8,13 @@ import type { BodyNamesOf, ParamNamesOf } from "./typed-client.ts";
  * How one operation becomes a command; every field left out (or `undefined`) uses the default.
  * Given for every operation by `.each()`, or for one operationId by `.override()`, whose fields
  * replace the rule's. With a registered spec, an `.override()` entry's input names are checked.
+ * The command keys installed packages add (`CommandExtras`, such as `@crustjs/mcp`'s `mcp`) are
+ * copied onto the command as given.
  */
-export interface OperationOverride<Deps extends ContextMap = {}, Op = unknown> {
+export interface OperationOverride<
+	Deps extends ContextMap = {},
+	Op = unknown,
+> extends CommandExtras {
 	/** Leaves the operation out. Default: the operation's `deprecated`. */
 	readonly exclude?: boolean;
 	/** A group path as typed on the command line, such as `"dns records"`; `""` is the root. Default: the first tag in kebab case, else `""`. */
@@ -47,6 +52,30 @@ export type OverrideEntry<Deps extends ContextMap = {}, Op = unknown> = Operatio
 	/** Checked by `crust build`: an operation that moved fails it (`override-stale`). */
 	readonly expect?: { readonly method: string; readonly path: string };
 };
+
+/** The fields the generator reads; an override's other keys are a package's command keys. */
+const GENERATOR_FIELDS = {
+	exclude: true,
+	group: true,
+	name: true,
+	hidden: true,
+	description: true,
+	flagName: true,
+	positional: true,
+	bind: true,
+	confirm: true,
+	paginate: true,
+	unwrap: true,
+	outputSchema: true,
+	expect: true,
+} as const satisfies Record<Exclude<keyof OverrideEntry, keyof CommandExtras>, true>;
+
+/** The keys of `fields` that packages own on commands (`CommandExtras`), for the command's metadata. */
+export function commandExtras(fields: OperationOverride): CommandExtras {
+	return Object.fromEntries(
+		Object.entries(fields).filter(([key]) => !Object.hasOwn(GENERATOR_FIELDS, key)),
+	);
+}
 
 type InputNamesOf<Op> = unknown extends Op ? string : ParamNamesOf<Op> | BodyNamesOf<Op>;
 

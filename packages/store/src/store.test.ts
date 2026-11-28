@@ -351,7 +351,7 @@ describe("the store file", () => {
 		createStore({ dirPath: tempDir, name: "config", fields: { blob: { type: "string" } } });
 	/** A `blob` whose file, as the store writes it, is `bytes` long. */
 	const blobOf = (bytes: number) =>
-		"x".repeat(bytes - JSON.stringify({ blob: "" }, null, "\t").length);
+		"x".repeat(bytes - `${JSON.stringify({ blob: "" }, null, "\t")}\n`.length);
 
 	it("reads and writes a file of exactly 16 MiB", async () => {
 		const store = blobStore();
@@ -391,7 +391,7 @@ describe("the store file", () => {
 
 	it("rejects a file over 16 MiB with PATH", async () => {
 		const filePath = join(tempDir, "config.json");
-		await writeFile(filePath, JSON.stringify({ blob: blobOf(MiB16 + 1) }, null, "\t"));
+		await writeFile(filePath, `${JSON.stringify({ blob: blobOf(MiB16 + 1) }, null, "\t")}\n`);
 
 		await expect(blobStore().read()).rejects.toMatchObject({
 			code: "PATH",
@@ -551,12 +551,29 @@ describe("format", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("store.write", () => {
-	it("should produce tab-indented JSON", async () => {
+	it("should produce tab-indented JSON ending in a newline", async () => {
 		const store = createStore({ dirPath: tempDir, name: "config", fields: BASIC_FIELDS });
 		await store.write({ theme: "dark", verbose: true });
 
 		const raw = await readFile(join(tempDir, "config.json"), "utf-8");
-		expect(raw).toBe(JSON.stringify({ theme: "dark", verbose: true }, null, "\t"));
+		expect(raw).toBe(`${JSON.stringify({ theme: "dark", verbose: true }, null, "\t")}\n`);
+	});
+
+	it("keeps the file's key order, with new keys after it", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ verbose: true, other: 1, theme: "dark" }));
+		const store = createStore({ dirPath: tempDir, name: "config", fields: BASIC_FIELDS });
+		const keys = async () => Object.keys(JSON.parse(await readFile(filePath, "utf-8")));
+
+		await store.patch({ theme: "light" });
+		expect(await keys()).toEqual(["verbose", "other", "theme"]);
+		await store.update((current) => ({ ...current, theme: "dark" }));
+		expect(await keys()).toEqual(["verbose", "other", "theme"]);
+		await store.write({ theme: "dark", verbose: false });
+		expect(await keys()).toEqual(["verbose", "other", "theme"]);
+		await writeFile(filePath, JSON.stringify({ verbose: true }));
+		await store.patch({ theme: "light" });
+		expect(await keys()).toEqual(["verbose", "theme"]);
 	});
 
 	it("should run field validators on write", async () => {
@@ -1081,7 +1098,7 @@ describe("Object.prototype key names", () => {
 					expectMissing(await store.patch({}));
 					expectMissing(await store.update((current) => current));
 					expectMissing(await store.write({}));
-					expect(await readFile(filePath, "utf-8")).toBe("{}");
+					expect(await readFile(filePath, "utf-8")).toBe("{}\n");
 					expectMissing(await store.read());
 
 					expect(Object.entries(await store.patch({ [name]: "v" }))).toEqual([[name, "v"]]);

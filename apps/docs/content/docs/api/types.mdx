@@ -95,7 +95,7 @@ A boolean flag takes no value: `--color=false` is a `PARSE` error. `--no-<name>`
 
 `env` names a variable, or lists variables of which the first that is set wins. It is consulted only when the flag has no value: no argv occurrence, or omitted from structured [`run()`](/docs/api/crust#runpath-input-options) input. The given value wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`; an empty variable counts as unset for a boolean. Variables come from `process.env`; MCP tool calls read the server's `process.env`. Help, man pages, and generated skills show `[env: NAME]`, never the value.
 
-`delimiter` splits string argv occurrences and the environment text alike. It requires `multiple: true` and drops empty segments. Boolean argv switches are never split.
+`delimiter` splits string argv occurrences and the environment text alike. It requires `multiple: true` and drops empty segments: `--tags ""` is `[]`, unless the flag is required, while a variable with no segment left is unset. Boolean argv switches are never split.
 
 `hidden: true` parses the flag as usual but leaves it out of help, man pages, completion, generated skills, search, and command input schemas. `deprecated: "message"` prints `Warning: flag "--name" is deprecated. message` on stderr once when the command line gives the flag, and help appends `[deprecated: message]`; command input schemas mark it `deprecated: true`. `requires: ["json"]` names flags of the same record the flag needs when given; another name is a compile error. See [Hidden and deprecated flags](/docs/guide/arguments-and-flags#hidden-and-deprecated-flags).
 
@@ -198,7 +198,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. Key
 
 Snapshots from Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details build pending commands only when read. A child's `meta`, except `meta.sections`, comes from its `defineCommand()` config, so reading it never runs the recipe. Reading the child's `meta.sections`, `hasAction`, `args`, `flags`, `outputSchema`, `output`, or `subCommands` builds it and throws any recipe error. `app.snapshot()` builds the full tree up front.
 
-`flags` contains effective local and Context-owned flags; those the command does not declare itself have `inherited: true`. `groups` lists the command's [`.group()`](/docs/api/crust#grouptitle-block) headings in code order, each with the names of its `commands` or its `flags`. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
+`flags` contains effective local and Context-owned flags; those the command does not declare itself have `inherited: true`. In snapshots Core projects, `flags`, `subCommands`, and an exclusive group's member `flags` have no prototype, so `snapshot.subCommands[word]` is `undefined` for any word that is not a command, `constructor` included. A snapshot `crust build` reads back from JSON has ordinary prototypes, so code that may receive one checks `Object.hasOwn(snapshot.subCommands, word)`. `groups` lists the command's [`.group()`](/docs/api/crust#grouptitle-block) headings in code order, each with the names of its `commands` or its `flags`. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
 ### `ArgSnapshot`
 
@@ -464,7 +464,7 @@ Reports where each current value came from as a [`ValueSource`](#valuesource), k
 | Source    | Meaning                                                                                                                                             |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `argv`    | Given on argv. An alias or `--no-<name>` reports the canonical name; a flag counts as given by the `bindInput` rule above, so `--tags ""` is `argv` |
-| `run`     | Typed `run()` input. An empty array for a variadic argument or a `multiple` flag gives no value, as on argv                                         |
+| `run`     | Typed `run()` input. An empty array for a variadic argument or a `multiple` flag gives no value, as omitting it on argv does                        |
 | `env`     | The flag's `env` variable                                                                                                                           |
 | `bound`   | Supplied by `bindInput` or `bindText`                                                                                                               |
 | `default` | The definition's default                                                                                                                            |

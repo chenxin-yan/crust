@@ -24,15 +24,33 @@ const HandlerInputBase: Context.ServiceClass<
 /** The invocation input, provided to every {@link handler} program so {@link service} can pull plain Contexts. */
 export class HandlerInput extends HandlerInputBase {}
 
+declare const ContextServiceBrand: unique symbol;
+
 /**
- * Union of the services provided by the {@link layer} Contexts in an action
- * input's `ctx` bag. Open-name bags (`Record<string, …>`) provide nothing:
- * their entries cannot be tied to a layer on the path.
+ * The type-only requirement of {@link service}: the Crust Context named `Name` with value
+ * `Value`. {@link handler} accepts it only when the command's `ctx` holds that Context.
+ */
+export interface ContextService<Name extends string, Value> {
+	// A function-typed `value` makes the brand invariant, so a same-name factory with a wider value is rejected.
+	readonly [ContextServiceBrand]: { readonly name: Name; readonly value: (value: Value) => Value };
+}
+
+/**
+ * Union of what a {@link handler} program may require for an action input: the services
+ * provided by the {@link layer} Contexts in its `ctx` bag, and a {@link ContextService} per
+ * Context in that bag. Open-name bags (`Record<string, …>`) provide nothing: their entries
+ * cannot be tied to a provider on the path.
  */
 export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
 	? string extends keyof Bag
 		? never
-		: { [K in keyof Bag]-?: Bag[K] extends Promise<LayerValue<infer S>> ? S : never }[keyof Bag]
+		: {
+				[K in keyof Bag & string]-?: Bag[K] extends Promise<infer Value>
+					? // A `never` or `any` value is assignable to every layer value and infers `S` as `unknown`.
+						| ContextService<K, Value>
+						| ([Value] extends [LayerValue<infer S>] ? (unknown extends S ? never : S) : never)
+					: never;
+			}[keyof Bag & string]
 	: never;
 
 /**
@@ -44,7 +62,8 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
  * exits with 130 (143 after SIGTERM, 141 after a closed stdout). Aborting the
  * invocation's `ctx.signal` interrupts the fiber.
  * A compile error saying a service is not assignable to `HandlerInput` means
- * no {@link layer} on the path provides that service.
+ * no {@link layer} on the path provides that service; one naming `ContextService<"x", …>`
+ * means the command's `ctx` has no Context `x` of that value type for {@link service}.
  */
 export function handler<Input extends ActionInput, Out, E>(
 	fn: (input: Input) => Effect.Effect<Out, E, ServicesOf<Input> | HandlerInput>,
@@ -108,13 +127,18 @@ function readContext<T>(ctx: ContextBag, name: string): Promise<T> {
 
 /**
  * Pull a plain Crust Context by factory from inside a {@link handler} program.
- * Lazy like `ctx.<name>`; requires the effective same-name provider to use
- * the same factory (including its `.of()` doubles). Missing or different factories fail with
- * Core's missing-context error as a `CrustDefinitionError`.
+ * Lazy like `ctx.<name>`. Its {@link ContextService} requirement makes a `handler()`
+ * whose command has no such Context in `ctx` a compile error. At runtime the effective
+ * same-name provider must use the same factory (including its `.of()` doubles); a different
+ * factory fails with Core's missing-context error as a `CrustDefinitionError`.
  */
 export function service<F extends AnyContextFactory>(
 	factory: F,
-): Effect.Effect<FactoryValueOf<F>, CrustTaggedError, HandlerInput> {
+): Effect.Effect<
+	FactoryValueOf<F>,
+	CrustTaggedError,
+	HandlerInput | ContextService<F["contextName"], FactoryValueOf<F>>
+> {
 	const name = factory.contextName;
 	return Effect.flatMap(HandlerInput, (input) =>
 		tryCrust((): Promise<FactoryValueOf<F>> => {

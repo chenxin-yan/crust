@@ -209,7 +209,7 @@ Call `session.close()` in a `finally`, as above, so an early error never leaves 
 | Condition                                                                          | Mode        |
 | ---------------------------------------------------------------------------------- | ----------- |
 | `device` or `noBrowser` (the user passed `--device` or `--no-browser`), even on CI | `"device"`  |
-| `CI` is set (`isCI()` from `@crustjs/utils/terminal`)                              | `"refuse"`  |
+| `CI` is set to anything but empty, `0`, or `false` (any letter case)               | `"refuse"`  |
 | No terminal: stdin is not a TTY, or neither stdout nor stderr is                   | `"refuse"`  |
 | A terminal, but an SSH session or Linux with no display                            | `"device"`  |
 | Otherwise                                                                          | `"browser"` |

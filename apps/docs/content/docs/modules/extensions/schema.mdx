@@ -31,7 +31,7 @@ Prints one line of JSON describing the command at `path`, or the root command wh
 
 Path segments are canonical command names or aliases, like routing; hidden commands resolve too. An unknown segment fails with a [`COMMAND_NOT_FOUND`](/docs/api/errors) error naming the path up to it, such as `Unknown command "remote ad".`; [`didYouMean()`](/docs/modules/extensions/did-you-mean) presents it like any unknown command.
 
-The command also returns the object, so [`run()`](/docs/api/crust#runpath-input-options) gets it as the outcome's `result`:
+The command also returns the object, so [`run()`](/docs/api/crust#runpath-input-options) gets it as the outcome's `result`, and under [`--json`](/docs/modules/extensions/json) the same line prints once on stdout, with nothing on stderr:
 
 ```ts
 const outcome = await app.run(["schema"], { args: { path: ["deploy"] } });
