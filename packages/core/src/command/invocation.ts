@@ -1167,16 +1167,26 @@ async function dispatch(
 			} else {
 				// Gates such as login checks precede only an action, never `--help` or a fallback.
 				if (resolvedNode.run) {
+					// Arguments are bound once every hook has returned: a positional cannot follow an
+					// omitted one, and two hooks may each supply one of a pair, in either order.
+					const args = new Map<string, NonNullable<RunInputPayload["args"]>[string]>();
 					for (const extension of extensions) {
 						const defaults = await extension.hooks.defaults?.(extensionContext);
-						if (defaults) {
-							bound = bindStructuredInput(
-								resolvedNode,
-								bound,
-								unsetDefaults(resolvedNode, bound, defaults),
-								true,
-							);
+						if (!defaults) continue;
+						const unset = unsetDefaults(resolvedNode, bound, defaults);
+						bound = bindStructuredInput(resolvedNode, bound, { flags: unset.flags }, true);
+						for (const [name, value] of Object.entries(unset.args ?? {})) {
+							// The first listed wins.
+							if (!args.has(name)) args.set(name, value);
 						}
+					}
+					if (args.size > 0) {
+						bound = bindStructuredInput(
+							resolvedNode,
+							bound,
+							{ args: Object.fromEntries(args) },
+							true,
+						);
 					}
 					// Every check passes before what a hook left for afterwards, such as a question.
 					const afterChecks: (() => unknown)[] = [];

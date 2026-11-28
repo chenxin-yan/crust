@@ -1390,6 +1390,30 @@ describe("Extension named hooks", () => {
 			expect(order).toEqual(["noAction"]);
 		});
 
+		it("fills two positionals from two Extensions, whichever is listed first", async () => {
+			const source = supplying("source", { args: { src: "a.txt" } });
+			const target = supplying("target", { args: { dst: "b.txt" } });
+			for (const extensions of [
+				[source, target],
+				[target, source],
+			]) {
+				const app = new Crust("copy")
+					.args({ name: "src", type: "string" }, { name: "dst", type: "string" })
+					.extend(...extensions)
+					.action(({ args }) => args);
+				expect(await app.run([])).toMatchObject({
+					status: "completed",
+					result: { src: "a.txt", dst: "b.txt" },
+				});
+			}
+			// A positional after an omitted one is still refused.
+			const gap = new Crust("copy")
+				.args({ name: "src", type: "string" }, { name: "dst", type: "string" })
+				.extend(target)
+				.action(({ args }) => args);
+			expect(await gap.run([])).toMatchObject({ status: "failed" });
+		});
+
 		it("keeps the first listed of two Extensions that supply one value", async () => {
 			const profile = supplying("profile", { flags: { region: "eu", label: "profile" } });
 			const lastUsed = supplying("last-used", { flags: { region: "ap", replicas: 5 } });
