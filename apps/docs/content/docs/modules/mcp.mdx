@@ -2,7 +2,7 @@
 title: "MCP"
 ---
 
-`@crustjs/mcp` serves your commands as [MCP](https://modelcontextprotocol.io) tools. Each tool's JSON Schema comes from the same definitions that drive parsing and help, and every command invocation runs through `app.run()`, with no per-command glue.
+`@crustjs/mcp` serves your commands as [MCP](https://modelcontextprotocol.io) tools. Each tool's JSON Schema comes from the same definitions that drive parsing and help, and every tool call runs the command as `app.run()` does, with no per-command glue.
 
 MCP serves clients that call tools instead of running a shell; [how agents use your CLI](/docs/guide/agents#how-agents-use-your-cli) shows where it fits beside the shell and skills.
 
@@ -16,16 +16,16 @@ The package has a peer dependency on `@crustjs/core` and depends on `@modelconte
 
 The server speaks MCP protocol revision 2026-07-28. A client that opens with the `initialize` handshake is served the revision it asks for, 2025-11-25 or earlier; the opening exchange decides, with nothing to configure.
 
-## `mcpExtension(options)`
+## `mcp(options?)`
 
 <include lang="ts">../../../examples/modules/mcp.ts#extension</include>
 
-`mcpExtension()` owns two commands:
+`mcp()` owns two commands:
 
 - `<cli> mcp` serves the application over stdio until the client disconnects. Stdout carries protocol frames, so the Command Action writes nothing else to it; command output is captured per call instead.
 - `<cli> mcp config [--client claude|cursor|vscode]` prints the client configuration snippet on stdout. `--client` defaults to `claude`, which also prints a `claude mcp add` one-liner on stderr. It returns the snippet too, so with [`json()`](/docs/modules/extensions/json), `--json` prints it as one JSON string.
 
-`app` is a callback, called when `mcp` runs, because the Extension is installed before the application is complete. To return the variable being assigned, annotate the callback `(): AnyCrust =>`; otherwise TypeScript reports the variable as referenced in its own initializer. `mcpExtension.id` is the Extension identity.
+`mcp` serves the application it runs in, read from the action's `rootCommand` and run through its [`runCommand`](/docs/api/types#crustcommandcontexta-f-ctx), so it does not matter where in the chain the Extension is installed: commands added after `.extend(mcp())` are tools too. `mcp.id` is the Extension identity.
 
 <auto-type-table path="../../../../../packages/mcp/src/extension.ts" name="McpExtensionOptions" />
 
@@ -59,10 +59,21 @@ A command becomes a tool when it:
 
 - has a Command Action (so the root is a tool only when it has one)
 - is visible: not `hidden`, nor under a hidden command
-- is not the `mcp` command, an `exclude` path, or under one
+- does not set `mcp: false`, nor sits under a command that does (the `mcp` command sets it)
 - is the application's own command, not one an Extension contributed (such as `completion`, `schema`, `skills install`, or [`@crustjs/openapi`](/docs/modules/openapi)'s `api` and `api preview`; its [generated commands](/docs/modules/openapi#generated-commands) are the application's), unless an `include` path selects it or a command it is under
 
-Every `exclude` and `include` path must be a canonical command path; hidden commands and paths under another excluded command count. A misspelled path or an alias throws, listing each unknown path, instead of leaving the command exposed or hidden. `exclude` wins over `include`, and `mcp` is never a tool.
+Every `include` path must be a canonical command path; hidden commands count. A misspelled path or an alias throws, listing each unknown path. `mcp: false` wins over `include`, so `mcp` is never a tool.
+
+### The `mcp` key
+
+`mcp()` owns an `mcp` key on command metadata, for `defineCommand()` and inline `.command()` alike:
+
+<include lang="ts">../../../examples/modules/mcp.ts#key</include>
+
+- `mcp: false` keeps the command, and everything under it, out of the tools. Use it for commands an agent should not run unattended, or that need a person, such as a browser sign-in.
+- An object holds the tool's [annotations](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations), under the specification's names: `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. They are passed to the client as they are, as hints; a client must not rely on them for safety.
+- The key is in the types once any file of the project imports `@crustjs/mcp`. A command that sets it in an application that does not install `mcp()` fails with a `DEFINITION` error (`unowned-key`) from source and in `crust build`, also when the application is served with `createMcpServer()`: install `mcp()` there too.
+- The root command takes no `mcp` key.
 
 The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. Building the tool list throws, naming the paths, when:
 
@@ -80,21 +91,21 @@ Each tool's `inputSchema` comes from [`commandInputSchema()`](/docs/modules/core
 
 By default `tools/list` returns every tool with its schemas. A CLI with hundreds of commands, such as one generated from an OpenAPI spec, fills the client's context with them before the first call. With `discovery: "progressive"`, `tools/list` returns three fixed tools over the same tool list instead:
 
-| Tool               | Arguments                                             | Result                                                                                                                                                      |
-| ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_tools`     | `query` (a task in words), `limit?` (1–20, default 5) | `{ "result": [{ name, description? }] }`: the tools that best match `query`, best first, without their schemas                                              |
-| `get_tool_details` | `name`                                                | The tool as direct `tools/list` would list it: `name`, `description` when it has one, `inputSchema`, and the `outputSchema` that listing advertises, if any |
-| `call_tool`        | `name`, `arguments?` (default `{}`)                   | The tool's own result, exactly as `tools/call` would return it, with [progress](#progress) for the request's token                                          |
+| Tool               | Arguments                                             | Result                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_tools`     | `query` (a task in words), `limit?` (1–20, default 5) | `{ "result": [{ name, description? }] }`: the tools that best match `query`, best first, without their schemas                                                                |
+| `get_tool_details` | `name`                                                | The tool as direct `tools/list` would list it: `name`, `description` when it has one, `inputSchema`, and the `outputSchema` and `annotations` that listing advertises, if any |
+| `call_tool`        | `name`, `arguments?` (default `{}`)                   | The tool's own result, exactly as `tools/call` would return it, with [progress](#progress) for the request's token                                                            |
 
 <include lang="ts">../../../examples/modules/mcp.ts#discovery</include>
 
-The three tools are the same for the server's whole life; the protocol does not let a server add tools as a side effect of other requests. `exclude`, `include`, and the rules above still decide which tools exist, so `search_tools` never finds a hidden, excluded, or unincluded Extension command, and `call_tool` and `get_tool_details` answer such names with `InvalidParams`, as `tools/call` does. A missing `query` or `name`, a `limit` out of range, or `arguments` that are not an object are `InvalidParams` too. The three tools advertise no `outputSchema`.
+The three tools are the same for the server's whole life; the protocol does not let a server add tools as a side effect of other requests. `mcp: false`, `include`, and the rules above still decide which tools exist, so `search_tools` never finds a hidden, `mcp: false`, or unincluded Extension command, and `call_tool` and `get_tool_details` answer such names with `InvalidParams`, as `tools/call` does. A missing `query` or `name`, a `limit` out of range, or `arguments` that are not an object are `InvalidParams` too. The three tools advertise no `outputSchema`.
 
 `search_tools` matches the words of `query` against each tool's command path, name, and aliases, its description, and its argument and flag names and descriptions, with descending base weights in that order, all else equal. A word counts more the fewer tools it matches, so `for` or `a` in a long generated name weighs little next to a rare word such as `purge`, and a match counts more in a short name or description than in a long one.
 
 ## Results
 
-The outcome of `app.run()` decides the tool result:
+The outcome of the run decides the tool result:
 
 - A `completed` result that is plain JSON (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block with the same JSON. An object property holding `undefined` is left out, as `JSON.stringify` does. Arrays and primitives are wrapped as `{ "result": value }` under every protocol revision: 2026-07-28 allows any JSON value, but earlier revisions require an object.
 - Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles) and every `handled` outcome return the captured stdout as text. The result is copied once before serialization, so getters run once and `toJSON` is not called.
@@ -102,7 +113,7 @@ The outcome of `app.run()` decides the tool result:
 
 Whatever the outcome, non-empty captured stderr follows as one more text block, so warnings and [`nextSteps()`](/docs/modules/extensions/next-steps)' `Next steps:` block (recovery steps included on failure) reach the client. It changes neither `structuredContent` nor `isError`.
 
-Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and excluded commands present.
+Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and `mcp: false` commands present.
 
 ### Output schema
 
@@ -131,10 +142,10 @@ Without a token, no notifications are sent. Either way, the tool result is the a
 
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
-`serveStdio(app, options?)` serves the application over the stdio transport and resolves when the client disconnects; it is what `<cli> mcp` runs. `createMcpServer(app, options?)` returns the SDK's low-level `Server` with the same `tools/list` and `tools/call` handlers, to connect to a transport yourself, as in a test; connected that way it speaks 2025-11-25 and earlier only. Both take `exclude`, `include`, and `discovery`, and reject when the tool list cannot be built.
+For serving outside a CLI, `serveStdio(app, options?)` serves the application over the stdio transport and resolves when the client disconnects, as `<cli> mcp` does. `createMcpServer(app, options?)` returns the SDK's low-level `Server` with the same `tools/list` and `tools/call` handlers, to connect to a transport yourself, as in a test; connected that way it speaks 2025-11-25 and earlier only. Both take `include` and `discovery`, and reject when the tool list cannot be built.
 
 - The server is named after the root command, with its `version` or `DEFAULT_SERVER_VERSION` (`0.0.0`).
-- Each command invocation runs `app.run(path, input, { signal })` with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token.
+- Each tool call runs `app.run(path, input, { signal })` (under `<cli> mcp`, the action's `runCommand` with the same arguments) with its own captured output, plus an `onEvent` that sends [progress](#progress) when the request carries a progress token.
 - Client cancellation aborts only that call; disconnecting aborts all of them. Actions must honor `signal` to stop.
 - `toolResultFromOutcome(outcome)` is the outcome-to-result conversion described in [Results](#results), without the `outputSchema` check.
 
@@ -154,7 +165,7 @@ Protocol frames also arrive on stdin. While the transport reads it, a `-` value 
 
 <include lang="ts">../../../examples/modules/mcp.ts#manifest</include>
 
-The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()`, which marks Extension commands and flags, so `include` can name Extension commands and tool inputs leave Extension flags out. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` when it applies, and the canonical `path` for `app.run()`.
+The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()`, which marks Extension commands and flags, so `include` can name Extension commands and tool inputs leave Extension flags out. Each entry carries the tool `name`, `description`, `inputSchema`, `outputSchema` and `annotations` when they apply, and the canonical `path` for `app.run()`.
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpTool" />
 
@@ -164,6 +175,6 @@ These build the [`mcp config`](#client-configuration) output yourself:
 
 - `currentLaunch()` returns the launch for the running process; `resolveLaunch(execPath, entry, compiled, execArgv?)` computes one from explicit values.
 - `renderClientConfig(client, name, launch)` and `renderClaudeAddCommand(name, launch)` render the snippet and the one-liner.
-- `MCP_CLIENTS` lists the supported `--client` values, and `MCP` is the Extension identity, the same as `mcpExtension.id`.
+- `MCP_CLIENTS` lists the supported `--client` values, and `MCP` is the Extension identity, the same as `mcp.id`.
 
 The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/mcp/src/index.ts) is the complete export list, including the `McpClient`, `McpLaunch`, and schema types.

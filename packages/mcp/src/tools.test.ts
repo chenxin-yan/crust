@@ -1,9 +1,9 @@
 import { completion } from "@crustjs/completion";
-import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { confirmation, help, json, jsonInput, schema } from "@crustjs/extensions";
 import { describe, expect, it } from "vite-plus/test";
 
-import { mcpExtension } from "./extension.ts";
+import { mcp } from "./extension.ts";
 import { toolsFromSnapshot } from "./tools.ts";
 
 const noop = () => {};
@@ -23,8 +23,9 @@ function jsonSchemaOutput(jsonSchema: Record<string, unknown>) {
 }
 
 describe("toolsFromSnapshot", () => {
-	it("names tools by canonical path, skipping hidden, actionless, excluded, and mcp commands", async () => {
+	it("names tools by canonical path, skipping hidden, actionless, and mcp: false commands", async () => {
 		const app = new Crust("fixture", { description: "Fixture app" })
+			.extend(mcp())
 			.add(
 				defineCommand("deploy", { description: "Deploy", aliases: ["d"] }, (c) => c.action(noop)),
 			)
@@ -33,7 +34,7 @@ describe("toolsFromSnapshot", () => {
 					c
 						.add(defineCommand("leaf", (sub) => sub.action(noop)))
 						.add(
-							defineCommand("dangerous", (sub) =>
+							defineCommand("dangerous", { mcp: false }, (sub) =>
 								sub.action(noop).add(defineCommand("nested", (n) => n.action(noop))),
 							),
 						),
@@ -43,9 +44,8 @@ describe("toolsFromSnapshot", () => {
 				defineCommand("secret", { hidden: true }, (c) =>
 					c.action(noop).add(defineCommand("child", (sub) => sub.action(noop))),
 				),
-			)
-			.add(defineCommand("mcp", (c) => c.action(noop)));
-		const tools = toolsFromSnapshot(await app.snapshot(), { exclude: [["group", "dangerous"]] });
+			);
+		const tools = toolsFromSnapshot(await app.snapshot());
 		expect(tools.map((tool) => [tool.name, tool.path])).toEqual([
 			["deploy", ["deploy"]],
 			["group_leaf", ["group", "leaf"]],
@@ -63,35 +63,49 @@ describe("toolsFromSnapshot", () => {
 		expect(tool?.description).toBe("Deploy [deprecated: Use ship.]");
 	});
 
-	it("rejects exclude paths that are not canonical command paths, listing each", async () => {
+	it("passes a command's mcp hints through as the tool's annotations", async () => {
 		const app = new Crust("cli")
-			.add(defineCommand("deploy", { aliases: ["d"] }, (c) => c.action(noop)))
+			.extend(mcp())
+			.add(defineCommand("status", { mcp: { readOnlyHint: true } }, (c) => c.action(noop)))
 			.add(
-				defineCommand("group", (c) =>
-					c.add(defineCommand("leaf", (sub) => sub.action(noop))).action(noop),
+				defineCommand(
+					"reset",
+					{ mcp: { title: "Reset", destructiveHint: true, idempotentHint: true } },
+					(c) => c.action(noop),
 				),
 			)
+			.add(defineCommand("plain", (c) => c.action(noop)));
+		const tools = toolsFromSnapshot(await app.snapshot());
+		expect(tools.map((tool) => [tool.name, tool.annotations])).toEqual([
+			["status", { readOnlyHint: true }],
+			["reset", { title: "Reset", destructiveHint: true, idempotentHint: true }],
+			["plain", undefined],
+		]);
+		expect(tools[2]).not.toHaveProperty("annotations");
+	});
+
+	it("rejects include paths that are not canonical command paths, listing each", async () => {
+		const app = new Crust("cli")
+			.add(defineCommand("deploy", { aliases: ["d"] }, (c) => c.action(noop)))
 			.add(defineCommand("secret", { hidden: true }, (c) => c.action(noop)));
 		const snapshot = await app.snapshot();
-		expect(() => toolsFromSnapshot(snapshot, { exclude: [["dpeloy"], ["d"], ["deploy"]] })).toThrow(
-			'Unknown MCP exclude paths "dpeloy", "d"; exclude takes canonical command paths',
+		expect(() => toolsFromSnapshot(snapshot, { include: [["dpeloy"], ["d"], ["deploy"]] })).toThrow(
+			'Unknown MCP include paths "dpeloy", "d"; include takes canonical command paths',
 		);
-		// [""] is not the root path [], so it must not exclude the whole tree.
-		expect(() => toolsFromSnapshot(snapshot, { exclude: [[""]] })).toThrow(
-			"Unknown MCP exclude paths",
+		// [""] is not the root path [].
+		expect(() => toolsFromSnapshot(snapshot, { include: [[""]] })).toThrow(
+			"Unknown MCP include paths",
 		);
-		// Paths under an excluded parent or a hidden command are still real commands.
-		expect(
-			toolsFromSnapshot(snapshot, {
-				exclude: [["group"], ["group", "leaf"], ["secret"]],
-			}).map((tool) => tool.name),
-		).toEqual(["deploy"]);
+		// A hidden command is still a real command.
+		expect(toolsFromSnapshot(snapshot, { include: [["secret"]] }).map((tool) => tool.name)).toEqual(
+			["deploy"],
+		);
 	});
 
 	it("serves Extension commands only when included, and never Extension flags", async () => {
-		const app: AnyCrust = new Crust("cli", { description: "CLI", version: "1.0.0" })
+		const app = new Crust("cli", { description: "CLI", version: "1.0.0" })
 			.extend(help(), jsonInput(), json(), completion(), schema())
-			.extend(mcpExtension({ app: () => app }))
+			.extend(mcp())
 			.add(defineCommand("work", (c) => c.flags({ fast: { type: "boolean" } }).action(noop)));
 		const snapshot = await app.snapshot();
 		const tools = toolsFromSnapshot(snapshot);
@@ -124,7 +138,15 @@ describe("toolsFromSnapshot", () => {
 		expect(() => toolsFromSnapshot(collidingSnapshot)).toThrow(
 			'Commands "a_b" and "a b" both become MCP tool "a_b"',
 		);
-		expect(toolsFromSnapshot(collidingSnapshot, { exclude: [["a"]] })).toHaveLength(1);
+		const kept = new Crust("cli")
+			.extend(mcp())
+			.add(defineCommand("a_b", (c) => c.action(noop)))
+			.add(
+				defineCommand("a", { mcp: false }, (c) =>
+					c.add(defineCommand("b", (sub) => sub.action(noop))),
+				),
+			);
+		expect(toolsFromSnapshot(await kept.snapshot())).toHaveLength(1);
 
 		const rootClash = new Crust("cli")
 			.action(noop)

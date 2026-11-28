@@ -1,6 +1,6 @@
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { skill } from "./extension.ts";
+import { skills } from "./extension.ts";
 
 function host() {
 	const deploy = defineCommand("deploy", (command) =>
@@ -12,7 +12,7 @@ function host() {
 // Compile-time regression checks; intentionally never invoked.
 // the default `skills` command keeps the host's command tree closed
 function _typecheckDefaultNameKeepsHostTreeClosed() {
-	const app = host().extend(skill({}));
+	const app = host().extend(skills({}));
 
 	void app.run(["deploy"], { flags: { force: true } });
 	void app.run(["skills"], { flags: { scope: "project", all: true } });
@@ -34,7 +34,7 @@ function _typecheckDefaultNameKeepsHostTreeClosed() {
 
 // a literal `command` option renames the contributed command without opening the tree
 function _typecheckLiteralNameKeepsHostTreeClosed() {
-	const app = host().extend(skill({ command: "agents" }));
+	const app = host().extend(skills({ command: "agents" }));
 
 	void app.run(["agents", "install"], { flags: { all: true } });
 	// @ts-expect-error -- the `skill` alias belongs to the default name only
@@ -47,7 +47,7 @@ function _typecheckLiteralNameKeepsHostTreeClosed() {
 
 // a dynamic `command` name cannot be known statically, so the tree stays open
 function _typecheckDynamicNameOpensTree(command: string) {
-	const app = host().extend(skill({ command }));
+	const app = host().extend(skills({ command }));
 
 	void app.run([command]);
 	void app.run(["deploy"], { flags: { force: true } });
@@ -55,10 +55,10 @@ function _typecheckDynamicNameOpensTree(command: string) {
 
 // the name stays `skills` unless a `command` is guaranteed present
 function _typecheckOmittedNameKeepsDefault(options: { command?: "agents" }) {
-	const app = host().extend(skill({ command: undefined }));
+	const app = host().extend(skills({ command: undefined }));
 	void app.run(["skill", "repair"]);
 	// @ts-expect-error -- an explicit name argument cannot rename the runtime default
-	skill<"agents">({});
+	skills<"agents">({});
 	// An optional literal may be absent at runtime, so the tree stays open.
-	void host().extend(skill(options)).run(["skills"]);
+	void host().extend(skills(options)).run(["skills"]);
 }

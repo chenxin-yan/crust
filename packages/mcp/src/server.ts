@@ -1,4 +1,10 @@
-import { type AnyCrust, type CommandSnapshot, CrustError, type RunOutcome } from "@crustjs/core";
+import {
+	type AnyCrust,
+	type CommandSnapshot,
+	type CrustCommandContext,
+	CrustError,
+	type RunOutcome,
+} from "@crustjs/core";
 import { parseCommandInput, type RunInputPayload } from "@crustjs/core/tooling";
 import { isJsonObject, parseJsonValue } from "@crustjs/utils/json";
 import type { SearchIndex } from "@crustjs/utils/search";
@@ -77,6 +83,15 @@ function resultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 /** A manifest entry with the snapshot of its command. */
 type ToolEntry = readonly [McpTool, CommandSnapshot];
 
+/** Runs a command of the served application: an action's `runCommand`, or `app.run()`. */
+type RunCommand = CrustCommandContext["runCommand"];
+
+/** `app.run()` as a {@link RunCommand}. */
+function runOf(app: AnyCrust): RunCommand {
+	// SAFETY: paths come from this app's own snapshot and run() validates `input`; AnyCrust erases the typed link.
+	return (path, input, options) => app.run(path as never, input as never, options);
+}
+
 /** What `tools/list` and `get_tool_details` say about a tool: everything but the fields run() routing uses. */
 function listedTool({
 	path: _path,
@@ -90,7 +105,7 @@ function listedTool({
 
 /** Run one command tool for `tools/call`, or `call_tool` in progressive discovery. */
 async function callCommandTool(
-	app: AnyCrust,
+	run: RunCommand,
 	[tool, command]: ToolEntry,
 	values: Readonly<Record<string, unknown>>,
 	ctx: ServerContext,
@@ -118,13 +133,8 @@ async function callCommandTool(
 						// A lost progress notification must not fail the tool call.
 					});
 				};
-	// SAFETY: `path` comes from this app's own snapshot and run() validates `input`; AnyCrust erases the typed link.
 	const result = toolResultFromOutcome(
-		await app.run(
-			tool.path as never,
-			input as never,
-			onEvent === undefined ? { signal } : { signal, onEvent },
-		),
+		await run(tool.path, input, onEvent === undefined ? { signal } : { signal, onEvent }),
 	);
 	// MCP requires structuredContent from a tool with an outputSchema unless isError is set.
 	if (tool.outputSchema === undefined || result.structuredContent || result.isError) {
@@ -202,8 +212,11 @@ export interface McpServerOptions extends McpToolsOptions {
 }
 
 /** Prepares the tools once; each call of the result builds a new server for them. */
-async function serverFactory(app: AnyCrust, options: McpServerOptions): Promise<() => Server> {
-	const snapshot = await app.snapshot();
+async function serverFactory(
+	snapshot: CommandSnapshot,
+	run: RunCommand,
+	options: McpServerOptions,
+): Promise<() => Server> {
 	const tools = toolsFromSnapshot(snapshot, options);
 	const commandAt = (path: readonly string[]) =>
 		path.reduce<CommandSnapshot>((command, name) => command.subCommands[name]!, snapshot);
@@ -233,7 +246,7 @@ async function serverFactory(app: AnyCrust, options: McpServerOptions): Promise<
 		}));
 		server.setRequestHandler("tools/call", async ({ params }, ctx) => {
 			const values = params.arguments ?? {};
-			if (catalogue === undefined) return callCommandTool(app, toolNamed(params.name), values, ctx);
+			if (catalogue === undefined) return callCommandTool(run, toolNamed(params.name), values, ctx);
 			switch (params.name) {
 				case "search_tools": {
 					const { query, limit = SEARCH_LIMIT_DEFAULT } = values;
@@ -269,7 +282,7 @@ async function serverFactory(app: AnyCrust, options: McpServerOptions): Promise<
 					if (typeof values.name !== "string") throw invalid("call_tool: name must be a string");
 					const input = values.arguments === undefined ? {} : values.arguments;
 					if (!isRecord(input)) throw invalid("call_tool: arguments must be an object");
-					return callCommandTool(app, toolNamed(values.name), input, ctx);
+					return callCommandTool(run, toolNamed(values.name), input, ctx);
 				}
 				default:
 					throw invalid(`Tool ${params.name} not found`);
@@ -304,7 +317,7 @@ export async function createMcpServer(
 	app: AnyCrust,
 	options: McpServerOptions = {},
 ): Promise<Server> {
-	return (await serverFactory(app, options))();
+	return (await serverFactory(await app.snapshot(), runOf(app), options))();
 }
 
 /**
@@ -317,7 +330,16 @@ export async function createMcpServer(
  * @throws before serving, when the snapshot cannot be prepared or the tool manifest is invalid
  */
 export async function serveStdio(app: AnyCrust, options: McpServerOptions = {}): Promise<void> {
-	const createServer = await serverFactory(app, options);
+	await serveFromSnapshot(await app.snapshot(), runOf(app), options);
+}
+
+/** {@link serveStdio} for the tree `snapshot` describes, running each call through `run`: what `mcp` runs. */
+export async function serveFromSnapshot(
+	snapshot: CommandSnapshot,
+	run: RunCommand,
+	options: McpServerOptions,
+): Promise<void> {
+	const createServer = await serverFactory(snapshot, run, options);
 	const { StdioServerTransport, serveStdio: serve } =
 		await import("@modelcontextprotocol/server/stdio");
 	const transport = new StdioServerTransport();

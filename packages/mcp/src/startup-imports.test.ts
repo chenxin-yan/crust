@@ -4,7 +4,7 @@ import { expect, it, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({ allowSdk: false, rankingLoaded: false }));
 
-// The SDK takes ~100 ms to load; a CLI using mcpExtension() should pay that only when `mcp` runs.
+// The SDK takes ~100 ms to load; a CLI using mcp() should pay that only when `mcp` runs.
 vi.mock("@modelcontextprotocol/server", async (importOriginal) => {
 	if (!state.allowSdk) throw new Error("the MCP SDK was loaded on import");
 	return importOriginal();

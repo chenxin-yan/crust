@@ -67,8 +67,10 @@ async function roundTrip(launch: McpLaunch, protocolVersion: typeof LEGACY | typ
 		expect(client.getNegotiatedProtocolVersion()).toBe(protocolVersion);
 		expect(client.getServerVersion()).toMatchObject({ name: "demo", version: "0.1.0" });
 		const { tools } = await client.listTools();
-		// `mcp` and `mcp config` never become tools, and jsonInput()'s `--input` is no tool input.
+		// Commands added after mcp() are served; `mcp`, `mcp config` and `login` (`mcp: false`)
+		// never become tools, and jsonInput()'s `--input` is no tool input.
 		expect(tools.map((tool) => tool.name)).toEqual(["greet", "whoami", "slurp"]);
+		expect(tools[1]!.annotations).toEqual({ readOnlyHint: true });
 		expect(Object.keys(tools[0]!.inputSchema.properties ?? {})).toEqual(["name", "shout"]);
 		// The env-backed flag is optional: the server's environment supplies it.
 		expect(tools[1]!.inputSchema.required).toBeUndefined();

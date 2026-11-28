@@ -60,7 +60,7 @@ Name the command with `command`; every message spells it as configured:
 
 <include lang="ts">../../../../examples/modules/extensions/telemetry.ts#command</include>
 
-A literal name keeps the command tree type-checked, as with [`skill()`](/docs/modules/skills); a `string` known only at runtime opens it. The command is a name at the root, not a path, and it cannot be left out. If the application has its own command of that name, Core throws a `DEFINITION` error when the command tree is prepared (the first `execute()`, `run()` or `snapshot()`, and `crust build`); pick another `command`. Like every Extension command, it is not an [MCP](/docs/modules/mcp) tool unless the application includes it.
+A literal name keeps the command tree type-checked, as with [`skills()`](/docs/modules/skills); a `string` known only at runtime opens it. The command is a name at the root, not a path, and it cannot be left out. If the application has its own command of that name, Core throws a `DEFINITION` error when the command tree is prepared (the first `execute()`, `run()` or `snapshot()`, and `crust build`); pick another `command`. Like every Extension command, it is not an [MCP](/docs/modules/mcp) tool unless the application includes it.
 
 ## When it sends
 

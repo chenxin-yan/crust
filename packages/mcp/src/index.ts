@@ -3,7 +3,7 @@ export {
 	MCP,
 	MCP_CLIENTS,
 	currentLaunch,
-	mcpExtension,
+	mcp,
 	renderClaudeAddCommand,
 	renderClientConfig,
 	resolveLaunch,
@@ -18,6 +18,7 @@ export {
 export type {
 	McpPropertySchema,
 	McpTool,
+	McpToolAnnotations,
 	McpToolInputSchema,
 	McpToolOutputSchema,
 	McpToolsOptions,

@@ -264,7 +264,7 @@ Each `bin` key is an installed command name and each value is the TypeScript ent
 └── completions/
 ```
 
-Registered Extensions such as [`man()`](/docs/modules/man), [`skill()`](/docs/modules/skills), and [`completion()`](/docs/modules/completion) contribute build hooks. `crust build` runs those hooks while preparing each entry, writes the files they return, and copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`artifactPath(name)`](/docs/api/crust#artifactpathpath).
+Registered Extensions such as [`man()`](/docs/modules/man), [`skills()`](/docs/modules/skills), and [`completion()`](/docs/modules/completion) contribute build hooks. `crust build` runs those hooks while preparing each entry, writes the files they return, and copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`artifactPath(name)`](/docs/api/crust#artifactpathpath).
 
 - Each hook's returned paths are recorded per `bin` entry under `build` in `.crust/manifest.json`. Loose top-level files are recorded but not copied into packages.
 - With several `bin` entries, same-named directories merge, so `man/greet.1` and `man/admin.1` coexist, and a file two entries write at the same path with the same bytes is kept once, so bins can share data such as one API's. A path two entries both write with different bytes fails the build naming both commands; collisions are compared case-insensitively.

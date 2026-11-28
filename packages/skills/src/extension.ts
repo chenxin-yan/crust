@@ -319,7 +319,7 @@ type SkillCommands<Command extends string> = string extends Command
 	: readonly [SkillCommandDefinition<Command>];
 
 /**
- * {@link skill}'s signature: a `command` that is always present flows into the host's
+ * The `skills()` factory's signature: a `command` that is always present flows into the host's
  * command tree, an absent one is `skills`, and a possibly absent one stays open.
  */
 export interface SkillExtension {
@@ -371,7 +371,9 @@ const skillFactory: ExtensionFactory<
 
 // SAFETY: the runtime command name is `options.command ?? "skills"`, which each overload's name restates,
 // and only the default name carries the `skill` alias.
-export const skill = skillFactory as SkillExtension;
+const skillsExtension = skillFactory as SkillExtension;
+// Exported under its public name without a module binding, which local `skills` lists would shadow.
+export { skillsExtension as skills };
 
 type SkillStatusEntry = SkillStatusResult["agents"][number];
 type SkillStatusMap = ReadonlyMap<AgentTarget, SkillStatusEntry>;

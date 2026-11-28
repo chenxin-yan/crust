@@ -3,7 +3,6 @@ import {
 	type CommandSnapshot,
 	formatDescription,
 	sectionsFor,
-	visibleSectionsFor,
 	type CommandDocumentation,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
@@ -79,6 +78,13 @@ export interface RenderManPageMdocOptions {
 	/** Prepared, validated Command Snapshot for the CLI. */
 	root: CommandSnapshot;
 	/**
+	 * Canonical command names below the root, naming the command whose page to render
+	 * (`["remote", "add"]`). Hidden commands have no page.
+	 *
+	 * @default [] (the root's page)
+	 */
+	path?: readonly string[];
+	/**
 	 * Manual section.
 	 *
 	 * @default 1
@@ -88,12 +94,38 @@ export interface RenderManPageMdocOptions {
 	date?: string;
 }
 
-/** Render an mdoc(7) manual page for the root command. */
+/** A command's manual page name: its full path joined with `-`, as `git-commit` for `git commit`. */
+export function manPageName(command: CommandDocumentation): string {
+	return command.path.join("-");
+}
+
+/** Render the mdoc(7) manual page of one command: the root's, or the one at `path`. */
 export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
-	const { root, section = 1, date } = options;
-	const { name } = root.meta;
-	const model = buildCommandDocumentation(root);
-	const description = model.description?.trim() || "No description provided.";
+	const { root, path = [], section = 1, date } = options;
+	let command = buildCommandDocumentation(root);
+	let parent: CommandDocumentation | undefined;
+	for (const name of path) {
+		const child = command.children.find((candidate) => candidate.name === name);
+		if (!child) {
+			throw new Error(
+				`No manual page for "${[...command.path, name].join(" ")}": no visible command has that path`,
+			);
+		}
+		parent = command;
+		command = child;
+	}
+	return renderCommandPage(command, parent, section, date);
+}
+
+/** Render the page of a documented command; `parent` is undefined for the root. */
+export function renderCommandPage(
+	command: CommandDocumentation,
+	parent: CommandDocumentation | undefined,
+	section: number,
+	date?: string,
+): string {
+	const name = manPageName(command);
+	const description = command.description?.trim() || "No description provided.";
 	const lines = [
 		`.Dd ${resolveDdLine(date)}`,
 		`.Dt ${dtTitle(name)} ${section}`,
@@ -103,17 +135,25 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		`.Nd ${ndArgument(description)}`,
 		".Sh SYNOPSIS",
 		".Bd -literal",
-		...bodyLines(model.usage),
+		...bodyLines(command.usage),
 		".Ed",
 		".Sh DESCRIPTION",
-		...bodyLines(description),
+		...bodyLines(
+			formatDescription(
+				description,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				command.deprecated,
+			),
+		),
 	];
 
-	// A man page intentionally summarizes only the root's immediate children;
-	// the shared model still resolves the complete visible tree for other adapters.
-	if (model.children.length > 0) {
+	// Each child has its own page; this one lists only the immediate children.
+	if (command.children.length > 0) {
 		lines.push(".Sh SUBCOMMANDS");
-		const groups = byHeading(model.children);
+		const groups = byHeading(command.children);
 		for (const [heading, children] of groups) {
 			if (heading !== undefined || groups.size > 1)
 				lines.push(`.Ss ${macroArgument(heading ?? "Additional commands")}`);
@@ -135,10 +175,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			lines.push(".El");
 		}
 	}
-	if (model.flags.length > 0) {
+	if (command.flags.length > 0) {
 		lines.push(".Sh OPTIONS");
 		// Ungrouped flags, own and inherited, open the section without a heading.
-		const flagGroups = new Map([[undefined, []], ...byHeading(model.flags)]);
+		const flagGroups = new Map([[undefined, []], ...byHeading(command.flags)]);
 		for (const [heading, flags] of flagGroups) {
 			if (flags.length === 0) continue;
 			if (heading !== undefined) lines.push(`.Ss ${macroArgument(heading)}`);
@@ -158,9 +198,9 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 			lines.push(".El");
 		}
 	}
-	if (model.args.length > 0) {
+	if (command.args.length > 0) {
 		lines.push(".Sh ARGUMENTS", ".Bl -tag -width 12n");
-		for (const arg of model.args) {
+		for (const arg of command.args) {
 			const separator = arg.variadic === "afterDoubleDash" ? "Fl \\- " : "";
 			lines.push(`.It ${separator}Ar ${arg.name}${arg.variadic ? " ..." : ""}`);
 			const body = formatDescription(arg.description, arg.default, arg.choices);
@@ -168,30 +208,27 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		}
 		lines.push(".El");
 	}
-	if (model.examples.length > 0) {
+	if (command.examples.length > 0) {
 		lines.push(
 			".Sh EXAMPLES",
 			".Bd -literal -offset indent",
-			...model.examples.flatMap(bodyLines),
+			...command.examples.flatMap(bodyLines),
 			".Ed",
 		);
 	}
-	for (const metadataSection of sectionsFor(model.sections, MAN)) {
+	for (const metadataSection of sectionsFor(command.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		lines.push(...bodyLines(metadataSection.body));
 	}
-	const commandSections = visibleSectionsFor(root, MAN).filter(({ path }) => path.length > 0);
-	if (commandSections.length > 0) {
-		lines.push(".Sh COMMANDS");
-		for (const group of commandSections) {
-			lines.push(`.Ss ${macroArgument(group.path.join(" "))}`);
-			group.sections.forEach((commandSection, index) => {
-				// mandoc -Tlint warns on .Pp directly after .Ss; only separate consecutive sections.
-				if (index > 0) lines.push(".Pp");
-				lines.push(`.Sy ${shTitle(commandSection.title)}`);
-				lines.push(...bodyLines(commandSection.body));
-			});
-		}
+	const related = [...(parent ? [parent] : []), ...[...command.children].sort(byName)];
+	if (related.length > 0) {
+		lines.push(
+			".Sh SEE ALSO",
+			...related.map(
+				(page, index) =>
+					`.Xr ${manPageName(page)} ${section}${index < related.length - 1 ? " ," : ""}`,
+			),
+		);
 	}
 	lines.push("");
 	return lines.join("\n");

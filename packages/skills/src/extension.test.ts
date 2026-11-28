@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { stubAgentOverridesUnset, withCwd } from "../tests/fixtures.ts";
-import { skill } from "./extension.ts";
+import { skills } from "./extension.ts";
 import { installSkill } from "./install.ts";
 
 let tempRoot: string;
@@ -91,7 +91,7 @@ async function asInstalled<T>(run: () => Promise<T>): Promise<T> {
 
 function createApp(autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
-		.extend(skill({ defaultScope: "project", autoUpdate }))
+		.extend(skills({ defaultScope: "project", autoUpdate }))
 		.action(() => {});
 }
 
@@ -127,7 +127,7 @@ function executeWithPrompts(argv: string[]) {
 	return { harness, run };
 }
 
-describe("skill extension packaged directory", () => {
+describe("skills extension packaged directory", () => {
 	it("registers skills as the canonical command with skill as an alias", async () => {
 		const snapshot = await createApp().snapshot();
 
@@ -140,7 +140,7 @@ describe("skill extension packaged directory", () => {
 	it.each(["agents", "skill"])(
 		"preserves the custom command name %s without aliases",
 		async (command) => {
-			const snapshot = await new Crust("demo").extend(skill({ command })).snapshot();
+			const snapshot = await new Crust("demo").extend(skills({ command })).snapshot();
 
 			expect(Object.keys(snapshot.subCommands)).toEqual([command]);
 			expect(snapshot.subCommands[command]?.meta.aliases ?? []).toEqual([]);
@@ -164,7 +164,7 @@ describe("skill extension packaged directory", () => {
 
 	it("keeps help usable when the packaged skills directory has not been built", async () => {
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ command: "agents" }))
+			.extend(skills({ command: "agents" }))
 			.action(() => {});
 		const output = await renderHelp(await app.snapshot());
 
@@ -187,7 +187,7 @@ describe("skill extension packaged directory", () => {
 		const authored = join(tempRoot, "authored", "guide");
 		await mkdir(authored, { recursive: true });
 		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
-		const extension = skill({ generated: false, extras: [authored] });
+		const extension = skills({ generated: false, extras: [authored] });
 		const app = new Crust("demo", { description: "Demo" }).extend(extension);
 
 		const artifacts = await buildArtifacts(app);
@@ -204,7 +204,7 @@ describe("skill extension packaged directory", () => {
 			"---\nname: guide\ndescription: Deployment guide\n---\n",
 		);
 		await writeFile(join(authored, "content.md"), "authored\n");
-		const extension = skill({ extras: [authored] });
+		const extension = skills({ extras: [authored] });
 		const app = new Crust("demo", {
 			description: "Demo",
 			version: "9.9.9",
@@ -232,7 +232,7 @@ describe("skill extension packaged directory", () => {
 			join(authored, "SKILL.md"),
 			"---\nname: gyst\ndescription: Authored co-review workflow\n---\n",
 		);
-		const extension = skill({
+		const extension = skills({
 			extras: [authored],
 			name: "gyst-reference",
 			description: "Generated command reference",
@@ -371,7 +371,7 @@ describe("skill extension packaged directory", () => {
 			`import { readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Crust } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
-import { skill } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
+import { skills } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
 
 // An installed CLI: a Node single executable application beside the staged skills.
 const getBuiltinModule = process.getBuiltinModule;
@@ -383,7 +383,7 @@ Object.defineProperty(process, "execPath", {
 
 const repairErrors: string[] = [];
 await new Crust("demo")
-  .extend(skill({}))
+  .extend(skills({}))
   .action(() => {})
   .execute({
     argv: [],
@@ -392,7 +392,7 @@ await new Crust("demo")
 
 const installErrors: string[] = [];
 await new Crust("demo")
-  .extend(skill({ autoUpdate: false }))
+  .extend(skills({ autoUpdate: false }))
   .action(() => {})
   .execute({
     argv: ["skill", "--all", "--scope", "project"],

@@ -17,6 +17,7 @@ import { json, nextSteps } from "@crustjs/extensions";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { mcp } from "./extension.ts";
 import {
 	createMcpServer,
 	type McpServerOptions,
@@ -97,10 +98,17 @@ const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" 
 
 describe("createMcpServer", () => {
 	it("advertises the root identity and the filtered tool manifest", async () => {
-		const client = await connect(fixture, { exclude: [["date"]] });
+		const client = await connect(fixture);
 		expect(client.getServerVersion()).toMatchObject({ name: "fixture", version: "1.2.3" });
 		const { tools } = await client.listTools();
-		expect(tools.map((tool) => tool.name)).toEqual(["echo", "print", "scalar", "fail", "slow"]);
+		expect(tools.map((tool) => tool.name)).toEqual([
+			"echo",
+			"print",
+			"date",
+			"scalar",
+			"fail",
+			"slow",
+		]);
 		expect(tools[0]).toMatchObject({
 			description: "Echo input",
 			inputSchema: {
@@ -115,6 +123,23 @@ describe("createMcpServer", () => {
 		expect((await included.callTool({ name: "extra" })).structuredContent).toEqual({
 			from: "extension",
 		});
+	});
+
+	it("lists a command's mcp hints as its annotations and leaves mcp: false commands out", async () => {
+		const app = new Crust("cli")
+			.extend(mcp())
+			.add(
+				defineCommand("status", { mcp: { readOnlyHint: true, openWorldHint: false } }, (c) =>
+					c.action(() => "ok"),
+				),
+			)
+			.add(defineCommand("login", { mcp: false }, (c) => c.action(() => "signed in")));
+		const client = await connect(app);
+		const { tools } = await client.listTools();
+		expect(tools.map((tool) => [tool.name, tool.annotations])).toEqual([
+			["status", { readOnlyHint: true, openWorldHint: false }],
+		]);
+		await expect(client.callTool({ name: "login" })).rejects.toThrow("Tool login not found");
 	});
 
 	it("runs typed input, converting url fields", async () => {
@@ -690,8 +715,8 @@ describe('discovery: "progressive"', () => {
 
 describe("serveStdio", () => {
 	it("rejects before serving when the tool manifest is invalid", async () => {
-		await expect(serveStdio(fixture, { exclude: [["nope"]] })).rejects.toThrow(
-			'Unknown MCP exclude paths "nope"',
+		await expect(serveStdio(fixture, { include: [["nope"]] })).rejects.toThrow(
+			'Unknown MCP include paths "nope"',
 		);
 	});
 });

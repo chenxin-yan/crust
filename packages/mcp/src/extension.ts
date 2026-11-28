@@ -1,5 +1,4 @@
 import {
-	type AnyCrust,
 	type CommandDefinition,
 	type CommandShape,
 	defineCommand,
@@ -12,8 +11,18 @@ import { isCompiledExecutable } from "@crustjs/utils/artifacts";
 import { shellQuote } from "@crustjs/utils/process";
 import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
 
-import { type McpServerOptions, serveStdio } from "./server.ts";
-import { MCP_COMMAND_NAME } from "./tools.ts";
+import { type McpServerOptions, serveFromSnapshot } from "./server.ts";
+import { MCP_COMMAND_NAME, type McpToolAnnotations } from "./tools.ts";
+
+declare module "@crustjs/core" {
+	interface CommandExtras {
+		/**
+		 * Read only by `mcp()`: `false` keeps the command and everything under it out of the MCP
+		 * tools; an object's hints become the tool's `annotations`.
+		 */
+		mcp?: false | McpToolAnnotations;
+	}
+}
 
 export const MCP: ExtensionId = defineExtensionId("crust:mcp");
 
@@ -21,13 +30,6 @@ export const MCP_CLIENTS = ["claude", "cursor", "vscode"] as const;
 export type McpClient = (typeof MCP_CLIENTS)[number];
 
 export interface McpExtensionOptions extends McpServerOptions {
-	/**
-	 * Returns the completed application to serve. Called when `mcp` runs, not
-	 * when the Extension is installed, so it may return the variable the
-	 * `.extend()` result is being assigned to: `mcpExtension({ app: (): AnyCrust => app })`.
-	 * The return annotation keeps TypeScript from seeing a self-referential initializer.
-	 */
-	readonly app: () => AnyCrust;
 	/** Explicit client launch, including `mcp`; use for custom runtime setup. */
 	readonly launch?: McpLaunch;
 }
@@ -115,52 +117,55 @@ export type McpCommandDefinition = CommandDefinition<
 
 /**
  * Adds `mcp`, which serves the application's commands as MCP tools over stdio,
- * and `mcp config`, which prints a client configuration snippet.
+ * and `mcp config`, which prints a client configuration snippet. Owns the `mcp`
+ * key on command metadata.
  */
-export const mcpExtension: ExtensionFactory<
-	[options: McpExtensionOptions],
+export const mcp: ExtensionFactory<
+	[options?: McpExtensionOptions],
 	{},
 	[],
 	{},
 	readonly [McpCommandDefinition]
-> = defineExtension(MCP).factory((extension, options) =>
-	extension.add(
-		defineCommand(
-			MCP_COMMAND_NAME,
-			{ description: "Serve this CLI's commands as MCP tools over stdio" },
-			(command) =>
-				command
-					.add(
-						defineCommand(
-							"config",
-							{ description: "Print the MCP client configuration for this CLI" },
-							(sub) =>
-								sub
-									.flags({
-										client: {
-											type: "string",
-											choices: MCP_CLIENTS,
-											default: "claude",
-											description: CLIENT_FLAG_DESCRIPTION,
-										},
-									})
-									.output(textOutput)
-									.action((context) => {
-										const name = context.rootCommand.meta.name;
-										const launch = options.launch ?? currentLaunch();
-										const client = context.flags.client;
-										const config = renderClientConfig(client, name, launch);
-										context.stdout(config);
-										if (client === "claude") {
-											context.stderr(`Or run: ${renderClaudeAddCommand(name, launch)}`);
-										}
-										return config;
-									}),
-						),
-					)
-					.action(async () => {
-						await serveStdio(options.app(), options);
-					}),
+> = defineExtension(MCP)
+	.owns("mcp")
+	.factory((extension, options = {}) =>
+		extension.add(
+			defineCommand(
+				MCP_COMMAND_NAME,
+				{ description: "Serve this CLI's commands as MCP tools over stdio", mcp: false },
+				(command) =>
+					command
+						.add(
+							defineCommand(
+								"config",
+								{ description: "Print the MCP client configuration for this CLI" },
+								(sub) =>
+									sub
+										.flags({
+											client: {
+												type: "string",
+												choices: MCP_CLIENTS,
+												default: "claude",
+												description: CLIENT_FLAG_DESCRIPTION,
+											},
+										})
+										.output(textOutput)
+										.action((context) => {
+											const name = context.rootCommand.meta.name;
+											const launch = options.launch ?? currentLaunch();
+											const client = context.flags.client;
+											const config = renderClientConfig(client, name, launch);
+											context.stdout(config);
+											if (client === "claude") {
+												context.stderr(`Or run: ${renderClaudeAddCommand(name, launch)}`);
+											}
+											return config;
+										}),
+							),
+						)
+						.action(async ({ rootCommand, runCommand }) => {
+							await serveFromSnapshot(rootCommand, runCommand, options);
+						}),
+			),
 		),
-	),
-);
+	);

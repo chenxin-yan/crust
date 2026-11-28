@@ -92,7 +92,7 @@ Every operation becomes a command unless an override [excludes](#overrides) it o
 
 <include lang="ts">../../../examples/modules/openapi.ts#start-empty</include>
 
-An agent that runs commands unattended gets every generated command as an MCP tool, the ones that write and delete too. Narrow them with a rule like the read-only one, or with the MCP server's `exclude`, and let it check a request first with [`api preview`](#preview-a-request): `include: [["api", "preview"]]` offers the preview without `api` itself, which could send the requests your rule left out.
+An agent that runs commands unattended gets every generated command as an MCP tool, the ones that write and delete too. Narrow them with a rule like the read-only one, and let it check a request first with [`api preview`](#preview-a-request): `include: [["api", "preview"]]` offers the preview without `api` itself, which could send the requests your rule left out.
 
 ## The `api` command
 

@@ -1,9 +1,11 @@
-import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { jsonInput } from "@crustjs/extensions";
 
-import { mcpExtension } from "../../src/index.ts";
+import { mcp } from "../../src/index.ts";
 
+// Installed before the commands: `mcp` serves the tree it runs in, not the one it was added to.
 const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
+	.extend(jsonInput(), mcp())
 	.add(
 		defineCommand("greet", { description: "Greet someone" }, (command) =>
 			command
@@ -18,18 +20,21 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 		),
 	)
 	.add(
-		defineCommand("whoami", { description: "Show the configured token" }, (command) =>
-			command
-				.flags({ token: { type: "string", env: "DEMO_TOKEN", required: true } })
-				.action(({ flags }) => ({ token: flags.token })),
+		defineCommand(
+			"whoami",
+			{ description: "Show the configured token", mcp: { readOnlyHint: true } },
+			(command) =>
+				command
+					.flags({ token: { type: "string", env: "DEMO_TOKEN", required: true } })
+					.action(({ flags }) => ({ token: flags.token })),
 		),
 	)
+	.add(defineCommand("login", { mcp: false }, (command) => command.action(() => "signed in")))
 	.add(
 		// Reads stdin like `--body -` would; under `mcp`, stdin carries protocol frames.
 		defineCommand("slurp", { description: "Read stdin" }, (command) =>
 			command.action(async ({ stdin }) => ({ text: await stdin.text() })),
 		),
-	)
-	.extend(jsonInput(), mcpExtension({ app: (): AnyCrust => app }));
+	);
 
 process.exitCode = await app.execute();
