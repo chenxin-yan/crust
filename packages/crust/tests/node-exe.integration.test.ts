@@ -4,9 +4,11 @@
  */
 import { spawnSync } from "node:child_process";
 import {
+	cpSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	realpathSync,
 	renameSync,
@@ -365,8 +367,15 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				// Nothing may resolve from the build machine any more.
 				renameSync(join(project, "node_modules"), join(project, "node_modules.moved"));
 
+				// The platform package ships the executables alone; the launcher's root holds the
+				// artifacts. On its own the binary runs from a release archive: the staged `bin/` folder.
 				const platformDir = join(consumer, "node_modules", "@scope", `node-exe-${alias}`);
-				const greetBinary = join(platformDir, "bin", `greet-${host}${exe}`);
+				expect(readdirSync(join(platformDir, "bin")).sort()).toEqual(
+					[`admin-${host}${exe}`, `greet-${host}${exe}`].sort(),
+				);
+				const archive = join(root, "archive");
+				cpSync(join(stageDir, alias, "bin"), archive, { recursive: true });
+				const greetBinary = join(archive, `greet-${host}${exe}`);
 				const expected = {
 					greeting: "HELLO ADA!",
 					node: `v${nodeVersion}`,
@@ -410,7 +419,7 @@ describe.skipIf(seaNodeDir === null || host === null || npm === null)(
 				const invalid = await runWithoutNode(greetBinary, []);
 				expect(invalid.exitCode).toBe(2);
 				expect(invalid.stderr).toContain('Missing required argument "<name>"');
-				const admin = await runWithoutNode(join(platformDir, "bin", `admin-${host}${exe}`), []);
+				const admin = await runWithoutNode(join(archive, `admin-${host}${exe}`), []);
 				expect(admin.stdout.trim()).toBe("admin ran");
 				expect(admin.exitCode).toBe(3);
 

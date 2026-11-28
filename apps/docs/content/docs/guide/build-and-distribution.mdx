@@ -145,6 +145,7 @@ Users always install the root package. A platform package only holds the binary 
 - It is [named](/docs/modules/crust#staged-packagejson-files) after your package plus the [platform alias](/docs/modules/crust#supported-targets).
 - Its `os`, `cpu`, and `libc` fields make the package manager install only the one that matches, such as `my-cli-linux-x64-musl` on Alpine.
 - It declares no `bin`, so installing one on its own provides no command.
+- It ships the executable alone. The root package holds the [Extension artifacts](/docs/modules/crust#extension-artifacts), such as man pages and skills, and the binary the launcher starts reads them there.
 
 ### Node.js binaries
 

@@ -96,7 +96,7 @@ function launcherRoot(): string | undefined {
  * - Compiled executable (Bun or Node SEA) started by its npm launcher: `<path>` in the
  *   launcher's root package, which {@link LAUNCHER_ENV} names.
  * - Compiled executable started on its own: `<dir of the executable>/<path>`, which is a
- *   platform package's `bin/` or wherever the binary was placed.
+ *   release archive's folder or wherever the binary was placed.
  * - Crust-built Bun/Node bundle: `<path>` next to the bundle's `bin/` directory,
  *   i.e. `.crust/root/<path>` in place and `<installed root>/<path>` after install.
  *   Build-only environment is ignored.

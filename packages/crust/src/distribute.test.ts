@@ -140,6 +140,7 @@ describe("runDistributeBuild", () => {
 				os: string[];
 				cpu: string[];
 				libc?: string[];
+				files: string[];
 				publishConfig?: Record<string, string>;
 			}>(join(plan.stageDir, dir, "package.json"));
 		expect(platformPackage("linux-x64")).toMatchObject({
@@ -149,6 +150,8 @@ describe("runDistributeBuild", () => {
 		});
 		// The root package provides the command: a platform package is not installed on its own.
 		expect(platformPackage("linux-x64")).not.toHaveProperty("bin");
+		// It ships the executable alone, not the artifacts staged beside it for release archives.
+		expect(platformPackage("linux-x64").files).toEqual(["bin/test-cli-bun-linux-x64"]);
 		expect(platformPackage("linux-x64-musl")).toMatchObject({
 			os: ["linux"],
 			cpu: ["x64"],

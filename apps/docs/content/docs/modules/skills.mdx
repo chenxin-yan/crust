@@ -81,7 +81,7 @@ global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
          ~/.claude/skills/my-cli -> /home/me/.agents/skills/my-cli
 ```
 
-Only the shared link in `.agents/skills` points at the packaged skill: the root package's copy, for a runtime package and for a binary its npm launcher started, so the link names no platform. A binary started on its own, from a platform package installed directly or a release archive, links to the copy beside it. An agent with its own skills folder at that scope gets a link to the shared link; an agent that reads `.agents/skills` needs nothing else. This is the layout `npx skills` writes. If the shared link cannot be made (a directory the skill does not own, left in place), no agent link is made for that skill at that scope. Project links are relative and global links are absolute.
+Only the shared link in `.agents/skills` points at the packaged skill: the root package's copy, for a runtime package and for a binary its npm launcher started, so the link names no platform. A binary started on its own, from a release archive, links to the copy beside it. An agent with its own skills folder at that scope gets a link to the shared link; an agent that reads `.agents/skills` needs nothing else. This is the layout `npx skills` writes. If the shared link cannot be made (a directory the skill does not own, left in place), no agent link is made for that skill at that scope. Project links are relative and global links are absolute.
 
 Before each Command Action, an installed CLI checks only the shared link of each scope, unless `autoUpdate: false`. Agent links point at the shared link, which does not move, so they are not inspected:
 

@@ -10,9 +10,18 @@
 // run from an unrelated cwd after its source project is deleted. Missing tools
 // or unbuilt workspace dists fail the tests instead of skipping them.
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
@@ -347,13 +356,19 @@ describe("host artifact acceptance", () => {
 			assets: join(project, ".crust", "root", "assets"),
 		});
 
+		// A release archive is the staged `bin/` folder: the binary with the artifacts beside it.
+		const archive = join(root, "bun-binary", "archive");
+		cpSync(join(project, ".crust", platform!.dir, "bin"), archive, { recursive: true });
 		const consumer = await installStaged("bun-binary", project, manifest);
 		const platformDir = join(consumer, "node_modules", platform!.name);
 		// The platform package provides no command: only the root's launcher is on PATH.
 		expect(readJson<object>(join(platformDir, "package.json"))).not.toHaveProperty("bin");
 		const platformBin = platform!.bins.greet!;
 		expect(platformBin).toBe(`bin/greet-${target}${process.platform === "win32" ? ".exe" : ""}`);
-		const binary = join(platformDir, platformBin);
+		// It ships the executable alone: the root package holds the artifacts the launcher's
+		// binary reads.
+		expect(readdirSync(join(platformDir, "bin"))).toEqual([basename(platformBin)]);
+		const binary = join(archive, basename(platformBin));
 		const launcher = join(
 			consumer,
 			"node_modules",
@@ -366,7 +381,7 @@ describe("host artifact acceptance", () => {
 		// path it records (a skill link) is the same on every platform.
 		expect(await greet(binary, [])).toEqual({
 			...expected,
-			assets: join(platformDir, "bin", "assets"),
+			assets: join(archive, "assets"),
 		});
 		expect(await greet(node, [launcher])).toEqual({
 			...expected,
