@@ -250,7 +250,7 @@ function enqueue<T>(
 export function createStore<const F extends FieldsDef>(
 	options: CreateStoreOptions<F>,
 ): Store<InferStoreConfig<F>> {
-	const { dirPath, name, fields, pruneUnknown, access, strict, lockTimeout } = options;
+	const { dirPath, name, fields, pruneUnknown, access, strict, lockTimeout, format } = options;
 	type Config = InferStoreConfig<F>;
 	const validators = new Map<string, FieldValidator>();
 
@@ -287,7 +287,7 @@ export function createStore<const F extends FieldsDef>(
 	}
 	if (strict === true) checkLockTimeout("lockTimeout", lockTimeout);
 
-	const filePath = resolveStorePath(dirPath, name);
+	const filePath = resolveStorePath(dirPath, name, format?.extension);
 
 	// Permission bits forwarded to every write (default → platform behavior).
 	const writeOptions: WriteJsonOptions =
@@ -427,12 +427,14 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	async function readPersisted(): Promise<StoreDocument | undefined> {
-		const persisted = await readJson(filePath);
+		const persisted = await readJson(filePath, format?.parse);
 		if (persisted === undefined || isJsonObject(persisted)) return persisted;
 		// A syntactically valid non-object root is still corrupt store data; do not silently reset it.
-		throw new CrustStoreError("PARSE", `Expected a JSON object in store file: ${filePath}`, {
-			path: filePath,
-		});
+		throw new CrustStoreError(
+			"PARSE",
+			`Expected ${format === undefined ? "a JSON" : "an"} object in store file: ${filePath}`,
+			{ path: filePath },
+		);
 	}
 
 	/** The declared fields of a persisted object, with defaults and core coercion applied. */
@@ -502,7 +504,13 @@ export function createStore<const F extends FieldsDef>(
 		await runFieldValidators(normalized, operation);
 		const output =
 			pruneUnknown === true ? normalized : withUnknownKeys(normalized, persisted, fields);
-		const json = JSON.stringify(output, null, "\t");
+		const json =
+			format === undefined
+				? JSON.stringify(output, null, "\t")
+				: // An unset field is not in the file: a format need not skip `undefined` as JSON does.
+					format.stringify(
+						Object.fromEntries(Object.entries(output).filter(([, value]) => value !== undefined)),
+					);
 		// Refused here, so a mutation never leaves a file the next read() rejects.
 		if (Buffer.byteLength(json) > MAX_FILE_BYTES) {
 			const issue = { message: "the file would be larger than 16 MiB", path: "" };

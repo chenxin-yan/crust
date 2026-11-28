@@ -1,6 +1,6 @@
 # @crustjs/config
 
-A CLI's settings, read from JSON config files, as one typed Crust Context per setting
+A CLI's settings, defined once, read from config files into typed Crust flags
 
 ## Install
 

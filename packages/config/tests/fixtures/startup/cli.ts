@@ -4,18 +4,17 @@ import { defineConfig } from "../../../src/index.ts";
 
 const config = defineConfig({
 	name: "acme",
-	global: true,
-	project: true,
-}).flags({ org: { type: "string", env: "ACME_ORG" } });
-
-const { org } = config.settings;
+	both: { org: { type: "string", env: "ACME_ORG" } },
+});
 
 await new Crust("acme")
 	.extend(config.extension)
 	.add(
 		defineCommand("ping", (command) => command.action(({ stdout }) => stdout("pong"))),
 		defineCommand("show", (command) =>
-			command.use(org).action(async ({ ctx, stdout }) => stdout(`org=${await ctx.org}`)),
+			command
+				.flags({ org: config.flag("org") })
+				.action(({ flags, stdout }) => stdout(`org=${flags.org}`)),
 		),
 	)
 	.execute();

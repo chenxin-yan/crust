@@ -8,6 +8,7 @@ import {
 	chmod,
 	chown,
 	lstat,
+	lutimes,
 	mkdir,
 	readdir,
 	readFile,
@@ -463,6 +464,21 @@ describe("writeJson", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("withFileLock", () => {
+	it("refuses a relative path before locking anything", async () => {
+		const fn = vi.fn(async () => "ran");
+		await expect(withFileLock("state.json", fn, { operation: "write" })).rejects.toMatchObject({
+			code: "PATH",
+			message: "filePath must be an absolute path",
+		});
+		// A drive path is absolute only on Windows; elsewhere it names a file in the working directory.
+		if (process.platform !== "win32") {
+			await expect(withFileLock("C:/state.json", fn, { operation: "write" })).rejects.toMatchObject(
+				{ code: "PATH" },
+			);
+		}
+		expect(fn).not.toHaveBeenCalled();
+	});
+
 	// A lock left behind would stall this process's next mutation until it looks stale.
 	it("removes its lock when the first delete is refused", async () => {
 		const tempDir = createTempDir();
@@ -526,6 +542,31 @@ describe("withFileLock", () => {
 			await rm(tempDir, { recursive: true, force: true });
 		}
 	});
+
+	// A cloned folder can hold a link at the lock path; following it, the lock never looked stale.
+	it.skipIf(process.platform === "win32")(
+		"takes over an old link to a missing target at the lock path",
+		async () => {
+			const tempDir = createTempDir();
+			await mkdir(tempDir, { recursive: true });
+			const filePath = join(tempDir, "config.json");
+			const lockPath = `${filePath}.lock`;
+			await symlink(join(tempDir, "missing"), lockPath);
+			const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+			await lutimes(lockPath, hourAgo, hourAgo);
+			try {
+				await expect(
+					withFileLock(filePath, async () => "ran", {
+						operation: "write",
+						signal: AbortSignal.timeout(2000),
+					}),
+				).resolves.toBe("ran");
+				await expect(lstat(lockPath)).rejects.toMatchObject({ code: "ENOENT" });
+			} finally {
+				await rm(tempDir, { recursive: true, force: true });
+			}
+		},
+	);
 });
 
 describe("deleteJson", () => {

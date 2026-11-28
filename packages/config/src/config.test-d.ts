@@ -1,13 +1,6 @@
-import {
-	type ContextInstance,
-	Crust,
-	defineCommand,
-	type Extension,
-	type FactoryValueOf,
-} from "@crustjs/core";
-import type { Store } from "@crustjs/store";
+import { Crust, defineCommand } from "@crustjs/core";
 
-import { type Config, type ConfigBuilder, type ConfigFlagDef, defineConfig } from "./index.ts";
+import { type ConfigEntry, defineConfig, type SettingKey } from "./index.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -15,345 +8,165 @@ type Expect<T extends true> = T;
 
 const config = defineConfig({
 	name: "acme",
-	global: true,
-	project: true,
-}).flags({
-	org: { type: "string", env: "ACME_ORG", required: true },
-	region: { type: "string", choices: ["us", "eu"], default: "us" },
-	port: { type: "number", short: "p", aliases: ["listen"] },
-	timeout: { type: "string", parse: (raw) => Number(raw), default: "30" },
-	tags: { type: "string", multiple: true, delimiter: "," },
-	yes: { type: "boolean", negatable: true, description: "Skip confirmations" },
-	telemetry: { type: "boolean", flag: false, env: "ACME_TELEMETRY" },
+	user: {
+		org: { type: "string", env: "ACME_ORG", required: true },
+		timeout: { type: "string", parse: (raw) => Number(raw), default: "30" },
+		tags: { type: "string", multiple: true, delimiter: "," },
+		yes: { type: "boolean" },
+	},
+	project: { entry: { type: "string" } },
+	both: {
+		region: { type: "string", choices: ["us", "eu"], default: "us" },
+		port: { type: "number", min: 1 },
+	},
+	command: true,
 });
 
-// Each setting's value: inferred as the settings would be as flags; required and defaulted
-// settings are never undefined, choices are a union, parse gives its output.
-const { org, region, port, timeout, tags, yes, telemetry } = config.settings;
-type _Values = Expect<
-	Equal<
-		[
-			FactoryValueOf<typeof org>,
-			FactoryValueOf<typeof region>,
-			FactoryValueOf<typeof port>,
-			FactoryValueOf<typeof timeout>,
-			FactoryValueOf<typeof tags>,
-			FactoryValueOf<typeof yes>,
-			FactoryValueOf<typeof telemetry>,
-		],
-		[
-			string,
-			"us" | "eu",
-			number | undefined,
-			number,
-			string[] | undefined,
-			boolean | undefined,
-			boolean | undefined,
-		]
-	>
->;
-
-// `config.global` is the typed store of the global file: what the user types, every key optional.
-type File = Awaited<ReturnType<typeof config.global.read>>;
-type _File = Expect<
-	Equal<
-		File,
-		{
-			org: string | undefined;
-			region: "us" | "eu" | undefined;
-			port: number | undefined;
-			timeout: string | undefined;
-			tags: string[] | undefined;
-			yes: boolean | undefined;
-			telemetry: boolean | undefined;
+// get(): each value as the setting's flag would have it.
+void (async () => {
+	type _Values = Expect<
+		Equal<
+			[
+				Awaited<ReturnType<typeof config.get<"org">>>,
+				Awaited<ReturnType<typeof config.get<"region">>>,
+				Awaited<ReturnType<typeof config.get<"port">>>,
+				Awaited<ReturnType<typeof config.get<"timeout">>>,
+				Awaited<ReturnType<typeof config.get<"tags">>>,
+				Awaited<ReturnType<typeof config.get<"yes">>>,
+			],
+			[string, "us" | "eu", number | undefined, number, string[] | undefined, boolean | undefined]
+		>
+	>;
+	const region: "us" | "eu" = await config.get("region");
+	void region;
+	// @ts-expect-error -- not a setting
+	await config.get("regoin");
+	const entries: ConfigEntry<{ region: { type: "string"; choices: ["us", "eu"] } }>[] = [];
+	for (const entry of entries) {
+		if (entry.key === "region") {
+			const _value: "us" | "eu" | undefined = entry.value;
 		}
-	>
->;
-const _global: Store<File> = config.global;
-void config.global.patch({ region: "eu" });
+	}
+	const listed = await config.list();
+	type _Listed = Expect<
+		Equal<
+			(typeof listed)[number]["key"],
+			"org" | "region" | "port" | "timeout" | "tags" | "yes" | "entry"
+		>
+	>;
+})();
+
+// set(): keys and values as a file holds them; each file takes only the settings it may hold.
+void config.set({ region: "eu", timeout: "45", tags: ["a"], org: undefined });
+void config.set({ region: "eu", port: 8080, entry: "src/main.ts" }, { project: true });
+// @ts-expect-error -- only the project file may set entry
+void config.set({ entry: "src/main.ts" });
 // @ts-expect-error -- outside choices
-void config.global.patch({ region: "mars" });
+void config.set({ region: "mars" });
 // @ts-expect-error -- a parse setting holds what the user types
-void config.global.patch({ timeout: 30 });
-// @ts-expect-error -- without `global`, the config exposes no global store
-void defineConfig({ name: "acme", project: true }).flags({}).global;
+void config.set({ timeout: 30 });
+// @ts-expect-error -- not a setting
+void config.set({ regoin: "eu" });
+// @ts-expect-error -- the project file may not set org
+void config.set({ org: "acme" }, { project: true });
+const userOnly = defineConfig({ name: "acme", user: { pager: { type: "string" } } });
+// @ts-expect-error -- no setting of a project file, so no project file to save in
+void userOnly.set({ pager: "less" }, { project: true });
+const projectOnly = defineConfig({ name: "acme", project: { entry: { type: "string" } } });
+void projectOnly.set({ entry: "src/main.ts" }, { project: true });
+// @ts-expect-error -- no setting of the user's file, so no user's file to save in
+void projectOnly.set({ entry: "src/main.ts" });
 
-// A command `.use()`s the settings it reads, and gets only their flags.
+// flag(): the setting's definition, with its key in `config`, under any flag name.
 const deploy = defineCommand("deploy", (command) =>
-	command.use(org, region).action(async ({ ctx, flags }) => {
-		const value = await ctx.org;
-		type _Org = Expect<Equal<typeof value, string>>;
-		type _Region = Expect<Equal<Awaited<typeof ctx.region>, "us" | "eu">>;
-		// `flags.org` is only what was typed or came from env; the settled value is `await ctx.org`.
-		type _Flag = Expect<Equal<typeof flags.org, string | undefined>>;
-		// @ts-expect-error -- a setting the command did not `.use()`
-		void ctx.port;
-		// @ts-expect-error -- nor its flag
-		void flags.port;
-		return value;
-	}),
-);
-const serve = defineCommand("serve", (command) =>
-	command.use(port, telemetry).action(async ({ ctx }) => (await ctx.port) ?? 0),
-);
-
-// `flags` holds what the run was given for each kind of setting: typed as the flag, never required
-// and never defaulted, since `required` and `default` apply after the files. `ctx` holds the setting.
-defineCommand("every", (command) =>
 	command
-		.use(org, region, port, timeout, tags, yes, telemetry)
-		.flags({ local: { type: "string", required: true } })
-		.action(({ ctx, flags }) => {
+		.flags({
+			where: config.flag("region"),
+			port: config.flag("port"),
+			when: config.flag("timeout"),
+		})
+		.action(({ flags }) => {
 			type _Flags = Expect<
 				Equal<
-					[
-						typeof flags.org,
-						typeof flags.region,
-						typeof flags.port,
-						typeof flags.timeout,
-						typeof flags.tags,
-						typeof flags.yes,
-						// The command's own flags keep their types.
-						typeof flags.local,
-					],
-					[
-						string | undefined,
-						"us" | "eu" | undefined,
-						number | undefined,
-						number | undefined,
-						string[] | undefined,
-						boolean | undefined,
-						string,
-					]
+					[typeof flags.where, typeof flags.port, typeof flags.when],
+					["us" | "eu", number | undefined, number]
 				>
 			>;
-			type _Ctx = Expect<
-				Equal<
-					[Awaited<typeof ctx.org>, Awaited<typeof ctx.region>, Awaited<typeof ctx.timeout>],
-					[string, "us" | "eu", number]
-				>
-			>;
-			// @ts-expect-error -- a `flag: false` setting is in `ctx` only
-			void flags.telemetry;
-			// @ts-expect-error -- an alias is a spelling, not a key of `flags`
-			void flags.listen;
-			// @ts-expect-error -- `ctx.org` is a promise: the missing `await` is caught
-			const text: string = ctx.org;
-			void text;
 		}),
 );
-// An inline child of the root reads every setting, typed the same way.
-new Crust("acme").extend(config.extension).command("inline", (command) =>
-	command.action(({ ctx, flags }) => {
-		type _Inline = Expect<
-			Equal<
-				[Awaited<typeof ctx.region>, typeof flags.region],
-				["us" | "eu", "us" | "eu" | undefined]
-			>
-		>;
-	}),
-);
-const app = new Crust("acme").extend(config.extension).add(deploy, serve);
-// @ts-expect-error -- the settings' Extension is missing
-new Crust("acme").add(deploy);
-// A test replaces one setting with its double, without the Extension.
-new Crust("acme").provide(org.of("test-org"), region.of("eu")).add(deploy);
-// @ts-expect-error -- a double has the setting's type
-org.of(1);
-// @ts-expect-error -- a setting that is not in the config
-void config.settings.nope;
-// @ts-expect-error -- a setting name that another provided Context already has
-new Crust("acme").provide(org.of("x")).extend(config.extension).add(deploy);
-const _config: Config<{ org: { type: "string" } }, true> = defineConfig({
+void new Crust("acme").extend(config.extension).add(deploy);
+// @ts-expect-error -- not a setting
+config.flag("regoin");
+const _key: SettingKey = config.flag("org").config;
+// @ts-expect-error -- only config.flag() writes the config key
+void defineCommand("x", (command) => command.flags({ org: { type: "string", config: "org" } }));
+
+// Definitions: a setting is a string, number or boolean flag definition, and nothing else.
+defineConfig({
 	name: "acme",
-	global: true,
-}).flags({ org: { type: "string" } });
-
-// Typed input: a command takes only its settings' flags, all optional (a file may give them).
-void app.run(["deploy"], {});
-void app.run(["deploy"], { flags: { org: "o", region: "eu" } });
-// @ts-expect-error -- outside choices
-void app.run(["deploy"], { flags: { region: "mars" } });
-// @ts-expect-error -- deploy does not use port
-void app.run(["deploy"], { flags: { port: 1 } });
-void app.run(["serve"], { flags: { port: 1 } });
-// @ts-expect-error -- a setting with `flag: false` owns no flag
-void app.run(["serve"], { flags: { telemetry: true } });
-
-// The Extension's tuple of Contexts holds every setting, whatever their number.
-const one = defineConfig({ name: "one", global: true }).flags({ a: { type: "string" } });
-new Crust("one")
-	.extend(one.extension)
-	.add(defineCommand("x", (command) => command.use(one.settings.a)));
-const thirty = defineConfig({ name: "thirty", global: true }).flags({
-	s0: { type: "string" },
-	s1: { type: "number" },
-	s2: { type: "boolean" },
-	s3: { type: "string" },
-	s4: { type: "number" },
-	s5: { type: "boolean" },
-	s6: { type: "string" },
-	s7: { type: "number" },
-	s8: { type: "boolean" },
-	s9: { type: "string" },
-	s10: { type: "number" },
-	s11: { type: "boolean" },
-	s12: { type: "string" },
-	s13: { type: "number" },
-	s14: { type: "boolean" },
-	s15: { type: "string" },
-	s16: { type: "number" },
-	s17: { type: "boolean" },
-	s18: { type: "string" },
-	s19: { type: "number" },
-	s20: { type: "boolean" },
-	s21: { type: "string" },
-	s22: { type: "number" },
-	s23: { type: "boolean" },
-	s24: { type: "string" },
-	s25: { type: "number" },
-	s26: { type: "boolean" },
-	s27: { type: "string" },
-	s28: { type: "number" },
-	s29: { type: "string", required: true },
+	// @ts-expect-error -- no such property
+	user: { org: { type: "string", flag: false } },
 });
-const first = defineCommand("first", (command) =>
-	command.use(thirty.settings.s0).action(async ({ ctx }) => ctx.s0),
-);
-const last = defineCommand("last", (command) =>
-	command.use(thirty.settings.s29, thirty.settings.s14).action(async ({ ctx }) => {
-		type _S29 = Expect<Equal<Awaited<typeof ctx.s29>, string>>;
-		type _S14 = Expect<Equal<Awaited<typeof ctx.s14>, boolean | undefined>>;
-		return ctx.s29;
-	}),
-);
-new Crust("thirty").extend(thirty.extension).add(first, last);
-
-// The Extension provides exactly the settings, each once, whatever order the tuple has.
-type Provided<E> = E extends Extension<any, infer P, any, any> ? P : never;
-type ProvidedNames<E> = Provided<E>[number] extends infer I
-	? I extends ContextInstance<infer N, any, any, any, any>
-		? N
-		: never
-	: never;
-type _ThirtyNames = Expect<
-	Equal<ProvidedNames<typeof thirty.extension>, keyof typeof thirty.settings>
->;
-type _ThirtyLength = Expect<Equal<Provided<typeof thirty.extension>["length"], 30>>;
-type _ConfigNames = Expect<
-	Equal<ProvidedNames<typeof config.extension>, keyof typeof config.settings>
->;
-type _ConfigLength = Expect<Equal<Provided<typeof config.extension>["length"], 7>>;
-type _OneLength = Expect<Equal<Provided<typeof one.extension>["length"], 1>>;
-// A setting of another config is not provided by this one's Extension.
-const foreign = defineCommand("foreign", (command) =>
-	command.use(one.settings.a).action(async ({ ctx }) => ctx.a),
-);
-// @ts-expect-error -- `a` belongs to another config
-new Crust("thirty").extend(thirty.extension).add(foreign);
-
-// A setting is a flag definition for a string, number or boolean.
-const shared = { type: "string", description: "Organization" } as const satisfies ConfigFlagDef;
-defineConfig({ name: "acme", global: true }).flags({ org: shared });
 defineConfig({
 	name: "acme",
-	global: true,
-}).flags(
-	// @ts-expect-error -- a default outside choices, as for a flag
-	{ region: { type: "string", choices: ["us"], default: "eu" } },
-);
+	// @ts-expect-error -- a config file holds no url
+	project: { site: { type: "url" } },
+});
 defineConfig({
 	name: "acme",
-	global: true,
-}).flags(
-	// @ts-expect-error -- an unknown property in a setting
-	{ org: { type: "string", nope: 1 } },
-);
+	// @ts-expect-error -- default outside choices
+	both: { region: { type: "string", choices: ["us", "eu"], default: "mars" } },
+});
 defineConfig({
 	name: "acme",
-	global: true,
-}).flags(
-	// @ts-expect-error -- a setting is a flag or `flag: false`, never `flag: true`
-	{ org: { type: "string", flag: true } },
+	// @ts-expect-error -- $schema is a file's pointer to its schema
+	user: { $schema: { type: "string" } },
+});
+// A group given as undefined holds no setting.
+defineConfig({ name: "acme", both: { active: { type: "boolean" } }, user: undefined }).flag(
+	"active",
 );
-// @ts-expect-error -- the store holds no URL
-defineConfig({ name: "acme", global: true }).flags({ api: { type: "url" } });
-// @ts-expect-error -- nor a path
-defineConfig({ name: "acme", global: true }).flags({ dir: { type: "path" } });
-// @ts-expect-error -- nor JSON
-defineConfig({ name: "acme", global: true }).flags({ data: { type: "json" } });
+// A group typed as a record of any names keeps its settings, under any name.
+const wide: Record<string, { type: "string" }> = { pager: { type: "string" } };
+void defineConfig({ name: "acme", user: wide }).get("pager");
+// Beside a group of known names, its unknown names are no duplicate of them.
+void defineConfig({ name: "acme", user: wide, project: { entry: { type: "string" } } }).get(
+	"entry",
+);
+// list() keeps each group's value types: a number setting beside a record of text settings.
+void (async () => {
+	const mixed = defineConfig({
+		name: "acme",
+		user: wide,
+		project: { port: { type: "number", default: 80 } },
+	});
+	for (const entry of await mixed.list()) {
+		// @ts-expect-error -- the port entry's value is a number
+		entry.value?.toUpperCase();
+	}
+})();
+// A name a record-typed group declares besides its any names still counts for the two-groups check.
+const declared = defineConfig({
+	name: "acme",
+	user: wide as Record<string, { type: "string" }> & { pager: { type: "string" } },
+	project: { pager: { type: "string" } },
+});
+type _Declared = Expect<Equal<typeof declared, { readonly FIX_SETTING_IN_TWO_GROUPS: "pager" }>>;
+const twice = defineConfig({
+	name: "acme",
+	user: { region: { type: "string" } },
+	both: { region: { type: "string" } },
+});
+type _Twice = Expect<Equal<typeof twice, { readonly FIX_SETTING_IN_TWO_GROUPS: "region" }>>;
+// @ts-expect-error -- a setting is in one group, so this is no config
+twice.flag("region");
 defineConfig({
 	name: "acme",
-	global: true,
-}).flags(
-	// @ts-expect-error -- a flag schema validates argv text, not a file's JSON value
-	{ org: { type: "string", schema: {} as never } },
-);
-
-// The files: `true`, or a bare file name ending in `.json`.
-defineConfig({ name: "acme", global: "settings.json", project: ".acme.json" }).flags({});
-// @ts-expect-error -- the global file must be a .json file
-defineConfig({ name: "acme", global: "settings.toml" }).flags({});
-// @ts-expect-error -- a file name, not a path
-defineConfig({ name: "acme", global: "a/b.json" }).flags({});
-// @ts-expect-error -- a file name, not a Windows path
-defineConfig({ name: "acme", project: "a\\b.json" }).flags({});
-// @ts-expect-error -- a file name, not only the extension
-defineConfig({ name: "acme", project: ".json" }).flags({});
-// @ts-expect-error -- a config reads at least one file
-defineConfig({ name: "acme" }).flags({});
-
-// Names the file or the store would read elsewhere, or not at all.
-// @ts-expect-error -- not the app's own directory
-defineConfig({ name: "..", global: true }).flags({});
-// @ts-expect-error -- the store refuses a name ending in .json
-defineConfig({ name: "acme", global: "prefs.json.json" }).flags({});
-// @ts-expect-error -- `$schema` points a file at its JSON Schema
-defineConfig({ name: "acme", global: true }).flags({ $schema: { type: "string" } });
-// @ts-expect-error -- also without a flag
-defineConfig({ name: "acme", global: true }).flags({ $schema: { type: "string", flag: false } });
-
-// Settings have string keys: a symbol key would never become a setting.
-const hiddenSetting: unique symbol = Symbol("hidden");
-// @ts-expect-error -- a symbol key
-defineConfig({ name: "acme", global: true }).flags({ [hiddenSetting]: { type: "string" } });
-// @ts-expect-error -- a number key
-defineConfig({ name: "acme", global: true }).flags({ 1.5: { type: "string" } });
-
-// Spellings and collisions are checked when the CLI runs from source and by `crust build`.
+	// @ts-expect-error -- a format reads and writes: parse and stringify go together
+	format: { extension: "toml", parse: (text: string) => JSON.parse(text) },
+});
 defineConfig({
 	name: "acme",
-	global: true,
-}).flags({ a: { type: "string", short: "x" }, b: { type: "string", short: "y", flag: false } });
-
-// Settings come only from `.flags()`, called once on what defineConfig() returns.
-// @ts-expect-error -- `flags` is not an option
-defineConfig({ name: "acme", global: true, flags: { org: { type: "string" } } });
-const builder = defineConfig({ name: "acme", global: true });
-// @ts-expect-error -- the builder is not a Context: call .flags() first
-defineCommand("x", (command) => command.use(builder));
-// @ts-expect-error -- nor a Context factory
-new Crust("acme").provide(builder());
-// @ts-expect-error -- the global store comes with the settings
-void builder.global;
-// @ts-expect-error -- .flags() is called once
-void builder.flags({ org: { type: "string" } }).flags;
-
-// A module that exports the builder for another to finish can name its type in a declaration.
-export const files: ConfigBuilder<true> = defineConfig({ name: "acme", global: true });
-void files.flags({ org: { type: "string" } }).global;
-
-// A definition typed as a union keeps each variant's value type; a flag it may not own is not typed.
-declare const either: { type: "string" } | { type: "string"; parse: (raw: string) => number };
-const unioned = defineConfig({ name: "acme", global: true }).flags({ x: either });
-type _Either = Expect<
-	Equal<FactoryValueOf<typeof unioned.settings.x>, string | number | undefined>
->;
-declare const maybeFlag: { type: "number"; flag?: false };
-const maybe = defineConfig({ name: "acme", global: true }).flags({ y: maybeFlag });
-const usesMaybe = defineCommand("m", (command) =>
-	command.use(maybe.settings.y).action(async ({ ctx }) => ctx.y),
-);
-const maybeApp = new Crust("acme").extend(maybe.extension).add(usesMaybe);
-// @ts-expect-error -- `flag?: false` may own no flag, so typed input does not offer it
-void maybeApp.run(["m"], { flags: { y: 1 } });
+	files: { user: "settings", project: "acme" },
+	format: { extension: "toml", parse: () => ({}), stringify: () => "" },
+});

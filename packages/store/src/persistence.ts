@@ -67,7 +67,10 @@ export const MAX_FILE_BYTES: number = 16 * 1024 * 1024;
  * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
-export async function readJson(filePath: string): Promise<JsonValue | undefined> {
+export async function readJson(
+	filePath: string,
+	parse: (text: string) => unknown = JSON.parse,
+): Promise<JsonValue | undefined> {
 	const notRegular = () =>
 		new CrustStoreError("PATH", `Store file is not a regular file: ${filePath}`, {
 			path: filePath,
@@ -132,11 +135,15 @@ export async function readJson(filePath: string): Promise<JsonValue | undefined>
 	}
 
 	try {
-		return JSON.parse(raw);
+		// SAFETY: a format's `parse` returns what the file holds; the store's fields check it.
+		const value = parse(raw) as JsonValue | undefined;
+		// `undefined` means no file: the file is there, so a write must not take it for missing.
+		if (value === undefined) throw new Error("the format's parse returned undefined");
+		return value;
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"PARSE",
-			`Malformed JSON in store file: ${filePath}`,
+			`Malformed ${parse === JSON.parse ? "JSON in store" : "store"} file: ${filePath}`,
 			{
 				path: filePath,
 			},
@@ -460,8 +467,11 @@ function isProcessAlive(pid: number): boolean {
 /** The pid a lock file names, or `undefined` when it has none: missing, not yet written, or another host's. */
 async function readLockPid(lockPath: string): Promise<number | undefined> {
 	try {
+		const fs = process.getBuiltinModule("node:fs/promises");
+		// A lock is a file of its own: a link or a device at the path, as a cloned folder can hold, is not read.
+		if (!(await fs.lstat(lockPath)).isFile()) return undefined;
 		const owner: { pid?: unknown; host?: unknown } | null = JSON.parse(
-			await process.getBuiltinModule("node:fs/promises").readFile(lockPath, "utf-8"),
+			await fs.readFile(lockPath, "utf-8"),
 		);
 		// A pid only identifies a process on the host that wrote it.
 		return owner?.host === process.getBuiltinModule("node:os").hostname() &&
@@ -483,7 +493,7 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
 	}
 	return process
 		.getBuiltinModule("node:fs/promises")
-		.stat(lockPath)
+		.lstat(lockPath)
 		.then(
 			(lock) => Date.now() - lock.mtimeMs > STALE_LOCK_MS,
 			() => false,
@@ -492,7 +502,8 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
 
 /**
  * Runs `fn` while holding `<filePath>.lock`, an advisory lock shared by every
- * process that uses this function on the same file.
+ * process that uses this function on the same file. A store that is not `strict` holds it
+ * around each mutation of its file. It does not reenter: `fn` must not take it again.
  *
  * The lock file is created exclusively (`wx`) and holds the owner's pid and host.
  * Waiters retry with a growing, jittered delay and remove a lock whose process
@@ -504,6 +515,10 @@ async function isStaleLock(lockPath: string): Promise<boolean> {
  * 10 seconds loses its lock; either costs lost updates, never a corrupt file. A store that
  * cannot accept that sets `strict`, which locks with `withLock` instead.
  *
+ * `filePath` must be absolute, like a store's `dirPath`: a relative one would follow the working
+ * directory while the call waits.
+ *
+ * @throws {CrustStoreError} `PATH` when `filePath` is not absolute.
  * @throws {CrustStoreError} `IO` when the lock file cannot be created or an abandoned one removed.
  */
 export async function withFileLock<T>(
@@ -511,6 +526,10 @@ export async function withFileLock<T>(
 	fn: () => Promise<T>,
 	options: FileLockOptions,
 ): Promise<T> {
+	// The host's rule, since the path is opened here: `C:/state.json` is relative outside Windows.
+	if (!process.getBuiltinModule("node:path").isAbsolute(filePath)) {
+		throw new CrustStoreError("PATH", "filePath must be an absolute path", { path: filePath });
+	}
 	const { open, rm } = process.getBuiltinModule("node:fs/promises");
 	const lockPath = `${filePath}.lock`;
 	const lockError = (err: unknown) =>

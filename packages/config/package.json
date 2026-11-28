@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/config",
 	"version": "0.0.0",
-	"description": "A CLI's settings, read from JSON config files, as one typed Crust Context per setting",
+	"description": "A CLI's settings, defined once, read from config files into typed Crust flags",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
@@ -49,12 +49,11 @@
 	},
 	"devDependencies": {
 		"@crustjs/core": "workspace:*",
-		"@crustjs/effect": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/openapi": "workspace:*",
+		"@crustjs/prompts": "workspace:*",
 		"@crustjs/testing": "workspace:*",
 		"@crustjs/internal-config": "workspace:*",
-		"effect": "catalog:",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {

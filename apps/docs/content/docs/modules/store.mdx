@@ -68,6 +68,27 @@ Field types and defaults determine the state type. `createStore()` resolves `<di
 
 Keys in the file that `fields` does not declare are never returned by `read()`. By default (`pruneUnknown: false`), mutations keep them in the file, so an older version of your CLI, or another tool sharing the file, never deletes fields it does not know. Pass `pruneUnknown: true` to drop them on the next mutation. `reset()` removes the whole file either way.
 
+## Formats
+
+A store file is JSON by default. `format` reads and writes another format with a parser package of your choice; Crust adds none:
+
+```ts
+import { configDir, createStore } from "@crustjs/store";
+import { parse, stringify } from "smol-toml";
+
+const store = createStore({
+  dirPath: configDir("my-cli"),
+  name: "config", // config.toml
+  fields: { theme: { type: "string", default: "light" } },
+  format: { extension: "toml", parse, stringify },
+});
+```
+
+- `extension` names the file, without its dot. It cannot hold a path separator or start with a dot.
+- `parse` must return an object: a file it throws on, or returns anything else for, rejects with `PARSE` and is left as it is. `stringify` receives the fields that are set and the [unknown keys](#unknown-keys) the store keeps.
+- The lock, the atomic replace, the 16 MiB limit and validation are the same as for JSON. A field converts text as it does for a JSON string, so a format that holds only text, such as INI, works: `"3"` in a number field reads as `3`.
+- Saving rewrites the file through `stringify`: comments and formatting in it are lost.
+
 ## Storage paths
 
 | Helper      | Linux and macOS        | Windows                      | Override                                    |
@@ -118,4 +139,4 @@ try {
 
 `CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, `DEFINITION`, or `LOCK`; `.is(code)` narrows `details`. A `VALIDATION` error names the file in its message and in `details.path`, with one entry per field in `details.issues`. A strict store's refusals are `PATH` with `details.reason` set to `"symlink"` or `"directory"`; `LOCK` means a strict lock was not acquired before its deadline.
 
-Store has no encryption, migrations, other formats, or synchronous methods. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/store/src/index.ts) lists every export.
+Store has no encryption, migrations, or synchronous methods. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/store/src/index.ts) lists every export.

@@ -4,33 +4,34 @@ import { defineCommand } from "@crustjs/core";
 
 export const config = defineConfig({
 	name: "acme",
-	global: true, // config.json in configDir("acme"), or a file name of your own
-	project: true, // acme.config.json, the nearest from the working directory up, or a file name
-}).flags({
-	// Each entry is a flag definition, as in a command's .flags({...}).
-	org: { type: "string", description: "Organization", env: "ACME_ORG", required: true },
-	region: { type: "string", choices: ["us", "eu"], default: "us", description: "Region" },
-	port: { type: "number", description: "Port" },
-	// No --telemetry flag: the variable and the files only.
-	telemetry: { type: "boolean", flag: false, env: "ACME_TELEMETRY" },
+	// Each setting is a flag definition, as in a command's .flags({...}). Its group says which
+	// file may hold it. `both`: the user's own file and a repository's acme.config.json.
+	both: {
+		org: { type: "string", description: "Organization", env: "ACME_ORG", required: true },
+		region: { type: "string", choices: ["us", "eu"], default: "us", description: "Region" },
+	},
+	// Only the user's own file: nothing a cloned repository should choose.
+	user: {
+		port: { type: "number", description: "Port" },
+		pager: { type: "string", description: "Pager for long output" },
+	},
+	// Only acme.config.json: what describes the project itself.
+	project: {
+		entry: { type: "string", description: "The project's entry file" },
+	},
+	// Adds `acme config get|set|unset|list`.
+	command: true,
 });
-// One Context per setting, named after it.
-export const { org, region, port, telemetry } = config.settings;
 
-// deploy takes --org and --region, and only those.
+// deploy takes --org and --region; their values come from the files when not given.
 const deploy = defineCommand("deploy", { description: "Deploy the app" }, (command) =>
-	command.use(org, region).action(async ({ ctx, stdout }) => {
-		const where = await ctx.region;
-		//    ^?
-		stdout(`deploying ${await ctx.org} to ${where}`);
-	}),
-);
-
-// serve takes --port, and only that.
-const serve = defineCommand("serve", { description: "Serve the app" }, (command) =>
 	command
-		.use(port)
-		.action(async ({ ctx, stdout }) => stdout(`listening on ${(await ctx.port) ?? 3000}`)),
+		.flags({ org: config.flag("org"), region: config.flag("region") })
+		.action(({ flags, stdout }) => {
+			const where = flags.region;
+			//    ^?
+			stdout(`deploying ${flags.org} to ${where}`);
+		}),
 );
 //#endregion
 
@@ -38,23 +39,38 @@ import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 import { defineApi } from "@crustjs/openapi";
 
-//#region set
-// `acme set region eu` saves a setting in the global file.
-const set = defineCommand(
-	"set",
-	{ description: "Save a setting in the global config" },
-	(command) =>
-		command
-			.args(
-				{ name: "key", type: "string", choices: ["org", "region"], required: true },
-				{ name: "value", type: "string", required: true },
-			)
-			.action(async ({ args, stdout }) => {
-				// The store checks the value against the setting: `acme set region mars` fails.
-				const saved = await config.global.patch({ [args.key]: args.value });
-				stdout(`${args.key} = ${saved[args.key]}`);
-			}),
+//#region flag-name
+// The command names the flag: `acme serve --listen 8080` sets the `port` setting for this run.
+const serve = defineCommand("serve", { description: "Serve the app" }, (command) =>
+	command
+		.flags({ listen: config.flag("port") })
+		.action(({ flags, stdout }) => stdout(`listening on ${flags.listen ?? 3000}`)),
 );
+//#endregion
+
+//#region get-set
+// `acme use eu` saves the region in the user's file; `acme pager` reads a setting no flag has.
+const use = defineCommand("use", { description: "Save a region" }, (command) =>
+	command
+		.args({ name: "region", type: "string", choices: ["us", "eu"], required: true })
+		.action(async ({ args, stdout }) => {
+			await config.set({ region: args.region });
+			stdout(`region saved: ${args.region}`);
+		}),
+);
+const pager = defineCommand("pager", { description: "Print the pager" }, (command) =>
+	command.action(async ({ stdout }) => stdout((await config.get("pager")) ?? "less")),
+);
+//#endregion
+
+//#region chdir
+// `acme -C ../other deploy` runs as if started in ../other, so that folder's project file applies.
+// Listed before config.extension: setups run in .extend() order.
+const chdir = defineExtension(defineExtensionId("acme:chdir"))
+	.flags({ dir: { type: "path", short: "C", description: "Run as if started in this folder" } })
+	.setup((ctx) => {
+		if (ctx.flags.dir !== undefined) process.chdir(ctx.flags.dir);
+	});
 //#endregion
 
 //#region schema
@@ -69,33 +85,12 @@ const api = defineApi({
 	spec: new URL("./acme.openapi.jsonc", import.meta.url),
 	baseUrl: "https://api.acme.example/v1",
 })
-	.use(org)
-	// Every generated command takes --org, and `{org}` in its path from the setting.
-	.each(() => ({ bind: { org: (ctx) => ctx.org } }));
-//#endregion
-
-//#region given
-// `flags.port` is what this run was given; `await ctx.port` is the setting.
-const show = defineCommand("show", { description: "Show the port" }, (command) =>
-	command.use(port).action(async ({ ctx, flags, stdout }) => {
-		// Given by --port, --input, typed run() input or the setting's variable; never a file or the default.
-		const given = flags.port !== undefined;
-		stdout(`port ${(await ctx.port) ?? "unset"}${given ? " (given for this run)" : ""}`);
-	}),
-);
+	// `{org}` in every generated command's path comes from the setting.
+	.each(() => ({ bind: { org: () => config.get("org") } }));
 //#endregion
 
 //#region app
 export const app = new Crust("acme", { version: "1.0.0" })
-	.extend(help(), version(), config.extension, configSchema, api.extension)
-	.add(deploy, serve, show, set, ...api.commands);
+	.extend(help(), version(), chdir, config.extension, configSchema, api.extension)
+	.add(deploy, serve, use, pager, ...api.commands);
 //#endregion
-
-//#region testing
-const tested = await new Crust("acme")
-	.provide(org.of("test-org"), region.of("eu"))
-	.add(deploy)
-	.run(["deploy"]);
-//#endregion
-
-void tested;

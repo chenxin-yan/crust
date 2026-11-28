@@ -1,0 +1,13 @@
+---
+"@crustjs/config": minor
+---
+
+**Breaking:** settings now land in flags. `defineConfig({ name, user?, project?, both?, format?, files?, command? })` defines every setting once, as the definition of a string, number or boolean flag, and replaces `defineConfig({ name, global, project }).flags({...})`, `config.settings` (one Context per setting), `config.global` (the store of the global file), `global: true` and `flag: false`.
+
+- A setting's group says which file may hold it: `user` for the user's own file (`config.json` in the app's configuration directory), `project` for the project file (`<name>.config.json`, the nearest from the working directory up), `both` for either, where the project file wins. A file exists only when a group names it. A setting found in a file that may not hold it is ignored with a warning naming the key and both files, so a cloned repository can no longer set every setting.
+- A command takes a setting as a flag under any name with `config.flag("region")`. `.extend(config.extension)` binds the files' value into such a flag when the run gives none, so the action reads the final value from `flags`: the command line or input, then the flag's `env`, then the project file, then the user's file, then `default`. `--help` shows the flag's default, `required` is checked after the files, and `prompts()` does not ask for a value a file gave.
+- `await config.get(key)` reads any setting, `await config.list()` returns every setting with its value and source, and `config.set(values)` or `config.set(values, { project: true })` saves them. Keys and values are checked at compile time, each form taking only the settings its file may hold. A value the setting's rules refuse throws before anything is saved, and saving in a linked project file is refused, as is a save that would make the file larger than 16 MiB.
+- The files are read and saved through `@crustjs/store`: saves of one config apply in call order, and every save holds the store's lock on the file, so two configs or two processes saving at once keep both keys.
+- `format: { extension, parse, stringify }` supplies a format other than JSON, as a store's `format` does, and `files: { user, project }` names the files, without their extension. A text value from a file is converted as the same text in an environment variable.
+- `command: true` adds `config get`, `set`, `unset` and `list`; with both files, `set --project` writes the project file, and each file refuses a setting it may not hold.
+- `config.jsonSchema()` is the JSON Schema of the user's file, and `config.jsonSchema({ project: true })` that of the project file.

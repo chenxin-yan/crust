@@ -21,6 +21,7 @@ export type {
 	InferStoreConfig,
 	Store,
 	StoreAccess,
+	StoreFormat,
 	StoreMutationOptions,
 	StorePermissionBits,
 	StoreUpdater,
