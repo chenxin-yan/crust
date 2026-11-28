@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 import {
@@ -30,6 +30,7 @@ import {
 } from "./agents.ts";
 import type { AgentTarget, Scope } from "./agents.ts";
 import { renderSkills } from "./build.ts";
+import { SKILL_MD } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
 import { SKILLS } from "./id.ts";
 import {
@@ -253,7 +254,14 @@ function formatSkillDocumentation(
 function plannedSkills(options: SkillOptions, snapshot: CommandSnapshot): readonly PackagedSkill[] {
 	const skills = new Map<string, string>();
 	for (const extra of options.extras ?? []) {
-		const { name, description } = readSkillFrontmatter(resolvePathLike(extra));
+		const dir = resolvePathLike(extra);
+		// The bundle's rule for an authored file, before the file is read: a regular file inside
+		// the skill. A link out of it is not followed, and a pipe cannot stall the build.
+		const entry = realpathSync(join(dir, SKILL_MD));
+		if (!isWithin(realpathSync(dir), entry) || !statSync(entry).isFile()) {
+			throw new Error(`"${join(dir, SKILL_MD)}" is not a file inside its skill directory.`);
+		}
+		const { name, description } = readSkillFrontmatter(dir);
 		skills.set(name, description);
 	}
 	const generated = options.name ?? snapshot.meta.name;

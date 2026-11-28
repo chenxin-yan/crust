@@ -268,6 +268,31 @@ describe("skills extension packaged directory", () => {
 		);
 	});
 
+	// POSIX-only: a symbolic link needs a privilege on Windows.
+	it.skipIf(process.platform === "win32")(
+		"does not read an authored SKILL.md that links out of its skill for the docs section",
+		async () => {
+			const authored = join(tempRoot, "authored", "guide");
+			await mkdir(authored, { recursive: true });
+			const outside = join(tempRoot, "outside.md");
+			await writeFile(outside, "---\nname: stolen\ndescription: Outside\n---\n");
+			await symlink(outside, join(authored, "SKILL.md"));
+			let body: string | undefined;
+			const reader = defineExtension("reader").build(({ snapshot }) => {
+				body = snapshot.meta.sections?.find((section) => section.title === "Agent skills")?.body;
+				return [];
+			});
+			const app = new Crust("demo", { description: "Demo" }).extend(
+				reader,
+				skills({ extras: [authored] }),
+			);
+
+			// The build hook still refuses the link with its own error.
+			await expect(buildArtifacts(app)).rejects.toThrow();
+			expect(body).not.toContain("stolen");
+		},
+	);
+
 	it.each(["skills", "skills install"])("installs every packaged skill via %s", async (command) => {
 		await writeSource("demo");
 		await writeSource("guide");
