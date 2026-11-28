@@ -96,10 +96,7 @@ async function roundTrip(launch: McpLaunch, protocolVersion: typeof LEGACY | typ
 			],
 		});
 		const slurp = await client.callTool({ name: "slurp" }, { timeout: 2_000 });
-		expect(slurp).toMatchObject({
-			isError: true,
-			content: [{ type: "text", text: "Error: stdin is in use by another reader" }],
-		});
+		expect(slurp.structuredContent).toEqual({ text: "" });
 		expect((await client.callTool(greet, { timeout: 2_000 })).structuredContent).toEqual({
 			greeting: "HELLO WORLD",
 		});

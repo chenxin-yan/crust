@@ -155,7 +155,7 @@ For serving outside a CLI, `serveStdio(app, options?)` serves the application ov
   corrupt the protocol stream. Keep them out of code that runs under `mcp`, or write to stderr.
 </Callout>
 
-Protocol frames also arrive on stdin. While the transport reads it, a `-` value that reads all of stdin, such as [`@crustjs/openapi`](/docs/modules/openapi)'s `--body -`, fails with `stdin is in use by another reader` instead of waiting for the client to disconnect.
+Protocol frames also arrive on the process's stdin, which a tool call never reads: a command runs as a tool with an empty `stdin`, as under [`run()`](/docs/api/crust#runpath-input-options). A `-` value that reads all of stdin, such as [`@crustjs/openapi`](/docs/modules/openapi)'s `--body -`, reads no input.
 
 <auto-type-table path="../../../../../packages/mcp/src/server.ts" name="McpServerOptions" />
 

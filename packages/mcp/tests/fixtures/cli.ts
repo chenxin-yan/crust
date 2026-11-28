@@ -31,7 +31,7 @@ const app = new Crust("demo", { description: "MCP fixture", version: "0.1.0" })
 	)
 	.add(defineCommand("login", { mcp: false }, (command) => command.action(() => "signed in")))
 	.add(
-		// Reads stdin like `--body -` would; under `mcp`, stdin carries protocol frames.
+		// Reads stdin like `--body -` would; under `mcp`, the process's stdin carries protocol frames.
 		defineCommand("slurp", { description: "Read stdin" }, (command) =>
 			command.action(async ({ stdin }) => ({ text: await stdin.text() })),
 		),
