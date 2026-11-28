@@ -1180,11 +1180,16 @@ async function dispatch(
 							if (!args.has(name)) args.set(name, value);
 						}
 					}
-					if (args.size > 0) {
+					// Checked again: a later hook may have bound one of them itself meanwhile.
+					const unset = [...args].filter(([name]) => {
+						const source = bound.sources.args[name];
+						return source === undefined || source === "default";
+					});
+					if (unset.length > 0) {
 						bound = bindStructuredInput(
 							resolvedNode,
 							bound,
-							{ args: Object.fromEntries(args) },
+							{ args: Object.fromEntries(unset) },
 							true,
 						);
 					}

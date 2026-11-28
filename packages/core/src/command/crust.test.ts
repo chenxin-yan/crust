@@ -1414,6 +1414,23 @@ describe("Extension named hooks", () => {
 			expect(await gap.run([])).toMatchObject({ status: "failed" });
 		});
 
+		it("keeps a positional a later hook binds itself, whichever is listed first", async () => {
+			const stored = supplying("stored", { args: { src: "stored" } });
+			const direct = defineExtension("direct").defaults((ctx) => {
+				ctx.bindText({ args: { src: "direct" } });
+			});
+			for (const extensions of [
+				[stored, direct],
+				[direct, stored],
+			]) {
+				const app = new Crust("copy")
+					.args({ name: "src", type: "string" })
+					.extend(...extensions)
+					.action(({ args }) => args);
+				expect(await app.run([])).toMatchObject({ result: { src: "direct" } });
+			}
+		});
+
 		it("keeps the first listed of two Extensions that supply one value", async () => {
 			const profile = supplying("profile", { flags: { region: "eu", label: "profile" } });
 			const lastUsed = supplying("last-used", { flags: { region: "ap", replicas: 5 } });
