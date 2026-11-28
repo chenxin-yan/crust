@@ -33,11 +33,11 @@ export type EnvVarsDef = Record<string, EnvVarDef>;
 
 export interface EnvOptions {
 	/** Variables to read at first `ctx.<name>` access; defaults to `process.env`. Only own properties count. */
-	readonly source?: Readonly<Record<string, string | undefined>>;
+	readonly source?: Readonly<Record<string, string | undefined>> | undefined;
 	/** Return declared variables as raw `string | undefined`: no coercion, defaults, requiredness, or schemas. */
-	readonly skipValidation?: boolean;
+	readonly skipValidation?: boolean | undefined;
 	/** Treat `""` as unset (default `false`, which keeps `""` as a value). */
-	readonly emptyStringAsUndefined?: boolean;
+	readonly emptyStringAsUndefined?: boolean | undefined;
 }
 
 /** Validated values, inferred exactly as the equivalent flags would be (`InferFlags`), read-only. */

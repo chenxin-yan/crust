@@ -17,7 +17,7 @@ import {
 } from "@crustjs/utils/process";
 
 export type BoundedProcessOptions = {
-	cwd?: string;
+	cwd?: string | undefined;
 	env?: NodeJS.ProcessEnv;
 	/** Milliseconds before process-tree cleanup; Windows requires a live parent. */
 	timeout: number;

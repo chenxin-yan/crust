@@ -5,14 +5,5 @@ import { libraryTasks, pack, testTags } from "../../vite.shared.ts";
 export default defineConfig({
 	test: { tags: testTags },
 	pack,
-	run: {
-		tasks: {
-			...libraryTasks,
-			"check:types:task": {
-				...libraryTasks["check:types:task"],
-				// Also check the consumer fixture under `exactOptionalPropertyTypes`.
-				command: "tsc --noEmit && tsc --noEmit -p tsconfig.exact.json",
-			},
-		},
-	},
+	run: { tasks: libraryTasks },
 });

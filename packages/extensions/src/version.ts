@@ -19,14 +19,16 @@ export interface VersionOptions {
 	 *
 	 * @default `${rootName} v${version}`
 	 */
-	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
+	readonly format?:
+		| ("plain" | ((version: string, context: ExtensionContext) => string))
+		| undefined;
 	/**
 	 * Short spelling of `--version`: `"V"` where the application uses `-v` for
 	 * something else, such as `--verbose`, or `false` for none.
 	 *
 	 * @default "v"
 	 */
-	readonly short?: "v" | "V" | false;
+	readonly short?: "v" | "V" | false | undefined;
 }
 
 const versionFlag = {

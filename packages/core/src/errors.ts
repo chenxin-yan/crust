@@ -94,19 +94,19 @@ export interface ParseErrorDetails {
 	 * leading dashes (`--nope` and `-x` report `"nope"` and `"x"`); for
 	 * `"missing-value"` and `"unexpected-value"` it is the canonical flag name.
 	 */
-	readonly flag?: string;
+	readonly flag?: string | undefined;
 	/** The offending argument name, for `"positional-gap"` and `"unknown-argument"`. */
-	readonly argument?: string;
+	readonly argument?: string | undefined;
 	/** Open so other packages can add reasons; `string & {}` keeps Core's literals in autocomplete. */
-	readonly reason?: ParseErrorReason | (string & {});
+	readonly reason?: ParseErrorReason | (string & {}) | undefined;
 }
 
 /** Details for runtime recipe, Extension, Context, and documentation failures. */
 export interface DefinitionErrorDetails {
-	readonly subject?: "command" | "context" | "extension" | "flag" | "argument";
-	readonly name?: string;
+	readonly subject?: "command" | "context" | "extension" | "flag" | "argument" | undefined;
+	readonly name?: string | undefined;
 	/** Open so other packages can add reasons; `string & {}` keeps Core's literals in autocomplete. */
-	readonly reason?: DefinitionErrorReason | (string & {});
+	readonly reason?: DefinitionErrorReason | (string & {}) | undefined;
 }
 
 /** One environment variable that failed; its value is never recorded. */

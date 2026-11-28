@@ -90,7 +90,11 @@ const BOOLEAN_WORDS = "true, false, 1, 0, yes, no, on, off";
  * and environment text is read by {@link coerceValue} first.
  */
 export function checkNumber(
-	def: { readonly type?: string; readonly min?: number; readonly max?: number },
+	def: {
+		readonly type?: string | undefined;
+		readonly min?: number | undefined;
+		readonly max?: number | undefined;
+	},
 	value: number,
 	label: string,
 ): number {

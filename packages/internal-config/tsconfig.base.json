@@ -14,6 +14,7 @@
 		// tsdown's per-file oxc declaration emit requires isolatedDeclarations.
 		"isolatedDeclarations": true,
 		"strict": true,
+		"exactOptionalPropertyTypes": true,
 		"skipLibCheck": true,
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedIndexedAccess": true,

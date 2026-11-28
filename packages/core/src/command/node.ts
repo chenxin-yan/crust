@@ -56,9 +56,9 @@ export interface CommandNode {
 	/** Prepared nodes only: the Extension declaring each Extension flag in {@link effectiveFlags}. */
 	extensionFlags?: ReadonlyMap<string, ExtensionId>;
 	/** Prepared root only: its `recursive: false` Extension flags, which documentation lists as its own. */
-	rootOnlyFlags?: ReadonlySet<string>;
+	rootOnlyFlags?: ReadonlySet<string> | undefined;
 	/** Prepared nodes only: the Extension that contributed this command or its top-level ancestor. */
-	extension?: ExtensionId;
+	extension?: ExtensionId | undefined;
 	/** Cached canonical/short/alias table for the effective flags. */
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
@@ -69,7 +69,7 @@ export interface CommandNode {
 	 */
 	subCommands: Record<string, CommandNode>;
 	/** Builder-stage children from `.add()` and `.command()`, newest first; cleared when the node is materialized or prepared. */
-	addedChildren?: AddedChild;
+	addedChildren?: AddedChild | undefined;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];
 	/** Contexts `.provide()`d on this command itself; preparation installs their sections here. */
@@ -91,7 +91,7 @@ export interface CommandNode {
 	 */
 	extensionPositions?: ReadonlyMap<ExtensionId, number>;
 	/** The Command Action */
-	run?: CommandAction;
+	run?: CommandAction | undefined;
 	/** Schema from `.output()` that validates and transforms the action result */
 	outputSchema?: StandardSchema;
 	/** Documentation headings from `.group()`, in code order */
@@ -359,11 +359,11 @@ function sameDefinition(a: unknown, b: unknown): boolean {
 		return Array.isArray(b) && a.length === b.length && a.every((v, i) => sameDefinition(v, b[i]));
 	}
 	if (!isPlainObject(a) || !isPlainObject(b)) return false;
-	const keys = Object.keys(a);
-	return (
-		keys.length === Object.keys(b).length &&
-		keys.every((key) => Object.hasOwn(b, key) && sameDefinition(a[key], b[key]))
-	);
+	// A key holding `undefined` is an absent key: a definition accepts either.
+	const held = (object: Record<string, unknown>) =>
+		Object.keys(object).filter((key) => object[key] !== undefined);
+	const keys = held(a);
+	return keys.length === held(b).length && keys.every((key) => sameDefinition(a[key], b[key]));
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -410,7 +410,7 @@ export interface ChildEntry {
 	/** Materializes the child once; a throwing recipe throws again on the next call. */
 	readonly resolve: () => CommandNode;
 	/** The definition `.add()` or an Extension contributed the child from. */
-	readonly definition?: CommandDefinition;
+	readonly definition?: CommandDefinition | undefined;
 }
 
 /** The node's children in insertion order, without materializing pending ones. */

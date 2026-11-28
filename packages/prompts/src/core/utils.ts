@@ -182,7 +182,7 @@ export function validateSelection(
 export interface NormalizedChoice<T> {
 	readonly label: string;
 	readonly value: T;
-	readonly hint?: string;
+	readonly hint?: string | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

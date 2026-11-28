@@ -216,11 +216,11 @@ interface ArgChoiceEntry {
 	 */
 	bySlot: ReadonlyArray<SlotValues | undefined>;
 	/** Slot index from which `variadicValues` applies, or `undefined`. */
-	variadicFrom?: number;
+	variadicFrom?: number | undefined;
 	/** Candidates of the variadic tail. */
-	variadicValues?: SlotValues;
+	variadicValues?: SlotValues | undefined;
 	/** Slot of an `"afterDoubleDash"` argument; a fixed slot, though variadic. */
-	ddSlot?: number;
+	ddSlot?: number | undefined;
 }
 
 /**
@@ -234,9 +234,9 @@ interface ArgSuppressEntry {
 	/** Fixed-slot suppression indices. */
 	slots: ReadonlyArray<number>;
 	/** Slot index from which variadic suppression applies, or `undefined`. */
-	variadicFrom?: number;
+	variadicFrom?: number | undefined;
 	/** Slot of an `"afterDoubleDash"` argument, as in {@link ArgChoiceEntry}. */
-	ddSlot?: number;
+	ddSlot?: number | undefined;
 }
 
 /**

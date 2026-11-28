@@ -1,5 +1,4 @@
-import type { TerminalIO } from "../core/renderer.ts";
-import { createPromptIO } from "../testing.ts";
+import { createPromptIO, type PromptTestIO } from "../testing.ts";
 
 /**
  * Wait until the prompt has handled all input written so far and drawn the resulting frame.
@@ -16,7 +15,7 @@ export async function tick(): Promise<void> {
 	await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-export function nonTTYIO(): Required<Pick<TerminalIO, "input" | "output">> {
+export function nonTTYIO(): PromptTestIO["io"] {
 	return createPromptIO({ isTTY: false }).io;
 }
 

@@ -1,4 +1,4 @@
-// Compiled by `tsconfig.exact.json` with `exactOptionalPropertyTypes`, as a consumer would:
+// Compiled with `exactOptionalPropertyTypes` (on in the shared tsconfig), as a consumer would:
 // every app `execute()` accepts is one `captureExecute()` accepts.
 import { Crust } from "@crustjs/core";
 

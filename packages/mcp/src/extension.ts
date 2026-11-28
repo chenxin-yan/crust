@@ -20,7 +20,7 @@ declare module "@crustjs/core" {
 		 * Read only by `mcp()`: `false` keeps the command and everything under it out of the MCP
 		 * tools; an object's hints become the tool's `annotations`.
 		 */
-		mcp?: false | McpToolAnnotations;
+		mcp?: false | McpToolAnnotations | undefined;
 	}
 }
 
@@ -31,7 +31,7 @@ export type McpClient = (typeof MCP_CLIENTS)[number];
 
 export interface McpExtensionOptions extends McpServerOptions {
 	/** Explicit client launch, including `mcp`; use for custom runtime setup. */
-	readonly launch?: McpLaunch;
+	readonly launch?: McpLaunch | undefined;
 }
 
 /** How an MCP client starts this CLI: the executable plus all arguments, including `mcp`. */

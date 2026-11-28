@@ -251,7 +251,9 @@ function _fluentInference() {
 		void options;
 		return extension;
 	});
-	type _optionalArgs = Expect<Equal<Parameters<typeof optional>, [options?: { a?: 1 }]>>;
+	type _optionalArgs = Expect<
+		Equal<Parameters<typeof optional>, [options?: { a?: 1 } | undefined]>
+	>;
 	optional();
 	const flags = { label: { type: "string" } } as const;
 	const annotated: ExtensionFactory<[label: string], {}, [], typeof flags> = defineExtension(
@@ -339,6 +341,12 @@ function _handleCallbacks() {
 	});
 	// @ts-expect-error Cleanup is registered with `defer`, not returned.
 	owned.setup(() => () => {});
+	// A `default` holding `undefined` is no default: hooks run before a missing flag is reported.
+	defineExtension(ID)
+		.flags({ quiet: { type: "boolean", required: true, default: undefined } })
+		.setup(({ flags }) => {
+			type _quiet = Expect<Equal<typeof flags.quiet, boolean | undefined>>;
+		});
 }
 
 function _postRunOutcome() {

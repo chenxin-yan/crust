@@ -686,6 +686,7 @@ describe("store.patch", () => {
 				optional: { schema: z.string().optional() },
 			},
 		});
+		// @ts-expect-error -- runtime regression for input the types reject.
 		await expect(store.patch({ enabled: undefined })).rejects.toMatchObject({
 			code: "VALIDATION",
 			details: { operation: "patch", issues: [{ path: "enabled" }] },
@@ -707,6 +708,7 @@ describe("store.patch", () => {
 			name: "required",
 			fields: { token: { schema: z.string() } },
 		});
+		// @ts-expect-error -- runtime regression for input the types reject.
 		await expect(required.patch({ token: undefined })).rejects.toMatchObject({
 			code: "VALIDATION",
 		});

@@ -431,9 +431,9 @@ async function installSkills(opts: {
 	scope: Scope;
 	installAll: boolean;
 	/** From `--agent`: skips the agent prompt and conflict confirmations. */
-	agents?: readonly AgentTarget[];
+	agents?: readonly AgentTarget[] | undefined;
 	/** From `--skill`: skips the skill prompt. */
-	skills?: readonly string[];
+	skills?: readonly string[] | undefined;
 	io: SkillIO;
 }): Promise<void> {
 	const { installAll, io } = opts;
@@ -590,7 +590,7 @@ async function uninstallSkills(opts: {
 	scope: Scope;
 	removeAll: boolean;
 	/** From `--skill`: skips the skill prompt. */
-	skills?: readonly string[];
+	skills?: readonly string[] | undefined;
 	io: SkillIO;
 }): Promise<void> {
 	const { removeAll, skills: namedSkills, io } = opts;
@@ -668,7 +668,12 @@ const INSTALL_FLAGS = {
 } as const;
 
 type SkillActionContext = SkillIO & {
-	flags: { scope?: Scope; all?: boolean; agent?: readonly string[]; skill?: readonly string[] };
+	flags: {
+		scope?: Scope | undefined;
+		all?: boolean | undefined;
+		agent?: readonly string[] | undefined;
+		skill?: readonly string[] | undefined;
+	};
 };
 
 function buildSkillCommand(commandName: string, options: SkillOptions) {

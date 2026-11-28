@@ -61,7 +61,9 @@ function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 	type LocalInput = RunInput<
 		CommandShapeAt<(typeof addedThenExtended)["_types"]["shape"], readonly ["local"]>
 	>;
-	type _addedCommandFlags = Expect<Equal<NonNullable<LocalInput["flags"]>, { trace?: boolean }>>;
+	type _addedCommandFlags = Expect<
+		Equal<NonNullable<LocalInput["flags"]>, { trace?: boolean | undefined }>
+	>;
 
 	const tools = defineExtension(defineExtensionId("tools")).add(
 		defineCommand("inspect", (command) => command.action(() => {})),
@@ -71,7 +73,7 @@ function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 		CommandShapeAt<(typeof extendedTwice)["_types"]["shape"], readonly ["inspect"]>
 	>;
 	type _extensionCommandFlags = Expect<
-		Equal<NonNullable<InspectInput["flags"]>, { trace?: boolean }>
+		Equal<NonNullable<InspectInput["flags"]>, { trace?: boolean | undefined }>
 	>;
 }
 

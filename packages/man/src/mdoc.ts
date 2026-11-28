@@ -49,7 +49,7 @@ function flagLabel(flag: DocumentationFlag): string {
 	return flag.spellings.join(", ") + value + repeats(flag);
 }
 /** Entries by `.group()` heading, in first-seen order; ungrouped ones under `undefined`. */
-function byHeading<T extends { readonly heading?: string }>(
+function byHeading<T extends { readonly heading?: string | undefined }>(
 	entries: readonly T[],
 ): Map<string | undefined, T[]> {
 	const groups = new Map<string | undefined, T[]>();
@@ -83,15 +83,15 @@ export interface RenderManPageMdocOptions {
 	 *
 	 * @default [] (the root's page)
 	 */
-	path?: readonly string[];
+	path?: readonly string[] | undefined;
 	/**
 	 * Manual section.
 	 *
 	 * @default 1
 	 */
-	section?: number;
+	section?: number | undefined;
 	/** Overrides `.Dd`; otherwise `SOURCE_DATE_EPOCH` (UTC), then today's local date. */
-	date?: string;
+	date?: string | undefined;
 }
 
 /** A command's manual page name: its full path joined with `-`, as `git-commit` for `git commit`. */

@@ -16,32 +16,36 @@ export interface OperationOverride<
 	Op = unknown,
 > extends CommandExtras {
 	/** Leaves the operation out. Default: the operation's `deprecated`. */
-	readonly exclude?: boolean;
+	readonly exclude?: boolean | undefined;
 	/** A group path as typed on the command line, such as `"dns records"`; `""` is the root. Default: the first tag in kebab case, else `""`. */
-	readonly group?: string;
+	readonly group?: string | undefined;
 	/** Default: the operationId in kebab case, without a leading `<group>-`. */
-	readonly name?: string;
-	readonly hidden?: boolean;
+	readonly name?: string | undefined;
+	readonly hidden?: boolean | undefined;
 	/** Default: the operation's summary. */
-	readonly description?: string;
+	readonly description?: string | undefined;
 	/** Flag or argument names, by the spec's parameter or top-level body field name. Default: the name in kebab case. */
-	readonly flagName?: { readonly [Name in InputNamesOf<Op>]?: string };
+	readonly flagName?: { readonly [Name in InputNamesOf<Op>]?: string | undefined } | undefined;
 	/** Parameters that become positional arguments, in order. Default: the path parameters in template order. */
-	readonly positional?: readonly ParamNamesOf<Op>[];
+	readonly positional?: readonly ParamNamesOf<Op>[] | undefined;
 	/** Parameters or top-level body fields the command fills itself, with no input. Called before each request. */
-	readonly bind?: {
-		readonly [Name in InputNamesOf<Op>]?: (ctx: ContextBag<Deps>) => string | Promise<string>;
-	};
+	readonly bind?:
+		| {
+				readonly [Name in InputNamesOf<Op>]?:
+					| ((ctx: ContextBag<Deps>) => string | Promise<string>)
+					| undefined;
+		  }
+		| undefined;
 	/** The message `.onConfirm()` gets before each request. Without `.onConfirm()`, the operation is left out. */
-	readonly confirm?: string | false;
+	readonly confirm?: string | false | undefined;
 	/** The next page's request for `--paginate`, or `undefined` after the last page. Default: `defineApi`'s `paginate`. */
-	readonly paginate?: (
-		response: Response,
-	) => ApiRequest | undefined | Promise<ApiRequest | undefined>;
+	readonly paginate?:
+		| ((response: Response) => ApiRequest | undefined | Promise<ApiRequest | undefined>)
+		| undefined;
 	/** The command's result from the response body, such as `(body) => (body as { result: unknown }).result`. */
-	readonly unwrap?: (body: unknown, response: Response) => unknown;
+	readonly unwrap?: ((body: unknown, response: Response) => unknown) | undefined;
 	/** The JSON Schema of the result after `unwrap`; without it, an `unwrap`ped command advertises no output schema. */
-	readonly outputSchema?: JsonSchema;
+	readonly outputSchema?: JsonSchema | undefined;
 }
 
 /** An `.override()` entry: an {@link OperationOverride} and the method and path it was written for. */
@@ -50,7 +54,7 @@ export type OverrideEntry<Deps extends ContextMap = {}, Op = unknown> = Operatio
 	Op
 > & {
 	/** Checked by `crust build`: an operation that moved fails it (`override-stale`). */
-	readonly expect?: { readonly method: string; readonly path: string };
+	readonly expect?: { readonly method: string; readonly path: string } | undefined;
 };
 
 /** The fields the generator reads; an override's other keys are a package's command keys. */

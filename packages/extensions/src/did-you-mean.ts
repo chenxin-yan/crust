@@ -20,7 +20,7 @@ export interface DidYouMeanOptions {
 	 *
 	 * @default "error"
 	 */
-	mode?: "error" | "help";
+	mode?: "error" | "help" | undefined;
 }
 
 /**

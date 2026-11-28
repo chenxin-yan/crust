@@ -377,7 +377,7 @@ describe(".auth() reads the Contexts .use()d before it", () => {
 
 	/** The `--profile` flag's Context, which `auth` reads; `setup` counts its set-ups. */
 	function profileContext() {
-		const setup = vi.fn(({ flags }: { flags: { profile?: string } }) => flags.profile);
+		const setup = vi.fn(({ flags }: { flags: { profile?: string | undefined } }) => flags.profile);
 		const profile = defineContext("profile")
 			.flags({ profile: { type: "string", description: "Account to use" } })
 			.setup(setup);

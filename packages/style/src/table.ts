@@ -23,14 +23,14 @@ export interface TableOptions {
 	 * remaining columns default to `"left"`. If omitted, all columns are
 	 * left-aligned.
 	 */
-	align?: readonly ColumnAlignment[];
+	align?: readonly ColumnAlignment[] | undefined;
 	/**
 	 * Draw `|` borders and a separator row under the headers. With `false`, columns are separated
 	 * by two spaces and lines end without padding, like `docker ps`.
 	 *
 	 * @default true
 	 */
-	border?: boolean;
+	border?: boolean | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

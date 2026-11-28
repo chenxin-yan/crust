@@ -12,21 +12,21 @@ export interface AuthServerOptions {
 	 * Only for servers that insist on one. A secret shipped inside a CLI is not confidential
 	 * and does not make the client confidential.
 	 */
-	clientSecret?: string;
+	clientSecret?: string | undefined;
 	/**
 	 * Loopback callback path registered with this server only, such as `/acme/callback`: plain
 	 * ASCII a browser sends unchanged (no `%`, query, fragment, dot or empty segments).
 	 * Unique among `servers`; with several servers it protects a server that sends no `iss`.
 	 * Defaults to `/callback`.
 	 */
-	redirectPath?: string;
+	redirectPath?: string | undefined;
 	/**
 	 * Development only: allow plain `http` when the issuer is `http://127.0.0.1:<port>` or
 	 * `http://[::1]:<port>` and every endpoint and verification URL is on that same origin.
 	 * Set it in code; nothing reads it from the environment.
 	 * @default false
 	 */
-	allowInsecureLoopback?: boolean;
+	allowInsecureLoopback?: boolean | undefined;
 }
 
 /** Options of `defineServers()`. */
@@ -38,7 +38,7 @@ export interface DefineServersOptions {
 	 * multi-server: every server must then send `iss` or use its own `redirectPath`.
 	 * @default false
 	 */
-	allowCustomIssuers?: boolean;
+	allowCustomIssuers?: boolean | undefined;
 }
 
 /** A declared server as kept in {@link AuthConfig}. The client secret is held privately. */
@@ -87,10 +87,10 @@ export interface AuthServer {
 
 /** Options of `discover()`. */
 export interface DiscoverOptions {
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 	/** Use this client id instead of the declared one. Required for a custom issuer. */
-	clientId?: string;
-	fetch?: Fetch;
+	clientId?: string | undefined;
+	fetch?: Fetch | undefined;
 }
 
 /**
@@ -114,19 +114,19 @@ export interface AuthorizationSessionOptions {
 	 * URI for each one you list.
 	 * @default ["127.0.0.1"]
 	 */
-	hosts?: readonly ("127.0.0.1" | "::1")[];
+	hosts?: readonly ("127.0.0.1" | "::1")[] | undefined;
 	/**
 	 * Ports to try in order. `0` picks a free port, which every compliant server accepts.
 	 * @default [0]
 	 */
-	ports?: readonly number[];
+	ports?: readonly number[] | undefined;
 	/** Space-separated scopes. Omitted from the request when unset. */
-	scope?: string;
+	scope?: string | undefined;
 	/** RFC 8707 resource indicators: absolute URIs without a fragment. */
-	resource?: string | readonly string[];
+	resource?: string | readonly string[] | undefined;
 	/** Extra authorization request parameters. Library-managed names are refused. */
-	extra?: Readonly<Record<string, string>>;
-	signal?: AbortSignal;
+	extra?: Readonly<Record<string, string>> | undefined;
+	signal?: AbortSignal | undefined;
 }
 
 /** What a custom result page receives: never a code, URL or server text. */
@@ -139,10 +139,10 @@ export interface CallbackPageView {
 /** Options of `AuthorizationSession.wait()`. */
 export interface WaitOptions {
 	/** @default 300000 (5 minutes) */
-	timeoutMs?: number;
-	signal?: AbortSignal;
+	timeoutMs?: number | undefined;
+	signal?: AbortSignal | undefined;
 	/** Renders the browser result page; the library sets every header. A throw serves the default page. */
-	page?: (view: CallbackPageView) => string;
+	page?: ((view: CallbackPageView) => string) | undefined;
 }
 
 /** One browser login: a loopback listener, `state`, PKCE and the issuer, frozen together. */
@@ -176,15 +176,15 @@ export interface DeviceFlow {
 	/** Epoch milliseconds after which the code is no longer valid. */
 	readonly expiresAt: number;
 	/** Polls the token endpoint until the user approves, denies or the code expires. Call once. */
-	poll(options?: { signal?: AbortSignal }): Promise<TokenSet>;
+	poll(options?: { signal?: AbortSignal | undefined }): Promise<TokenSet>;
 }
 
 /** Options of `startDeviceFlow()`. */
 export interface DeviceFlowOptions {
-	scope?: string;
-	resource?: string | readonly string[];
-	signal?: AbortSignal;
-	fetch?: Fetch;
+	scope?: string | undefined;
+	resource?: string | readonly string[] | undefined;
+	signal?: AbortSignal | undefined;
+	fetch?: Fetch | undefined;
 }
 
 /** The token endpoint client of one server. */
@@ -193,36 +193,43 @@ export interface TokenClient {
 	exchangeCode(
 		session: AuthorizationSession,
 		code: string,
-		options?: { signal?: AbortSignal },
+		options?: { signal?: AbortSignal | undefined },
 	): Promise<TokenSet>;
 	/** Sends a refresh-token grant. */
 	refresh(
 		refreshToken: string,
-		options?: { scope?: string; resource?: string | readonly string[]; signal?: AbortSignal },
+		options?: {
+			scope?: string | undefined;
+			resource?: string | readonly string[] | undefined;
+			signal?: AbortSignal | undefined;
+		},
 	): Promise<TokenSet>;
 	/** Revokes a token (RFC 7009). HTTP 200 is success whatever the body says. */
 	revoke(
 		token: string,
-		options?: { tokenTypeHint?: "refresh_token" | "access_token"; signal?: AbortSignal },
+		options?: {
+			tokenTypeHint?: "refresh_token" | "access_token" | undefined;
+			signal?: AbortSignal | undefined;
+		},
 	): Promise<void>;
 }
 
 /** Input of `detectLoginMode()`. */
 export interface LoginModeOptions {
 	/** The user passed `--device`. */
-	device?: boolean;
+	device?: boolean | undefined;
 	/** The user passed `--no-browser`. */
-	noBrowser?: boolean;
+	noBrowser?: boolean | undefined;
 	/** @default process.env */
-	env?: Readonly<Record<string, string | undefined>>;
+	env?: Readonly<Record<string, string | undefined>> | undefined;
 	/** @default process.platform */
-	platform?: string;
+	platform?: string | undefined;
 	/** @default process.stdin */
-	stdin?: { readonly isTTY?: boolean };
+	stdin?: { readonly isTTY?: boolean | undefined } | undefined;
 	/** @default process.stdout */
-	stdout?: { readonly isTTY?: boolean };
+	stdout?: { readonly isTTY?: boolean | undefined } | undefined;
 	/** @default process.stderr */
-	stderr?: { readonly isTTY?: boolean };
+	stderr?: { readonly isTTY?: boolean | undefined } | undefined;
 }
 
 /** Which login to run: a loopback browser login, a device-code login, or none. */
@@ -245,33 +252,33 @@ export interface CreateAuthOptions extends AuthServerOptions {
 	 * An environment variable, such as `ACME_TOKEN`, whose value (trimmed) wins over the stored
 	 * login when it is not blank.
 	 */
-	env?: string;
+	env?: string | undefined;
 	/** Space-separated scopes every login asks for. Omitted from the request when unset. */
-	scope?: string;
+	scope?: string | undefined;
 	/**
 	 * RFC 8707 resource indicators every login asks tokens for, such as your API's URI:
 	 * absolute URIs without a fragment. Omitted from the request when unset.
 	 */
-	resource?: string | readonly string[];
+	resource?: string | readonly string[] | undefined;
 	/** The name the device-login message shows. @default app */
-	name?: string;
+	name?: string | undefined;
 	/** Loopback addresses the browser login tries in order. @default ["127.0.0.1"] */
-	hosts?: AuthorizationSessionOptions["hosts"];
+	hosts?: AuthorizationSessionOptions["hosts"] | undefined;
 	/** Loopback ports the browser login tries in order; `0` picks a free one. @default [0] */
-	ports?: AuthorizationSessionOptions["ports"];
+	ports?: AuthorizationSessionOptions["ports"] | undefined;
 	/** The `fetch` used for every request to the server. @default globalThis.fetch */
-	fetch?: Fetch;
+	fetch?: Fetch | undefined;
 	/**
 	 * Refuse to store a login without an OS keyring, with `CredentialKeyError` (`unavailable`),
 	 * instead of storing its tokens in plaintext.
 	 * @default false
 	 */
-	strict?: boolean;
+	strict?: boolean | undefined;
 	/**
 	 * Turns on profiles: named logins, such as a work account and a personal one. The client then
 	 * has `profile(name)` and `profiles`. `{}` is enough.
 	 */
-	profiles?: ProfilesOptions;
+	profiles?: ProfilesOptions | undefined;
 }
 
 /** Options of `profiles` in `createAuth()`. */
@@ -281,7 +288,7 @@ export interface ProfilesOptions {
 	 * profile when it is not blank. Read at each call; it wins over the profile last logged in to
 	 * or chosen with `profiles.use()`.
 	 */
-	env?: string;
+	env?: string | undefined;
 }
 
 /**
@@ -320,18 +327,18 @@ export interface LoginOptions {
 	 * always run that one, even on CI, such as for a `--device` or `--web` flag.
 	 * @default "auto"
 	 */
-	flow?: "auto" | "device" | "browser";
-	signal?: AbortSignal;
+	flow?: "auto" | "device" | "browser" | undefined;
+	signal?: AbortSignal | undefined;
 	/** Replaces the configured `scope` for this login. */
-	scope?: string;
+	scope?: string | undefined;
 	/** Shows the authorization URL of a browser login, and may open it. */
 	onUrl: (prompt: BrowserLoginPrompt) => void | Promise<void>;
 	/** Shows the code of a device login. */
 	onCode: (prompt: DeviceLoginPrompt) => void | Promise<void>;
 	/** Renders the browser result page; a throw serves the default page. */
-	page?: (view: CallbackPageView) => string;
+	page?: ((view: CallbackPageView) => string) | undefined;
 	/** Receives what you may want to tell the user, such as this login stored in plaintext. */
-	onWarning?: (warning: AuthWarning) => void;
+	onWarning?: ((warning: AuthWarning) => void) | undefined;
 }
 
 /** Options of `login()` on a client with `profiles`. */
@@ -341,16 +348,16 @@ export interface ProfileLoginOptions extends LoginOptions {
 	 * new tokens after sign-in, such as to ask your API for the account name, and returns the
 	 * name; nothing is stored when it throws or returns an invalid name.
 	 */
-	profile?: string | ((tokens: TokenSet) => string | Promise<string>);
+	profile?: (string | ((tokens: TokenSet) => string | Promise<string>)) | undefined;
 }
 
 /** Options of `token()`. */
 export interface TokenOptions {
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 	/** The API URL the token is for: the stored login's token is returned only for `apiOrigins`. */
-	baseUrl?: string;
+	baseUrl?: string | undefined;
 	/** Receives what you may want to tell the user, such as a refreshed login stored in plaintext. */
-	onWarning?: (warning: AuthWarning) => void;
+	onWarning?: ((warning: AuthWarning) => void) | undefined;
 }
 
 /** The token `token()` returns. Its `value` prints as `[Redacted]`. */
@@ -359,16 +366,16 @@ export interface AuthToken {
 	/** `"env"`: the `env` variable; `"login"`: the stored login. */
 	readonly source: "env" | "login";
 	/** Only for the stored login: refreshes it unless it already changed (for a 401). */
-	readonly refresh?: (options: { signal?: AbortSignal }) => Promise<AuthToken>;
+	readonly refresh?: (options: { signal?: AbortSignal | undefined }) => Promise<AuthToken>;
 }
 
 /** What `status()` reports, read without a request, a refresh or a lock. */
 export interface AuthStatus {
 	readonly source: "env" | "login" | "none";
 	/** The stored login's expiry, in epoch milliseconds, when the server sent one. */
-	readonly expiresAt?: number;
+	readonly expiresAt?: number | undefined;
 	/** The scope the server granted the stored login. */
-	readonly scope?: string;
+	readonly scope?: string | undefined;
 	/** Where stored logins are kept; absent for `"env"`, which reads no file or keyring. */
 	readonly storage?: {
 		/** The OS keyring holding the file's key, or `"file"` when tokens are stored in plaintext. */
@@ -412,7 +419,7 @@ export interface AuthClient {
 	 */
 	readonly status: () => Promise<AuthStatus>;
 	/** Deletes the stored login, then revokes it at the server as a best effort. */
-	readonly logout: (options?: { signal?: AbortSignal }) => Promise<LogoutResult>;
+	readonly logout: (options?: { signal?: AbortSignal | undefined }) => Promise<LogoutResult>;
 }
 
 /** A profile `profiles.list()` reports. */
@@ -452,7 +459,7 @@ export interface ProfileAuthClient extends ProfileClient {
 		 * Remembers `name` as the current profile. A profile without a stored login →
 		 * `LoginRequiredError`. Its logout forgets it again.
 		 */
-		readonly use: (name: string, options?: { signal?: AbortSignal }) => Promise<void>;
+		readonly use: (name: string, options?: { signal?: AbortSignal | undefined }) => Promise<void>;
 	};
 }
 
@@ -464,18 +471,18 @@ export interface CredentialStoreOptions {
 	 * File name without `.json`.
 	 * @default "credentials"
 	 */
-	name?: string;
+	name?: string | undefined;
 	/**
 	 * Milliseconds to wait for a lock held by another process before failing with
 	 * `LockTimeoutError` or `LockRecoveryRequiredError`.
 	 * @default 40000
 	 */
-	lockTimeout?: number;
+	lockTimeout?: number | undefined;
 	/**
 	 * Encrypt the tokens with a key kept in the OS keyring. Without this option, tokens are
 	 * stored in plaintext and no keyring is used.
 	 */
-	keyring?: KeyringOptions;
+	keyring?: KeyringOptions | undefined;
 }
 
 /** Options of the OS keyring that keeps the credentials file's key. */
@@ -485,9 +492,9 @@ export interface KeyringOptions {
 	 * storing it in plaintext.
 	 * @default false
 	 */
-	strict?: boolean;
+	strict?: boolean | undefined;
 	/** Called once per process when a secret is stored in plaintext for want of a keyring. */
-	onWarning?: (warning: AuthWarning) => void;
+	onWarning?: ((warning: AuthWarning) => void) | undefined;
 }
 
 /** Where a credentials file's secrets are, as `status()` reports it. */
@@ -510,13 +517,16 @@ export interface CredentialStore {
 	/** Absolute path of the file. */
 	readonly path: string;
 	/** Where the file's secrets are. Reads the file and the keyring (within 5 seconds); never writes. */
-	status(options?: { signal?: AbortSignal }): Promise<CredentialStoreStatus>;
+	status(options?: { signal?: AbortSignal | undefined }): Promise<CredentialStoreStatus>;
 	/**
 	 * Without `key`, deletes the file (a corrupt one too) and every login in it. Copy the file
 	 * first to keep it. With `key` (a token source's `key`), replaces that credential with a
 	 * logged-out record. Waiting for the lock is cancellable; the delete or write is not.
 	 */
-	resetCredentials(options?: { key?: string; signal?: AbortSignal }): Promise<void>;
+	resetCredentials(options?: {
+		key?: string | undefined;
+		signal?: AbortSignal | undefined;
+	}): Promise<void>;
 }
 
 /** Which login a token source reads and writes: stored with the tokens and checked on every use. */
@@ -525,7 +535,7 @@ export interface CredentialIdentity {
 	issuer: string;
 	clientId: string;
 	/** @default "default" */
-	profile?: string;
+	profile?: string | undefined;
 	/**
 	 * The API origins the token may be sent to, such as `["https://api.example.com"]`: `https`
 	 * (plain `http` only on a development server's origin). Set them in code, never from env.
@@ -542,8 +552,8 @@ export interface TokenSourceOptions {
 	 * Refresh this many milliseconds before the access token expires.
 	 * @default 30000
 	 */
-	skewMs?: number;
-	fetch?: Fetch;
+	skewMs?: number | undefined;
+	fetch?: Fetch | undefined;
 }
 
 /** An access token and the generation of the credential it came from. Prints as `[Redacted]`. */
@@ -555,7 +565,10 @@ export interface AccessToken {
 
 /** A stored credential, as committed by a login. Its tokens print as `[Redacted]`. */
 export interface Credential {
-	readonly identity: Readonly<Required<CredentialIdentity>>;
+	// Not `Required<…>`: under `exactOptionalPropertyTypes` it keeps a declared `| undefined`.
+	readonly identity: {
+		readonly [K in keyof CredentialIdentity]-?: Exclude<CredentialIdentity[K], undefined>;
+	};
 	readonly accessToken: string;
 	readonly refreshToken: string | undefined;
 	readonly expiresAt: number | undefined;
@@ -579,7 +592,7 @@ export interface LoginTicket {
 	 */
 	commit(
 		tokens: TokenSet,
-		options?: { resource?: readonly string[]; signal?: AbortSignal },
+		options?: { resource?: readonly string[] | undefined; signal?: AbortSignal | undefined },
 	): Promise<Credential>;
 	/** Finishes the ticket; a commit still waiting for its lock writes nothing. Idempotent. */
 	cancel(): void;
@@ -608,18 +621,21 @@ export interface TokenSource {
 	 * of one credential share one request, across token sources and processes. With `baseUrl`,
 	 * its origin must be one of the credential's `apiOrigins`.
 	 */
-	get(options?: { signal?: AbortSignal; baseUrl?: string }): Promise<AccessToken>;
+	get(options?: {
+		signal?: AbortSignal | undefined;
+		baseUrl?: string | undefined;
+	}): Promise<AccessToken>;
 	/**
 	 * Refreshes now, for a 401. With `ifGeneration`, a credential that changed since that
 	 * generation is returned as is, without a request.
 	 */
 	forceRefresh(options?: {
-		signal?: AbortSignal;
-		ifGeneration?: string;
-		baseUrl?: string;
+		signal?: AbortSignal | undefined;
+		ifGeneration?: string | undefined;
+		baseUrl?: string | undefined;
 	}): Promise<AccessToken>;
 	/** Opens a login. One per credential at a time in a process (`LoginInProgressError`). */
-	beginLogin(options?: { signal?: AbortSignal }): Promise<LoginTicket>;
+	beginLogin(options?: { signal?: AbortSignal | undefined }): Promise<LoginTicket>;
 	/** Logs out locally, then revokes the tokens at the server as a best effort. */
-	logout(options?: { signal?: AbortSignal }): Promise<LogoutResult>;
+	logout(options?: { signal?: AbortSignal | undefined }): Promise<LogoutResult>;
 }

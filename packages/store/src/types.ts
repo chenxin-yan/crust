@@ -43,7 +43,9 @@ interface FieldDefBase<V> {
 	 *
 	 * @param value - The field value to validate.
 	 */
-	validate?: (value: V) => void | Promise<void> | { value: V } | Promise<{ value: V }>;
+	validate?:
+		| ((value: V) => void | Promise<void> | { value: V } | Promise<{ value: V }>)
+		| undefined;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────
@@ -58,16 +60,16 @@ interface ScalarFieldBase<V> extends FieldDefBase<V> {
 interface StringFieldDef extends ScalarFieldBase<string> {
 	type: "string";
 	/** Default string value when the field is not persisted. */
-	default?: string;
+	default?: string | undefined;
 	/** The only values the field accepts; a literal tuple narrows its type to their union. */
-	choices?: readonly string[];
+	choices?: readonly string[] | undefined;
 }
 
 /** A scalar number field. */
 interface NumberFieldDef extends ScalarFieldBase<number> {
 	type: "number";
 	/** Default number value when the field is not persisted. */
-	default?: number;
+	default?: number | undefined;
 	choices?: never;
 }
 
@@ -75,7 +77,7 @@ interface NumberFieldDef extends ScalarFieldBase<number> {
 interface BooleanFieldDef extends ScalarFieldBase<boolean> {
 	type: "boolean";
 	/** Default boolean value when the field is not persisted. */
-	default?: boolean;
+	default?: boolean | undefined;
 	choices?: never;
 }
 
@@ -91,16 +93,16 @@ interface ArrayFieldBase<V> extends FieldDefBase<V> {
 interface StringArrayFieldDef extends ArrayFieldBase<string[]> {
 	type: "string";
 	/** Default string array value when the field is not persisted. */
-	default?: readonly string[];
+	default?: readonly string[] | undefined;
 	/** The only values each item accepts; a literal tuple narrows the item type to their union. */
-	choices?: readonly string[];
+	choices?: readonly string[] | undefined;
 }
 
 /** An array of numbers field. */
 interface NumberArrayFieldDef extends ArrayFieldBase<number[]> {
 	type: "number";
 	/** Default number array value when the field is not persisted. */
-	default?: readonly number[];
+	default?: readonly number[] | undefined;
 	choices?: never;
 }
 
@@ -108,7 +110,7 @@ interface NumberArrayFieldDef extends ArrayFieldBase<number[]> {
 interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 	type: "boolean";
 	/** Default boolean array value when the field is not persisted. */
-	default?: readonly boolean[];
+	default?: readonly boolean[] | undefined;
 	choices?: never;
 }
 
@@ -234,10 +236,10 @@ export interface StoreValidatorIssue {
 /** Explicit Unix permission bits for store persistence. */
 export interface StorePermissionBits {
 	/** Permission bits for the persisted store file (e.g. `0o600`). */
-	file?: number;
+	file?: number | undefined;
 
 	/** Permission bits for the store's parent directory (e.g. `0o700`). */
-	directory?: number;
+	directory?: number | undefined;
 }
 
 /**
@@ -308,7 +310,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 *
 	 * @default JSON, in `<name>.json`
 	 */
-	format?: StoreFormat;
+	format?: StoreFormat | undefined;
 
 	/**
 	 * Field definitions that declare the store's config schema.
@@ -329,7 +331,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 *
 	 * @default false
 	 */
-	pruneUnknown?: boolean;
+	pruneUnknown?: boolean | undefined;
 
 	/**
 	 * Persistence visibility for store writes.
@@ -353,7 +355,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * @example "private"
 	 * @example { file: 0o600, directory: 0o700 }
 	 */
-	access?: StoreAccess;
+	access?: StoreAccess | undefined;
 
 	/**
 	 * For a file that must not lose an update and must stay private, such as credentials.
@@ -372,7 +374,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 *
 	 * @default false
 	 */
-	strict?: boolean;
+	strict?: boolean | undefined;
 
 	/**
 	 * Milliseconds a strict store's mutation waits for the lock before failing with `LOCK`.
@@ -380,7 +382,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 *
 	 * @default 40000
 	 */
-	lockTimeout?: number;
+	lockTimeout?: number | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -394,7 +396,7 @@ export interface StoreMutationOptions {
 	 * its lock: it rejects with `signal.reason` and changes nothing. Not observed once the
 	 * mutation holds the lock.
 	 */
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

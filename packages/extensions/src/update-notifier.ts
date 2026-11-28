@@ -23,8 +23,8 @@ export type UpdateCommandResolver = (info: {
 
 export interface UpdateNotifierState {
 	lastCheckedAt: number;
-	latestVersion?: string;
-	lastNotifiedVersion?: string;
+	latestVersion?: string | undefined;
+	lastNotifiedVersion?: string | undefined;
 }
 
 export interface UpdateNotifierCacheAdapter {
@@ -44,7 +44,7 @@ export interface UpdateNotifierCacheConfig {
 	 * When omitted, the built-in `@crustjs/store` persistence is used, so
 	 * `intervalMs` can be tuned without reimplementing storage.
 	 */
-	adapter?: UpdateNotifierCacheAdapter;
+	adapter?: UpdateNotifierCacheAdapter | undefined;
 
 	/**
 	 * Minimum interval in milliseconds between network update checks.
@@ -53,7 +53,7 @@ export interface UpdateNotifierCacheConfig {
 	 *
 	 * @default 86_400_000 (24 hours)
 	 */
-	intervalMs?: number;
+	intervalMs?: number | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ interface UpdateNotifierBaseOptions {
 	 *
 	 * @default The root command's `meta.version`
 	 */
-	currentVersion?: string;
+	currentVersion?: string | undefined;
 
 	/**
 	 * The npm package name to check for updates.
@@ -82,14 +82,14 @@ interface UpdateNotifierBaseOptions {
 	 *
 	 * @default 5_000 (5 seconds)
 	 */
-	timeoutMs?: number;
+	timeoutMs?: number | undefined;
 
 	/**
 	 * Custom npm registry URL to query for the latest version.
 	 *
 	 * @default "https://registry.npmjs.org"
 	 */
-	registryUrl?: string;
+	registryUrl?: string | undefined;
 
 	/**
 	 * Looks up the latest version instead of the npm registry, for a registry the user
@@ -97,7 +97,9 @@ interface UpdateNotifierBaseOptions {
 	 * aborts after `timeoutMs` or when the invocation is cancelled, and the check stops
 	 * waiting then. A missing or empty version, or a throw, is a failed check.
 	 */
-	latestVersion?: (signal: AbortSignal) => string | undefined | Promise<string | undefined>;
+	latestVersion?:
+		| ((signal: AbortSignal) => string | undefined | Promise<string | undefined>)
+		| undefined;
 
 	/**
 	 * Upgrade command shown in the notice.
@@ -108,12 +110,12 @@ interface UpdateNotifierBaseOptions {
 	 * does not suggest a command. Callbacks and package-manager detection run
 	 * only when a notice is shown.
 	 */
-	updateCommand?: string | UpdateCommandResolver | { scope: "global" | "local" };
+	updateCommand?: string | UpdateCommandResolver | { scope: "global" | "local" } | undefined;
 
 	/**
 	 * Documentation URL shown after the update notice.
 	 */
-	updateDocsUrl?: string;
+	updateDocsUrl?: string | undefined;
 
 	/**
 	 * Cache configuration for cross-run persistence.
@@ -128,7 +130,7 @@ interface UpdateNotifierBaseOptions {
 	 * cache: false
 	 * ```
 	 */
-	cache?: false | UpdateNotifierCacheConfig;
+	cache?: false | UpdateNotifierCacheConfig | undefined;
 }
 
 /**
@@ -143,13 +145,7 @@ interface UpdateNotifierBaseOptions {
  * ```
  */
 export type UpdateNotifierOptions = UpdateNotifierBaseOptions &
-	(
-		| { latestVersion?: undefined }
-		| {
-				latestVersion: NonNullable<UpdateNotifierBaseOptions["latestVersion"]>;
-				registryUrl?: undefined;
-		  }
-	);
+	({ latestVersion?: undefined } | { registryUrl?: undefined });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Defaults

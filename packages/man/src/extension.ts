@@ -11,7 +11,7 @@ import { manPageName, renderCommandPage } from "./mdoc.ts";
 
 export interface ManOptions {
 	/** Manual section. Defaults to 1. */
-	readonly section?: number;
+	readonly section?: number | undefined;
 }
 
 /** Adds build-time mdoc generation: one page per visible command, as `git-commit(1)`. */

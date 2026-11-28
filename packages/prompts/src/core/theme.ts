@@ -38,7 +38,7 @@ function themeFromStyle(
 export const defaultTheme: PromptTheme = themeFromStyle({ bold, cyan, dim, green, red });
 
 /** {@link defaultTheme} with color support detected from `output` rather than stdout. */
-export function defaultThemeFor(output: { readonly isTTY?: boolean }): PromptTheme {
+export function defaultThemeFor(output: { readonly isTTY?: boolean | undefined }): PromptTheme {
 	// Same TTY state as stdout: the late-bound default already decides, without building a style.
 	if ((output.isTTY ?? false) === (process.stdout?.isTTY ?? false)) return defaultTheme;
 	// Env is snapshotted once per prompt/spinner here; changing it mid-render is not a real use case.

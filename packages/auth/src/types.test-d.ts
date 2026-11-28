@@ -33,7 +33,11 @@ type Expect<T extends true> = T;
 export type ExchangeTakesOnlySessionCodeAndSignal = Expect<
 	Equal<
 		Parameters<TokenClient["exchangeCode"]>,
-		[session: AuthorizationSession, code: string, options?: { signal?: AbortSignal }]
+		[
+			session: AuthorizationSession,
+			code: string,
+			options?: { signal?: AbortSignal | undefined } | undefined,
+		]
 	>
 >;
 

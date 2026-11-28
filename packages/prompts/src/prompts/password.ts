@@ -144,14 +144,14 @@ function renderSubmitted(theme: PromptTheme, message: string | undefined, mask: 
 export function password<Output>(
 	options: PasswordBaseOptions & {
 		readonly schema: StandardSchema<unknown, Output>;
-		readonly validate?: never;
+		readonly validate?: undefined;
 	},
 	io?: TerminalIO,
 ): Promise<Output>;
 export function password(
 	options?: PasswordBaseOptions & {
-		readonly schema?: never;
-		readonly validate?: ValidateFn<string>;
+		readonly schema?: undefined;
+		readonly validate?: ValidateFn<string> | undefined;
 	},
 	io?: TerminalIO,
 ): Promise<string>;

@@ -156,14 +156,14 @@ function renderSubmitted(value: string, theme: PromptTheme, message: string | un
 export function input<Output>(
 	options: InputBaseOptions & {
 		readonly schema: StandardSchema<unknown, Output>;
-		readonly validate?: never;
+		readonly validate?: undefined;
 	},
 	io?: TerminalIO,
 ): Promise<Output>;
 export function input(
 	options?: InputBaseOptions & {
-		readonly schema?: never;
-		readonly validate?: ValidateFn<string>;
+		readonly schema?: undefined;
+		readonly validate?: ValidateFn<string> | undefined;
 	},
 	io?: TerminalIO,
 ): Promise<string>;

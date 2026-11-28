@@ -22,10 +22,12 @@ export interface AuthAttempt {
 	 * the attempt to replay the request with, which later requests and pages also use, or
 	 * `undefined` to keep the 401. Leave it out for a credential that can't be refreshed.
 	 */
-	readonly retry?: (
-		response: Response,
-		options: { readonly signal: AbortSignal },
-	) => Promise<AuthAttempt | undefined>;
+	readonly retry?:
+		| ((
+				response: Response,
+				options: { readonly signal: AbortSignal },
+		  ) => Promise<AuthAttempt | undefined>)
+		| undefined;
 }
 
 /**
@@ -68,7 +70,10 @@ export interface ApiClient<Operations = unknown, AuthDeps extends ContextMap = {
 	 * With `auth: false` (e.g. a public operation), neither the request nor its redirects
 	 * call `auth` or carry its headers.
 	 */
-	fetch(path: string, init?: RequestInit & { readonly auth?: false }): Promise<Response>;
+	fetch(
+		path: string,
+		init?: RequestInit & { readonly auth?: false | undefined },
+	): Promise<Response>;
 	/**
 	 * Sends the operation with this `operationId` through {@link ApiClient.fetch}, its request built
 	 * from the spec and `input`, and resolves to the 2xx response's JSON body, `undefined` without

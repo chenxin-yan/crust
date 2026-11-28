@@ -91,8 +91,10 @@ export type KnownSpellings<S extends string> = string extends S ? never : S;
  * are consumed synchronously during argv parsing. `Extract` keeps the check
  * union-aware (a sometimes-async `cond ? Promise.resolve(x) : x` parser is
  * caught). An `any` return is branded too: it is no proof the parser is synchronous.
+ * The pattern says `| undefined` so that, under `exactOptionalPropertyTypes`, a parser
+ * that may be unset is still checked.
  */
-type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
+type AsyncParseBrand<T> = T extends { parse?: ((...args: never[]) => infer R) | undefined }
 	? Extract<R, Promise<unknown>> extends never
 		? {}
 		: {

@@ -301,7 +301,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 				{
 					value: stored.value,
 					source: "login" as const,
-					refresh: async ({ signal }: { signal?: AbortSignal }) =>
+					refresh: async ({ signal }: { signal?: AbortSignal | undefined }) =>
 						loginToken(
 							source,
 							profile,
@@ -344,7 +344,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			}
 		}
 
-		async function logout(logoutOptions?: { signal?: AbortSignal }) {
+		async function logout(logoutOptions?: { signal?: AbortSignal | undefined }) {
 			throwIfAborted(logoutOptions?.signal);
 			const { source } = await select();
 			return source.logout(logoutOptions);
@@ -415,7 +415,7 @@ export function createAuth(options: CreateAuthOptions): AuthClient | ProfileAuth
 			.map((profileName) => ({ name: profileName, current: profileName === currentName }));
 	}
 
-	async function use(profileName: string, { signal }: { signal?: AbortSignal } = {}) {
+	async function use(profileName: string, { signal }: { signal?: AbortSignal | undefined } = {}) {
 		const chosen = checkProfile(profileName, "A profile name");
 		const source = tokenSourceInternals(sourceOf(chosen));
 		await files.update((document) => {

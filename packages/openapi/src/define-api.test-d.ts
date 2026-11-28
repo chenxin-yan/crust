@@ -124,6 +124,7 @@ declare module "./typed-client.ts" {
 }
 
 const spec = new URL("./acme.openapi.jsonc", import.meta.url);
+declare const maybeQuery: { role: "admin" } | undefined;
 const baseUrl = "https://api.acme.test";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -139,6 +140,8 @@ function _typecheckRegisteredSpecById() {
 				const users = await api.call("listUsers");
 				type _Users = Expect<Equal<typeof users, User[]>>;
 				await api.call("listUsers", { query: { role: "admin" } });
+				// An optional part may hold `undefined`, as when it is passed on from a value that may be unset.
+				await api.call("listUsers", { query: maybeQuery });
 				const created = await api.call("createUser", { body: { name: "Ada" } });
 				type _Created = Expect<Equal<typeof created, User>>;
 				// An optional body; several 2xx responses give a union.

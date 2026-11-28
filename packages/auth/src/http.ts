@@ -60,7 +60,7 @@ export async function requestJson(
 	fetchImpl: Fetch,
 	url: string,
 	init: { method: "GET" | "POST"; headers?: Record<string, string>; body?: URLSearchParams },
-	options: { signal?: AbortSignal; timeoutMs?: number },
+	options: { signal?: AbortSignal | undefined; timeoutMs?: number },
 ): Promise<JsonResponse> {
 	throwIfAborted(options.signal);
 	const link = linkSignal(options.signal, options.timeoutMs ?? REQUEST_TIMEOUT_MS);

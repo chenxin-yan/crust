@@ -84,28 +84,28 @@ export interface SpinnerHandleOptions {
 	 *
 	 * @default "dots"
 	 */
-	readonly spinner?: SpinnerType;
+	readonly spinner?: SpinnerType | undefined;
 	/** Per-spinner theme overrides. */
-	readonly theme?: PartialProgressTheme;
+	readonly theme?: PartialProgressTheme | undefined;
 	/**
 	 * SIGINT policy.
 	 *
 	 * @default "exit"
 	 */
-	readonly sigint?: SpinnerSigintPolicy;
+	readonly sigint?: SpinnerSigintPolicy | undefined;
 	/**
 	 * Terminal sink receiving the rendered output. Resolution order:
 	 * this option → ambient {@link withTerminalIO} output → standard error, written through
 	 * the same writer as Core's default `stderr`.
 	 */
-	readonly sink?: TerminalOutput;
+	readonly sink?: TerminalOutput | undefined;
 	/**
 	 * Stops the spinner with `✗` and its current message when aborted while it runs, unless
 	 * `stop()` is called in the same turn (a `finally` that cancellation reaches). Defaults to
 	 * the ambient {@link withTerminalIO} signal, which inside a Crust command is the invocation's
 	 * `signal`. A spinner started after the abort, to show cleanup, ignores it.
 	 */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignal | undefined;
 }
 
 export interface SpinnerHandle {
@@ -411,7 +411,7 @@ export function spinner(
 	options: SpinnerHandleOptions & { readonly task?: undefined },
 ): SpinnerHandle;
 export function spinner<T>(
-	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] },
+	options: SpinnerHandleOptions & { task?: SpinnerOptions<T>["task"] | undefined },
 ): Promise<T> | SpinnerHandle {
 	const handle = createSpinnerHandle(options);
 	const { task } = options;

@@ -39,7 +39,7 @@ export type ScaffoldOptions = (
 			 * Files written from code, after `copy`. A key that names a copied file replaces its content
 			 * and keeps its permission bits. Keys are written as given: no `_` rename.
 			 */
-			readonly write?: ScaffoldFiles;
+			readonly write?: ScaffoldFiles | undefined;
 	  }
 	| { readonly copy?: undefined; readonly write: ScaffoldFiles }
 ) & {
@@ -56,10 +56,10 @@ export type ScaffoldOptions = (
 	 *
 	 * @default "abort"
 	 */
-	readonly conflict?: "abort" | "overwrite" | "replace";
+	readonly conflict?: "abort" | "overwrite" | "replace" | undefined;
 
 	/** Run every check and return the files that would be written, without writing or deleting. */
-	readonly dryRun?: boolean;
+	readonly dryRun?: boolean | undefined;
 };
 
 /**
@@ -113,7 +113,7 @@ export interface RunStepsOptions {
 	 * Inside a Crust command, pass the action's `stderr`. Defaults to standard error, written
 	 * through the same writer as Core's default `stderr`.
 	 */
-	readonly stderr?: (text: string) => void;
+	readonly stderr?: ((text: string) => void) | undefined;
 	/**
 	 * Cancels the steps: aborting it terminates the running child process and rejects with
 	 * `signal.reason` once it exits, or after 5 seconds and a `SIGKILL`, skipping the remaining
@@ -121,5 +121,5 @@ export interface RunStepsOptions {
 	 * terminal signal, which inside a Crust command is the invocation's `signal`, so Ctrl-C and
 	 * `SIGTERM` cancel `runSteps()` without passing it.
 	 */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignal | undefined;
 }

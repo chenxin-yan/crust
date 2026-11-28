@@ -11,7 +11,7 @@ function _typecheckRejectsInvalidChoiceDefaultsAtTheBuilderCall() {
 	new Crust("cli").flags({ mode: { type: "string", choices: ["a", "b"], default: "z" } });
 }
 
-function _optionalParserDefinitions() {
+function _optionalParserDefinitions(maybeAsync: ((raw: string) => Promise<number>) | undefined) {
 	type OptionalAsyncDefinition = {
 		readonly type: "string";
 		readonly parse?: (raw: string) => Promise<number>;
@@ -22,6 +22,10 @@ function _optionalParserDefinitions() {
 	};
 	// @ts-expect-error -- optional declared parsers must still be synchronous when present
 	defineFlag(asyncDefinition);
+	// @ts-expect-error -- a parser that may be unset must be synchronous when it is set
+	defineFlag({ type: "string", parse: maybeAsync });
+	// @ts-expect-error -- the same for an argument
+	defineArg("value", { type: "string", parse: maybeAsync });
 
 	type OptionalSyncDefinition = {
 		readonly type: "string";

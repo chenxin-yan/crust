@@ -23,14 +23,14 @@ declare module "@crustjs/core" {
 		 * The question `prompts()` asks on a terminal when the argument has no value, or only its
 		 * default. Read only by `prompts()` from `@crustjs/prompts/extension`.
 		 */
-		prompt?: string;
+		prompt?: string | undefined;
 	}
 	interface FlagExtras {
 		/**
 		 * The question `prompts()` asks on a terminal when the flag has no value, or only its
 		 * default. Read only by `prompts()` from `@crustjs/prompts/extension`.
 		 */
-		prompt?: string;
+		prompt?: string | undefined;
 	}
 }
 

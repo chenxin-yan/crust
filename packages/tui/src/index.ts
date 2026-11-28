@@ -22,7 +22,7 @@ export interface RunTuiConfig extends CliRendererConfig {
 	 * Destroys the renderer when aborted; `runTui()` then rejects with the signal's reason. Pass
 	 * the action's `signal` so the app closes when the invocation is cancelled.
 	 */
-	signal?: AbortSignal;
+	signal?: AbortSignal | undefined;
 }
 
 /** Mounts an app onto the OpenTUI renderer; may be async. */

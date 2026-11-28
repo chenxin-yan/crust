@@ -8,14 +8,5 @@ export default defineConfig({
 		...pack,
 		entry: ["src/index.ts", "src/interactive.ts"],
 	},
-	run: {
-		tasks: {
-			...libraryTasks,
-			"check:types:task": {
-				...libraryTasks["check:types:task"],
-				// Also check the consumer fixture under `exactOptionalPropertyTypes`.
-				command: "tsc --noEmit && tsc --noEmit -p tsconfig.exact.json",
-			},
-		},
-	},
+	run: { tasks: libraryTasks },
 });

@@ -25,7 +25,7 @@ declare module "@crustjs/core" {
 		 * The setting whose file value this flag takes when the run gives it none. Written only by
 		 * `config.flag(key)` from `@crustjs/config`, and read only by that config's `extension`.
 		 */
-		config?: SettingKey;
+		config?: SettingKey | undefined;
 	}
 }
 
@@ -112,9 +112,9 @@ export type ConfigCommandDefinition = CommandDefinition<"config">;
 /** The names of the files of {@link defineConfig}, without their extension. */
 export interface ConfigFiles {
 	/** The user's own file, in the app's configuration directory. @default "config" */
-	readonly user?: string;
+	readonly user?: string | undefined;
 	/** The project file, the nearest from the working directory up. @default "<name>.config" */
-	readonly project?: string;
+	readonly project?: string | undefined;
 }
 
 /** The options of {@link defineConfig}: its settings in three groups, by the file that may hold them. */
@@ -130,17 +130,17 @@ export interface ConfigOptions<
 	 * what the app runs as a command. Each is the definition of a string, number, integer or
 	 * boolean flag.
 	 */
-	readonly user?: U;
+	readonly user?: U | undefined;
 	/** Settings only the project file may hold, such as what describes the project itself. */
-	readonly project?: P;
+	readonly project?: P | undefined;
 	/** Settings either file may hold; the project file's value wins. */
-	readonly both?: B;
+	readonly both?: B | undefined;
 	/** The files' format, as a store's `format`. @default JSON */
-	readonly format?: StoreFormat;
+	readonly format?: StoreFormat | undefined;
 	/** The files' names. */
-	readonly files?: ConfigFiles;
+	readonly files?: ConfigFiles | undefined;
 	/** Adds `config get`, `set`, `unset` and `list`. @default false */
-	readonly command?: boolean;
+	readonly command?: boolean | undefined;
 }
 
 /**
@@ -308,10 +308,10 @@ export function defineConfig<
 	const C extends boolean = false,
 >(
 	options: ConfigOptions<U, P, B> & {
-		readonly user?: CheckedSettings<U>;
-		readonly project?: CheckedSettings<P>;
-		readonly both?: CheckedSettings<B>;
-		readonly command?: C;
+		readonly user?: CheckedSettings<U> | undefined;
+		readonly project?: CheckedSettings<P> | undefined;
+		readonly both?: CheckedSettings<B> | undefined;
+		readonly command?: C | undefined;
 	},
 	// A setting is in one group. Said by the result, not by a brand on `options`: a type there that
 	// names two groups stops TypeScript inferring a group that holds a `parse` function.

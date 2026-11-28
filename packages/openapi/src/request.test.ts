@@ -282,6 +282,13 @@ describe("buildRequest", () => {
 		expect(
 			request("getReport", { path: { id: "1" }, header: { ACCEPT: "application/xml" } }).headers,
 		).toEqual({ accept: "application/xml" });
+		// A spelling holding `undefined` is absent; the other one is the override.
+		expect(
+			request("getReport", {
+				path: { id: "1" },
+				header: { Accept: undefined, accept: "application/xml" },
+			}).headers,
+		).toEqual({ accept: "application/xml" });
 	});
 
 	it("names what call() cannot send and points to fetch()", () => {

@@ -9,7 +9,7 @@ export interface HyperlinkOptions {
 	 * Optional OSC 8 hyperlink id used by some terminals to keep visually
 	 * separated segments grouped as a single hovered link.
 	 */
-	readonly id?: string;
+	readonly id?: string | undefined;
 }
 
 function assertMatches(value: string, label: string, pattern: RegExp, suffix = ""): void {

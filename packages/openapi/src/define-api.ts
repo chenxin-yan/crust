@@ -66,7 +66,7 @@ export interface DefineApiOptions<Id extends string = string> {
 	 * credentials through `.auth()`: headers this function adds itself also go to the other origins
 	 * redirects and next pages lead to.
 	 */
-	readonly fetch?: (input: URL, init: RequestInit) => Promise<Response>;
+	readonly fetch?: ((input: URL, init: RequestInit) => Promise<Response>) | undefined;
 	/**
 	 * The pinned OpenAPI document: a `file:` URL, such as
 	 * `new URL("./acme.openapi.jsonc", import.meta.url)`, read when a command first needs it, with
@@ -78,16 +78,16 @@ export interface DefineApiOptions<Id extends string = string> {
 	 * The registered spec in `Specs` that types `call()`, needed only when several are registered,
 	 * and the directory `crust build` writes a URL's document to. Default: `"openapi"`.
 	 */
-	readonly id?: Id;
+	readonly id?: Id | undefined;
 	/**
 	 * The next page's request for `--paginate`, or `undefined` after the last page.
 	 * Receives a copy of each successful response, so it may read the body. The next page
 	 * must be http(s); off the base URL's origin it is requested without credential headers.
 	 * Returning the previous request again (same URL and method, `init` reused) fails instead of looping.
 	 */
-	readonly paginate?: (
-		response: Response,
-	) => ApiRequest | undefined | Promise<ApiRequest | undefined>;
+	readonly paginate?:
+		| ((response: Response) => ApiRequest | undefined | Promise<ApiRequest | undefined>)
+		| undefined;
 }
 
 type OperationIdOf<Operations> = unknown extends Operations ? string : keyof Operations & string;

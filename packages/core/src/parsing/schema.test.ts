@@ -163,7 +163,7 @@ describe("Standard Schema on flag definitions", () => {
 describe("Standard Schema on json flags", () => {
 	const user = z.object({ name: z.string(), role: z.enum(["admin", "member"]).optional() });
 	function bodyApp() {
-		const received: { body?: z.output<typeof user> } = {};
+		const received: { body?: z.output<typeof user> | undefined } = {};
 		const app = new Crust("cli")
 			.flags({ body: { type: "json", schema: user.optional() } })
 			.action(({ flags }) => {

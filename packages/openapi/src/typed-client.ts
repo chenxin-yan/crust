@@ -11,9 +11,9 @@ type ParamValue = Scalar | readonly Scalar[] | { readonly [key: string]: Scalar 
 
 /** What `call()` takes for an operation it has no types for. */
 export interface CallInput {
-	readonly path?: Readonly<Record<string, ParamValue>>;
-	readonly query?: Readonly<Record<string, ParamValue | undefined>>;
-	readonly header?: Readonly<Record<string, ParamValue | undefined>>;
+	readonly path?: Readonly<Record<string, ParamValue>> | undefined;
+	readonly query?: Readonly<Record<string, ParamValue | undefined>> | undefined;
+	readonly header?: Readonly<Record<string, ParamValue | undefined>> | undefined;
 	/** Sent as JSON. */
 	readonly body?: unknown;
 }
@@ -59,18 +59,21 @@ type ParamPart<Parameters, In extends "path" | "query"> = In extends keyof Param
 	? [Defined<Parameters[In]>] extends [never]
 		? {}
 		: undefined extends Parameters[In]
-			? { readonly [_ in In]?: Defined<Parameters[In]> }
+			? { readonly [_ in In]?: Defined<Parameters[In]> | undefined }
 			: { readonly [_ in In]: Parameters[In] }
 	: {};
 /** The `Accept` override `call()` sends instead of its own, whatever headers the spec declares. */
-type AcceptOverride = { readonly Accept?: string; readonly accept?: string };
+type AcceptOverride = {
+	readonly Accept?: string | undefined;
+	readonly accept?: string | undefined;
+};
 type HeaderPart<Parameters> = "header" extends keyof Parameters
 	? [Defined<Parameters["header"]>] extends [never]
-		? { readonly header?: AcceptOverride }
+		? { readonly header?: AcceptOverride | undefined }
 		: undefined extends Parameters["header"]
-			? { readonly header?: Defined<Parameters["header"]> & AcceptOverride }
+			? { readonly header?: (Defined<Parameters["header"]> & AcceptOverride) | undefined }
 			: { readonly header: Parameters["header"] & AcceptOverride }
-	: { readonly header?: AcceptOverride };
+	: { readonly header?: AcceptOverride | undefined };
 // The JSON media type's schema; without one, every media type's.
 type MediaOf<Content> = [Extract<keyof Content, JsonMediaType>] extends [never]
 	? Content[keyof Content]
@@ -81,7 +84,7 @@ type BodyOf<Body> = [Defined<Body>] extends [never]
 	? {}
 	: Defined<Body> extends { content: infer Content }
 		? undefined extends Body
-			? { readonly body?: MediaOf<Content> }
+			? { readonly body?: MediaOf<Content> | undefined }
 			: { readonly body: MediaOf<Content> }
 		: {};
 type Flatten<T> = { [K in keyof T]: T[K] } & {};
@@ -112,7 +115,7 @@ export type BodyNamesOf<Op> = Op extends { requestBody?: unknown }
 type OperationInput<Op> = Flatten<
 	(Op extends { parameters: infer Parameters }
 		? ParamPart<Parameters, "path"> & ParamPart<Parameters, "query"> & HeaderPart<Parameters>
-		: { readonly header?: AcceptOverride }) &
+		: { readonly header?: AcceptOverride | undefined }) &
 		BodyPart<Op>
 >;
 

@@ -20,7 +20,7 @@ const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
 /** Options for {@link renderHelp}. */
 export interface RenderHelpOptions {
 	/** Terminal width that descriptions wrap to; they do not wrap when absent. */
-	readonly columns?: number;
+	readonly columns?: number | undefined;
 }
 
 /**
@@ -76,7 +76,7 @@ export interface HelpOptions {
 	 * `app db migrate --help` prints. Off by default, because in an application without
 	 * subcommands it would take the root command's first argument.
 	 */
-	readonly command?: boolean;
+	readonly command?: boolean | undefined;
 }
 
 /**
@@ -88,7 +88,9 @@ export interface HelpExtension {
 	(
 		options: HelpOptions & { readonly command: true },
 	): Extension<{}, [], typeof helpFlags, readonly [HelpCommandDefinition]>;
-	(options?: HelpOptions & { readonly command?: false }): Extension<{}, [], typeof helpFlags, []>;
+	(
+		options?: HelpOptions & { readonly command?: false | undefined },
+	): Extension<{}, [], typeof helpFlags, []>;
 	readonly id: ExtensionId;
 }
 

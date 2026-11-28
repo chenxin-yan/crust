@@ -184,14 +184,14 @@ export interface CrustCommandContext<
 /** Static configuration for a reusable command definition. */
 export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
 	/** Plain-text sections rendered after built-in command documentation. */
-	readonly sections?: readonly CommandSectionInput[];
+	readonly sections?: readonly CommandSectionInput[] | undefined;
 }
 
 /** Static metadata accepted by the root command constructor, including keys packages add through {@link CommandExtras}. */
 export interface RootCommandMeta
 	extends Pick<CommandMeta, "description" | "version" | "usage" | "examples">, CommandExtras {
 	/** Plain-text sections rendered after built-in command documentation. */
-	readonly sections?: readonly CommandSectionInput[];
+	readonly sections?: readonly CommandSectionInput[] | undefined;
 }
 
 export type AnyCommandDefinitionBuilder = Crust<
@@ -1534,7 +1534,10 @@ export type AnyCrust = Pick<
 >;
 
 type DefinedRootMetaKeys<Meta extends RootCommandMeta | undefined> = {
-	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
+	// Not `Required<…>`: under `exactOptionalPropertyTypes` it keeps a declared `| undefined`.
+	[K in RootMetaKey]: [Meta] extends [{ [P in K]-?: Exclude<RootCommandMeta[P], undefined> }]
+		? K
+		: never;
 }[RootMetaKey];
 
 type ExtensionMetaKeys<E> =

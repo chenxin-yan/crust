@@ -51,7 +51,9 @@ export interface GenerateOptions {
 	readonly client: ContextFactory<"api", void, ApiClient>;
 	/** The app's sources from `.use()`, which every generated command `.use()`s too. */
 	readonly sources: readonly UseSource[];
-	readonly onConfirm?: (ctx: ContextBag, message: string) => ConfirmResult | Promise<ConfirmResult>;
+	readonly onConfirm?:
+		| ((ctx: ContextBag, message: string) => ConfirmResult | Promise<ConfirmResult>)
+		| undefined;
 	readonly baseUrl: string;
 	readonly paginate?: DefineApiOptions["paginate"];
 }

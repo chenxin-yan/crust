@@ -62,7 +62,9 @@ type CompletedEvents<Events extends readonly unknown[] | undefined> = [Events] e
 	? {}
 	: undefined extends Events
 		? { readonly events?: Exclude<Events, undefined> }
-		: { readonly events: Events };
+		: // `Exclude` changes nothing here, but lets a generic outcome's `events` (as in an overload
+			// of `run()`) match an open one's `events?` under `exactOptionalPropertyTypes`.
+			{ readonly events: Exclude<Events, undefined> };
 
 type FailedEvents<Events extends readonly unknown[] | undefined> = [Events] extends [undefined]
 	? {}
@@ -283,12 +285,13 @@ type UnknownRunKeys<Actual, Known> = {
 // input, per union member, also rejects unknown keys in inputs held in variables.
 type ClosedRunInput<Shape extends CommandShape, Input> = Input extends unknown
 	? UnknownRunKeys<Input, keyof RunInput<Shape>> & {
-			[
-				K in keyof Input as K extends ("args" | "flags") & keyof RunInput<Shape> ? K : never
-			]: UnknownRunKeys<
-				NonNullable<Input[K]>,
-				KeysOf<NonNullable<RunInput<Shape>[K & keyof RunInput<Shape>]>>
-			>;
+			[K in keyof Input as K extends ("args" | "flags") & keyof RunInput<Shape> ? K : never]:
+				| UnknownRunKeys<
+						NonNullable<Input[K]>,
+						KeysOf<NonNullable<RunInput<Shape>[K & keyof RunInput<Shape>]>>
+				  >
+				// An optional section may hold `undefined`, which `RunInput` accepts.
+				| undefined;
 		}
 	: never;
 
