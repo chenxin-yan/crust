@@ -80,7 +80,7 @@ The group a setting is in says which file may hold it:
 
 - A setting is in one group: its key in two is a compile error where the config is used (`FIX_SETTING_IN_TWO_GROUPS`).
 - A file exists only when a group names it. A config with only `user` settings never looks for a project file, and one with only `project` settings never reads the user's file.
-- A setting found in a file that may not hold it is ignored with a warning naming the key and both files, once in a run.
+- A setting found in a file that may not hold it is ignored with a warning naming the key and both files. A run prints a warning once, however often it reads the files.
 
 ### Why the project file is limited
 
@@ -134,6 +134,7 @@ Error: Malformed config file: /home/me/repo/acme.config.json
 - A file that cannot be read, such as a folder of that name, a device, a file above 16 MiB or one without read permission, fails with `Cannot read config file: <path>` and exit code 2. One that does not parse, or does not hold an object, fails with `Malformed config file: <path>`.
 - A value that does not convert fails as an invalid environment value does, naming the setting and the file, with exit code 2. The built-in conversions never repeat the value; a setting's own `parse` error is shown as on the command line.
 - A file is read only for the settings a command takes and its run did not give: `acme serve --listen 8080` works whatever the files hold.
+- A broken file fails only a read of a setting it may hold: with a malformed project file, a `user` setting is still read from the user's file.
 - `--help` works whatever the files hold.
 
 ## Read and save settings
@@ -144,7 +145,7 @@ Error: Malformed config file: /home/me/repo/acme.config.json
 - `await config.list()` returns every setting with its value and source: `{ key, value, source }`, where `source` is `{ kind: "env", name }`, `{ kind: "file", path }`, `{ kind: "default" }` or `{ kind: "unset" }`.
 - `await config.set(values)` saves settings in the user's file; `config.set(values, { project: true })` saves them in the nearest project file, or a new one in the working directory. A value is what a file holds (the text of a `parse` setting), and `undefined` removes a setting. The keys and values are checked at compile time: each form takes only the settings its file may hold, so `config.set({ entry })` without `{ project: true }` does not compile. A value the setting's rules refuse (`min`, `choices`, `parse`) throws before anything is saved.
 - Saving keeps the other keys and the mode of the file, creates the folder when needed, and replaces the file in one step; a save that would make the file larger than 16 MiB is refused (`Cannot save <path>: the file would be larger than 16 MiB`). Saves of one config run one at a time, in the order they were called, and every save holds the store's lock file `<file>.lock` next to the file (see [Concurrency](/docs/modules/store#concurrency)), so another config or process saving at the same time keeps its keys too. A linked user file stays a link when the file it points to has the same extension; saving in a linked project file is refused.
-- `get()` and `list()` print a file's warnings on the process's stderr.
+- `get()` and `list()` print a file's warnings on the process's stderr, unless the run they are called in has printed them.
 
 ## The `config` command
 

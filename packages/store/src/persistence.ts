@@ -136,7 +136,10 @@ export async function readJson(
 
 	try {
 		// SAFETY: a format's `parse` returns what the file holds; the store's fields check it.
-		return parse(raw) as JsonValue;
+		const value = parse(raw) as JsonValue | undefined;
+		// `undefined` means no file: the file is there, so a write must not take it for missing.
+		if (value === undefined) throw new Error("the format's parse returned undefined");
+		return value;
 	} catch (err: unknown) {
 		throw new CrustStoreError(
 			"PARSE",

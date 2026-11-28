@@ -525,6 +525,20 @@ describe("format", () => {
 		await expect(list.read()).rejects.toMatchObject({ code: "PARSE" });
 	});
 
+	it("rejects a file its parse returns undefined for, and leaves it as it is", async () => {
+		const path = join(tempDir, "state.conf");
+		await writeFile(path, "region = eu\n");
+		const store = createStore({
+			dirPath: tempDir,
+			name: "state",
+			fields: { region: { type: "string" } },
+			format: { ...lines, parse: () => undefined },
+		});
+		await expect(store.read()).rejects.toMatchObject({ code: "PARSE" });
+		await expect(store.patch({ region: "us" })).rejects.toMatchObject({ code: "PARSE" });
+		expect(await readFile(path, "utf-8")).toBe("region = eu\n");
+	});
+
 	it.each(["", ".conf", "a/b", "a\\b"])("refuses the extension %j", (extension) => {
 		expect(() =>
 			createStore({ dirPath: tempDir, name: "state", fields: {}, format: { ...lines, extension } }),

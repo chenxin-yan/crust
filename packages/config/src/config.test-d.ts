@@ -122,6 +122,10 @@ defineConfig({
 	// @ts-expect-error -- $schema is a file's pointer to its schema
 	user: { $schema: { type: "string" } },
 });
+// A group given as undefined holds no setting.
+defineConfig({ name: "acme", both: { active: { type: "boolean" } }, user: undefined }).flag(
+	"active",
+);
 const twice = defineConfig({
 	name: "acme",
 	user: { region: { type: "string" } },

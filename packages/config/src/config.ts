@@ -192,6 +192,9 @@ type CheckedSettings<G> = {
 	readonly [K in keyof G]: LocalValueBrand<G[K]> & KnownPropertiesBrand<G[K]>;
 } & ReservedNameBrand<G>;
 
+/** A group as given: one given as `undefined` is inferred as every name, and holds no setting. */
+type Group<G> = string extends keyof G ? {} : G;
+
 /** The settings that are in two groups. */
 type InTwoGroups<U, P, B> = (keyof U & keyof P) | (keyof U & keyof B) | (keyof P & keyof B);
 
@@ -300,14 +303,14 @@ export function defineConfig<
 	},
 	// A setting is in one group. Said by the result, not by a brand on `options`: a type there that
 	// names two groups stops TypeScript inferring a group that holds a `parse` function.
-): [InTwoGroups<U, P, B>] extends [never]
+): [InTwoGroups<Group<U>, Group<P>, Group<B>>] extends [never]
 	? Config<
-			U & P & B,
-			keyof (U & B) & string,
-			keyof (P & B) & string,
+			Group<U> & Group<P> & Group<B>,
+			keyof (Group<U> & Group<B>) & string,
+			keyof (Group<P> & Group<B>) & string,
 			C extends true ? readonly [ConfigCommandDefinition] : []
 		>
-	: { readonly FIX_SETTING_IN_TWO_GROUPS: InTwoGroups<U, P, B> } {
+	: { readonly FIX_SETTING_IN_TWO_GROUPS: InTwoGroups<Group<U>, Group<P>, Group<B>> } {
 	const { name, format } = options;
 	const groups: Record<"user" | "project" | "both", ConfigSettings> = {
 		user: options.user ?? {},
@@ -341,9 +344,11 @@ export function defineConfig<
 	/** The store of the config file at `path`: it reads, locks and replaces the file. */
 	const storeAt = async (path: string) => {
 		const { createStore } = await import("@crustjs/store");
-		const { basename, dirname } = process.getBuiltinModule("node:path");
+		const { basename, dirname, sep } = process.getBuiltinModule("node:path");
 		return createStore({
-			dirPath: dirname(path),
+			// With the separator: the store takes a `dirPath` ending in `.json` for a file's path, and a
+			// project's folder may be named so.
+			dirPath: dirname(path) + sep,
 			name: basename(path, `.${fileExtension}`),
 			// SAFETY: a setting's value is checked by core when it is converted, not by the store.
 			fields: fields as never,
@@ -358,34 +363,62 @@ export function defineConfig<
 		return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 	};
 
-	// A warning is printed once in a run, however often the run reads the files.
-	const warned = new Set<string>();
-	/** The files in the order they apply: the project file, then the user's file. */
-	const readFiles = async (warn: (line: string) => void): Promise<ConfigFile[]> => {
-		const user = await userPath();
+	// What a run has warned of: it reads the files more than once (for its flags, then for a
+	// `get()` in its action) and warns once. Kept per run, so two runs at once each warn.
+	type Run = { readonly warned: Set<string>; over: boolean };
+	let runs: import("node:async_hooks").AsyncLocalStorage<Run> | undefined;
+	/** Marks the start of a run. Called before a hook first awaits, so the run's later steps see it. */
+	const startRun = (ctx: { defer(cleanup: () => void): void }) => {
+		runs ??= new (process.getBuiltinModule("node:async_hooks").AsyncLocalStorage)<Run>();
+		const run: Run = { warned: new Set(), over: false };
+		// Not `run()`: a hook cannot wrap the rest of its invocation.
+		runs.enterWith(run);
+		ctx.defer(() => void (run.over = true));
+	};
+	/**
+	 * The files in the order they apply: the project file, then the user's file. Both are read, so
+	 * a setting in the wrong one is warned of, but a file that may hold none of `wanted` cannot fail
+	 * the read: a broken project file does not stand in the way of a setting only the user's holds.
+	 */
+	const readFiles = async (
+		warn: (line: string) => void,
+		wanted: readonly string[],
+	): Promise<ConfigFile[]> => {
+		const run = runs?.getStore();
+		const warned = run === undefined || run.over ? new Set<string>() : run.warned;
 		const read: ConfigFile[] = [];
 		/** A file's values without the settings only the `other` file may set. */
-		const add = async (path: string, may: (key: string) => boolean, other: string) => {
-			const values = { ...(await readValues(path)) };
+		const add = async (
+			path: string,
+			may: (key: string) => boolean,
+			other: () => string | Promise<string>,
+		) => {
+			let values: Record<string, unknown>;
+			try {
+				values = { ...(await readValues(path)) };
+			} catch (error) {
+				if (wanted.some(may)) throw error;
+				return;
+			}
 			for (const key of Object.keys(values)) {
 				if (may(key)) continue;
 				delete values[key];
-				const line = `Warning: ${path} sets "${key}", which only ${other} may set; ignored.`;
+				const line = `Warning: ${path} sets "${key}", which only ${await other()} may set; ignored.`;
 				if (!warned.has(line)) warn(line);
 				warned.add(line);
 			}
 			read.push({ path, values });
 		};
 		const found = hasProject ? nearest(projectName) : undefined;
-		if (found !== undefined) await add(found, inProject, user);
-		if (hasUser) await add(user, inUser, projectName);
+		if (found !== undefined) await add(found, inProject, userPath);
+		if (hasUser) await add(await userPath(), inUser, () => projectName);
 		return read;
 	};
 
-	/** Reads the files on the first call only, for the settings of one `list()` or `get()`. */
-	const filesOnce = (warn: (line: string) => void) => {
+	/** Reads the files on the first call only, for the settings `wanted` of one `list()` or `get()`. */
+	const filesOnce = (warn: (line: string) => void, wanted: readonly string[]) => {
 		let pending: Promise<ConfigFile[]> | undefined;
-		return () => (pending ??= readFiles(warn));
+		return () => (pending ??= readFiles(warn, wanted));
 	};
 
 	/** The first file that gives `key` a value: a value that converts to nothing gives none. */
@@ -493,7 +526,10 @@ export function defineConfig<
 			);
 		});
 		if (wanted.length === 0) return;
-		const read = await readFiles((line) => ctx.stderr(line));
+		const read = await readFiles(
+			(line) => ctx.stderr(line),
+			wanted.map(([, flag]) => flag.config!.slice(prefix.length)),
+		);
 		for (const [flagName, flag] of wanted) {
 			const file = await fromFiles(flag.config!.slice(prefix.length), read);
 			// Converted once already, so binding the same words cannot fail.
@@ -519,8 +555,7 @@ export function defineConfig<
 	const extension = defineExtension(defineExtensionId(`crust:config:${name}`))
 		.owns("config")
 		.setup(async (ctx) => {
-			// A new run warns again.
-			warned.clear();
+			startRun(ctx);
 			try {
 				await bindFiles(ctx);
 			} catch (error) {
@@ -581,7 +616,7 @@ export function defineConfig<
 			command
 				.command("list", { description: "Show every setting, its value and its source" }, (list) =>
 					list.action(async ({ stdout, stderr }) => {
-						const files = filesOnce((line) => stderr(line));
+						const files = filesOnce((line) => stderr(line), keys);
 						const entries = await Promise.all(
 							keys.map(async (setting) => ({ setting, ...(await resolve(setting, files)) })),
 						);
@@ -600,7 +635,7 @@ export function defineConfig<
 					get.args(key).action(async ({ args, stdout, stderr }) => {
 						const { value } = await resolve(
 							args.key,
-							filesOnce((line) => stderr(line)),
+							filesOnce((line) => stderr(line), [args.key]),
 						);
 						if (value !== undefined) stdout(shown(value, "\n"));
 					}),
@@ -633,7 +668,7 @@ export function defineConfig<
 	const config = {
 		flag: (key: string) => ({ ...settings[key], config: `${prefix}${key}` }),
 		get: async (key: string) => {
-			const { value } = await resolve(key, filesOnce(toStderr));
+			const { value } = await resolve(key, filesOnce(toStderr, [key]));
 			const def = settings[key]!;
 			if (value === undefined && def.required) {
 				const variables = [def.env ?? []].flat().map((variable) => `$${variable}`);
@@ -645,7 +680,7 @@ export function defineConfig<
 			return value;
 		},
 		list: async () => {
-			const files = filesOnce(toStderr);
+			const files = filesOnce(toStderr, keys);
 			return Promise.all(keys.map(async (key) => ({ key, ...(await resolve(key, files)) })));
 		},
 		set: async (values: Record<string, unknown>, target?: { readonly project?: true }) => {

@@ -85,7 +85,7 @@ const store = createStore({
 ```
 
 - `extension` names the file, without its dot. It cannot hold a path separator or start with a dot.
-- `parse` must return an object, and a file it throws on rejects with `PARSE`. `stringify` receives the fields that are set and the [unknown keys](#unknown-keys) the store keeps.
+- `parse` must return an object: a file it throws on, or returns anything else for, rejects with `PARSE` and is left as it is. `stringify` receives the fields that are set and the [unknown keys](#unknown-keys) the store keeps.
 - The lock, the atomic replace, the 16 MiB limit and validation are the same as for JSON. A field converts text as it does for a JSON string, so a format that holds only text, such as INI, works: `"3"` in a number field reads as `3`.
 - Saving rewrites the file through `stringify`: comments and formatting in it are lost.
 

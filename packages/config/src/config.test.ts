@@ -234,6 +234,17 @@ describe("the project file", () => {
 		expect((await captureExecute(app, ["deploy"])).stderr).toBe(warning);
 	});
 
+	it("is read and saved in a folder whose name ends in .json", async () => {
+		const folder = join(root, "site.json");
+		write(join(folder, "acme.config.json"), { replicas: 4 });
+		process.chdir(folder);
+		expect((await deploy()).flags.replicas).toBe(4);
+		await acme().config.set({ replicas: 5 }, { project: true });
+		expect(JSON.parse(readFileSync(join(folder, "acme.config.json"), "utf8"))).toEqual({
+			replicas: 5,
+		});
+	});
+
 	it("is not looked for when no setting may be in it", async () => {
 		const config = defineConfig({ name: "acme", user: { pager: { type: "string" } } });
 		write(projectFile(), "{ broken");
@@ -254,8 +265,17 @@ describe("the project file", () => {
 			const warning = `Warning: ${projectFile()} sets "pager", which only ${userFile()} may set; ignored.\n`;
 			expect(await captureExecute(app, ["show"])).toMatchObject({ stderr: warning });
 			expect(direct).not.toHaveBeenCalled();
-			// The next run warns again.
+			// The next run warns again, and so does each of two runs at once.
 			expect((await captureExecute(app, ["show"])).stderr).toBe(warning);
+			const [first, second] = await Promise.all([
+				captureExecute(app, ["show"]),
+				captureExecute(app, ["show"]),
+			]);
+			expect([first.stderr, second.stderr]).toEqual([warning, warning]);
+			expect(direct).not.toHaveBeenCalled();
+			// Outside a run, a read warns on the process's stderr.
+			await config.get("pager");
+			expect(direct).toHaveBeenCalledWith(warning);
 		} finally {
 			direct.mockRestore();
 		}
@@ -289,6 +309,17 @@ describe("a setting only the project file may hold", () => {
 		write(projectFile(), { entry: "src/main.ts" });
 		expect(await config.get("entry")).toBe("src/main.ts");
 		expect(await config.get("region")).toBe("eu");
+	});
+
+	it("does not stand in the way of a setting it cannot hold: only the files that may hold a setting are read", async () => {
+		const { config } = tool();
+		write(userFile(), { pager: "less" });
+		write(projectFile(), "{ broken");
+		expect(await config.get("pager")).toBe("less");
+		await expect(config.get("region")).rejects.toThrow(`Malformed config file: ${projectFile()}`);
+		write(projectFile(), { entry: "src/main.ts" });
+		write(userFile(), "{ broken");
+		expect(await config.get("entry")).toBe("src/main.ts");
 	});
 
 	it("is saved only in the project file", async () => {
