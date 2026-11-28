@@ -1,7 +1,6 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import type { RunOutcome } from "./typed-run.ts";
 
@@ -109,9 +108,7 @@ function _typecheckAddsSixtyDefinitionsInOneCall() {
 	type _last = Expect<
 		Equal<"c59" extends keyof (typeof app)["_types"]["tree"] ? true : false, true>
 	>;
-	new Crust("wide-extend").extend(
-		defineExtension(defineExtensionId("wide")).add(...sixtyDefinitions),
-	);
+	new Crust("wide-extend").extend(defineExtension("wide").add(...sixtyDefinitions));
 }
 
 // 46+ Contexts in one `.provide()` call must not hit TS2589 (excessively deep instantiation)
@@ -177,7 +174,7 @@ const p58 = defineContext("p58").setup(() => 58);
 const p59 = defineContext("p59").setup(() => 59);
 function _typecheckProvidesUsesAndExtendsSixtyContextsInOneCall() {
 	// Extension first: an earlier app-call TS2589 would mask this call's own failure.
-	const wideExtension = defineExtension(defineExtensionId("wide-provide")).provide(
+	const wideExtension = defineExtension("wide-provide").provide(
 		p0(),
 		p1(),
 		p2(),
@@ -389,243 +386,243 @@ function _typecheckProvidesUsesAndExtendsSixtyContextsInOneCall() {
 }
 
 // 45+ Extensions in one `.extend()` call must not hit TS2589 (excessively deep instantiation)
-const e0 = defineExtension(defineExtensionId("e0"))
+const e0 = defineExtension("e0")
 	.flags({ f0: { type: "boolean" } })
 	.provide(p0())
 	.add(defineCommand("ec0", (command) => command.flags({ x: { type: "string" } })));
-const e1 = defineExtension(defineExtensionId("e1"))
+const e1 = defineExtension("e1")
 	.flags({ f1: { type: "boolean" } })
 	.provide(p1())
 	.add(defineCommand("ec1", (command) => command.flags({ x: { type: "string" } })));
-const e2 = defineExtension(defineExtensionId("e2"))
+const e2 = defineExtension("e2")
 	.flags({ f2: { type: "boolean" } })
 	.provide(p2())
 	.add(defineCommand("ec2", (command) => command.flags({ x: { type: "string" } })));
-const e3 = defineExtension(defineExtensionId("e3"))
+const e3 = defineExtension("e3")
 	.flags({ f3: { type: "boolean" } })
 	.provide(p3())
 	.add(defineCommand("ec3", (command) => command.flags({ x: { type: "string" } })));
-const e4 = defineExtension(defineExtensionId("e4"))
+const e4 = defineExtension("e4")
 	.flags({ f4: { type: "boolean" } })
 	.provide(p4())
 	.add(defineCommand("ec4", (command) => command.flags({ x: { type: "string" } })));
-const e5 = defineExtension(defineExtensionId("e5"))
+const e5 = defineExtension("e5")
 	.flags({ f5: { type: "boolean" } })
 	.provide(p5())
 	.add(defineCommand("ec5", (command) => command.flags({ x: { type: "string" } })));
-const e6 = defineExtension(defineExtensionId("e6"))
+const e6 = defineExtension("e6")
 	.flags({ f6: { type: "boolean" } })
 	.provide(p6())
 	.add(defineCommand("ec6", (command) => command.flags({ x: { type: "string" } })));
-const e7 = defineExtension(defineExtensionId("e7"))
+const e7 = defineExtension("e7")
 	.flags({ f7: { type: "boolean" } })
 	.provide(p7())
 	.add(defineCommand("ec7", (command) => command.flags({ x: { type: "string" } })));
-const e8 = defineExtension(defineExtensionId("e8"))
+const e8 = defineExtension("e8")
 	.flags({ f8: { type: "boolean" } })
 	.provide(p8())
 	.add(defineCommand("ec8", (command) => command.flags({ x: { type: "string" } })));
-const e9 = defineExtension(defineExtensionId("e9"))
+const e9 = defineExtension("e9")
 	.flags({ f9: { type: "boolean" } })
 	.provide(p9())
 	.add(defineCommand("ec9", (command) => command.flags({ x: { type: "string" } })));
-const e10 = defineExtension(defineExtensionId("e10"))
+const e10 = defineExtension("e10")
 	.flags({ f10: { type: "boolean" } })
 	.provide(p10())
 	.add(defineCommand("ec10", (command) => command.flags({ x: { type: "string" } })));
-const e11 = defineExtension(defineExtensionId("e11"))
+const e11 = defineExtension("e11")
 	.flags({ f11: { type: "boolean" } })
 	.provide(p11())
 	.add(defineCommand("ec11", (command) => command.flags({ x: { type: "string" } })));
-const e12 = defineExtension(defineExtensionId("e12"))
+const e12 = defineExtension("e12")
 	.flags({ f12: { type: "boolean" } })
 	.provide(p12())
 	.add(defineCommand("ec12", (command) => command.flags({ x: { type: "string" } })));
-const e13 = defineExtension(defineExtensionId("e13"))
+const e13 = defineExtension("e13")
 	.flags({ f13: { type: "boolean" } })
 	.provide(p13())
 	.add(defineCommand("ec13", (command) => command.flags({ x: { type: "string" } })));
-const e14 = defineExtension(defineExtensionId("e14"))
+const e14 = defineExtension("e14")
 	.flags({ f14: { type: "boolean" } })
 	.provide(p14())
 	.add(defineCommand("ec14", (command) => command.flags({ x: { type: "string" } })));
-const e15 = defineExtension(defineExtensionId("e15"))
+const e15 = defineExtension("e15")
 	.flags({ f15: { type: "boolean" } })
 	.provide(p15())
 	.add(defineCommand("ec15", (command) => command.flags({ x: { type: "string" } })));
-const e16 = defineExtension(defineExtensionId("e16"))
+const e16 = defineExtension("e16")
 	.flags({ f16: { type: "boolean" } })
 	.provide(p16())
 	.add(defineCommand("ec16", (command) => command.flags({ x: { type: "string" } })));
-const e17 = defineExtension(defineExtensionId("e17"))
+const e17 = defineExtension("e17")
 	.flags({ f17: { type: "boolean" } })
 	.provide(p17())
 	.add(defineCommand("ec17", (command) => command.flags({ x: { type: "string" } })));
-const e18 = defineExtension(defineExtensionId("e18"))
+const e18 = defineExtension("e18")
 	.flags({ f18: { type: "boolean" } })
 	.provide(p18())
 	.add(defineCommand("ec18", (command) => command.flags({ x: { type: "string" } })));
-const e19 = defineExtension(defineExtensionId("e19"))
+const e19 = defineExtension("e19")
 	.flags({ f19: { type: "boolean" } })
 	.provide(p19())
 	.add(defineCommand("ec19", (command) => command.flags({ x: { type: "string" } })));
-const e20 = defineExtension(defineExtensionId("e20"))
+const e20 = defineExtension("e20")
 	.flags({ f20: { type: "boolean" } })
 	.provide(p20())
 	.add(defineCommand("ec20", (command) => command.flags({ x: { type: "string" } })));
-const e21 = defineExtension(defineExtensionId("e21"))
+const e21 = defineExtension("e21")
 	.flags({ f21: { type: "boolean" } })
 	.provide(p21())
 	.add(defineCommand("ec21", (command) => command.flags({ x: { type: "string" } })));
-const e22 = defineExtension(defineExtensionId("e22"))
+const e22 = defineExtension("e22")
 	.flags({ f22: { type: "boolean" } })
 	.provide(p22())
 	.add(defineCommand("ec22", (command) => command.flags({ x: { type: "string" } })));
-const e23 = defineExtension(defineExtensionId("e23"))
+const e23 = defineExtension("e23")
 	.flags({ f23: { type: "boolean" } })
 	.provide(p23())
 	.add(defineCommand("ec23", (command) => command.flags({ x: { type: "string" } })));
-const e24 = defineExtension(defineExtensionId("e24"))
+const e24 = defineExtension("e24")
 	.flags({ f24: { type: "boolean" } })
 	.provide(p24())
 	.add(defineCommand("ec24", (command) => command.flags({ x: { type: "string" } })));
-const e25 = defineExtension(defineExtensionId("e25"))
+const e25 = defineExtension("e25")
 	.flags({ f25: { type: "boolean" } })
 	.provide(p25())
 	.add(defineCommand("ec25", (command) => command.flags({ x: { type: "string" } })));
-const e26 = defineExtension(defineExtensionId("e26"))
+const e26 = defineExtension("e26")
 	.flags({ f26: { type: "boolean" } })
 	.provide(p26())
 	.add(defineCommand("ec26", (command) => command.flags({ x: { type: "string" } })));
-const e27 = defineExtension(defineExtensionId("e27"))
+const e27 = defineExtension("e27")
 	.flags({ f27: { type: "boolean" } })
 	.provide(p27())
 	.add(defineCommand("ec27", (command) => command.flags({ x: { type: "string" } })));
-const e28 = defineExtension(defineExtensionId("e28"))
+const e28 = defineExtension("e28")
 	.flags({ f28: { type: "boolean" } })
 	.provide(p28())
 	.add(defineCommand("ec28", (command) => command.flags({ x: { type: "string" } })));
-const e29 = defineExtension(defineExtensionId("e29"))
+const e29 = defineExtension("e29")
 	.flags({ f29: { type: "boolean" } })
 	.provide(p29())
 	.add(defineCommand("ec29", (command) => command.flags({ x: { type: "string" } })));
-const e30 = defineExtension(defineExtensionId("e30"))
+const e30 = defineExtension("e30")
 	.flags({ f30: { type: "boolean" } })
 	.provide(p30())
 	.add(defineCommand("ec30", (command) => command.flags({ x: { type: "string" } })));
-const e31 = defineExtension(defineExtensionId("e31"))
+const e31 = defineExtension("e31")
 	.flags({ f31: { type: "boolean" } })
 	.provide(p31())
 	.add(defineCommand("ec31", (command) => command.flags({ x: { type: "string" } })));
-const e32 = defineExtension(defineExtensionId("e32"))
+const e32 = defineExtension("e32")
 	.flags({ f32: { type: "boolean" } })
 	.provide(p32())
 	.add(defineCommand("ec32", (command) => command.flags({ x: { type: "string" } })));
-const e33 = defineExtension(defineExtensionId("e33"))
+const e33 = defineExtension("e33")
 	.flags({ f33: { type: "boolean" } })
 	.provide(p33())
 	.add(defineCommand("ec33", (command) => command.flags({ x: { type: "string" } })));
-const e34 = defineExtension(defineExtensionId("e34"))
+const e34 = defineExtension("e34")
 	.flags({ f34: { type: "boolean" } })
 	.provide(p34())
 	.add(defineCommand("ec34", (command) => command.flags({ x: { type: "string" } })));
-const e35 = defineExtension(defineExtensionId("e35"))
+const e35 = defineExtension("e35")
 	.flags({ f35: { type: "boolean" } })
 	.provide(p35())
 	.add(defineCommand("ec35", (command) => command.flags({ x: { type: "string" } })));
-const e36 = defineExtension(defineExtensionId("e36"))
+const e36 = defineExtension("e36")
 	.flags({ f36: { type: "boolean" } })
 	.provide(p36())
 	.add(defineCommand("ec36", (command) => command.flags({ x: { type: "string" } })));
-const e37 = defineExtension(defineExtensionId("e37"))
+const e37 = defineExtension("e37")
 	.flags({ f37: { type: "boolean" } })
 	.provide(p37())
 	.add(defineCommand("ec37", (command) => command.flags({ x: { type: "string" } })));
-const e38 = defineExtension(defineExtensionId("e38"))
+const e38 = defineExtension("e38")
 	.flags({ f38: { type: "boolean" } })
 	.provide(p38())
 	.add(defineCommand("ec38", (command) => command.flags({ x: { type: "string" } })));
-const e39 = defineExtension(defineExtensionId("e39"))
+const e39 = defineExtension("e39")
 	.flags({ f39: { type: "boolean" } })
 	.provide(p39())
 	.add(defineCommand("ec39", (command) => command.flags({ x: { type: "string" } })));
-const e40 = defineExtension(defineExtensionId("e40"))
+const e40 = defineExtension("e40")
 	.flags({ f40: { type: "boolean" } })
 	.provide(p40())
 	.add(defineCommand("ec40", (command) => command.flags({ x: { type: "string" } })));
-const e41 = defineExtension(defineExtensionId("e41"))
+const e41 = defineExtension("e41")
 	.flags({ f41: { type: "boolean" } })
 	.provide(p41())
 	.add(defineCommand("ec41", (command) => command.flags({ x: { type: "string" } })));
-const e42 = defineExtension(defineExtensionId("e42"))
+const e42 = defineExtension("e42")
 	.flags({ f42: { type: "boolean" } })
 	.provide(p42())
 	.add(defineCommand("ec42", (command) => command.flags({ x: { type: "string" } })));
-const e43 = defineExtension(defineExtensionId("e43"))
+const e43 = defineExtension("e43")
 	.flags({ f43: { type: "boolean" } })
 	.provide(p43())
 	.add(defineCommand("ec43", (command) => command.flags({ x: { type: "string" } })));
-const e44 = defineExtension(defineExtensionId("e44"))
+const e44 = defineExtension("e44")
 	.flags({ f44: { type: "boolean" } })
 	.provide(p44())
 	.add(defineCommand("ec44", (command) => command.flags({ x: { type: "string" } })));
-const e45 = defineExtension(defineExtensionId("e45"))
+const e45 = defineExtension("e45")
 	.flags({ f45: { type: "boolean" } })
 	.provide(p45())
 	.add(defineCommand("ec45", (command) => command.flags({ x: { type: "string" } })));
-const e46 = defineExtension(defineExtensionId("e46"))
+const e46 = defineExtension("e46")
 	.flags({ f46: { type: "boolean" } })
 	.provide(p46())
 	.add(defineCommand("ec46", (command) => command.flags({ x: { type: "string" } })));
-const e47 = defineExtension(defineExtensionId("e47"))
+const e47 = defineExtension("e47")
 	.flags({ f47: { type: "boolean" } })
 	.provide(p47())
 	.add(defineCommand("ec47", (command) => command.flags({ x: { type: "string" } })));
-const e48 = defineExtension(defineExtensionId("e48"))
+const e48 = defineExtension("e48")
 	.flags({ f48: { type: "boolean" } })
 	.provide(p48())
 	.add(defineCommand("ec48", (command) => command.flags({ x: { type: "string" } })));
-const e49 = defineExtension(defineExtensionId("e49"))
+const e49 = defineExtension("e49")
 	.flags({ f49: { type: "boolean" } })
 	.provide(p49())
 	.add(defineCommand("ec49", (command) => command.flags({ x: { type: "string" } })));
-const e50 = defineExtension(defineExtensionId("e50"))
+const e50 = defineExtension("e50")
 	.flags({ f50: { type: "boolean" } })
 	.provide(p50())
 	.add(defineCommand("ec50", (command) => command.flags({ x: { type: "string" } })));
-const e51 = defineExtension(defineExtensionId("e51"))
+const e51 = defineExtension("e51")
 	.flags({ f51: { type: "boolean" } })
 	.provide(p51())
 	.add(defineCommand("ec51", (command) => command.flags({ x: { type: "string" } })));
-const e52 = defineExtension(defineExtensionId("e52"))
+const e52 = defineExtension("e52")
 	.flags({ f52: { type: "boolean" } })
 	.provide(p52())
 	.add(defineCommand("ec52", (command) => command.flags({ x: { type: "string" } })));
-const e53 = defineExtension(defineExtensionId("e53"))
+const e53 = defineExtension("e53")
 	.flags({ f53: { type: "boolean" } })
 	.provide(p53())
 	.add(defineCommand("ec53", (command) => command.flags({ x: { type: "string" } })));
-const e54 = defineExtension(defineExtensionId("e54"))
+const e54 = defineExtension("e54")
 	.flags({ f54: { type: "boolean" } })
 	.provide(p54())
 	.add(defineCommand("ec54", (command) => command.flags({ x: { type: "string" } })));
-const e55 = defineExtension(defineExtensionId("e55"))
+const e55 = defineExtension("e55")
 	.flags({ f55: { type: "boolean" } })
 	.provide(p55())
 	.add(defineCommand("ec55", (command) => command.flags({ x: { type: "string" } })));
-const e56 = defineExtension(defineExtensionId("e56"))
+const e56 = defineExtension("e56")
 	.flags({ f56: { type: "boolean" } })
 	.provide(p56())
 	.add(defineCommand("ec56", (command) => command.flags({ x: { type: "string" } })));
-const e57 = defineExtension(defineExtensionId("e57"))
+const e57 = defineExtension("e57")
 	.flags({ f57: { type: "boolean" } })
 	.provide(p57())
 	.add(defineCommand("ec57", (command) => command.flags({ x: { type: "string" } })));
-const e58 = defineExtension(defineExtensionId("e58"))
+const e58 = defineExtension("e58")
 	.flags({ f58: { type: "boolean" } })
 	.provide(p58())
 	.add(defineCommand("ec58", (command) => command.flags({ x: { type: "string" } })));
-const e59 = defineExtension(defineExtensionId("e59"))
+const e59 = defineExtension("e59")
 	.flags({ f59: { type: "boolean" } })
 	.provide(p59())
 	.add(defineCommand("ec59", (command) => command.flags({ x: { type: "string" } })));
@@ -800,502 +797,502 @@ function _typecheckChainedFlagExtensions() {
 }
 
 // A chain of 90+ `.extend()` calls must not hit TS2589: each call resolves its command tree.
-const chained0 = defineExtension(defineExtensionId("chained-0")).add(
+const chained0 = defineExtension("chained-0").add(
 	defineCommand("chained-0", (command) =>
 		command.flags({ "chained-flag-0": { type: "boolean" } }).action(() => 0 as const),
 	),
 );
-const chained1 = defineExtension(defineExtensionId("chained-1")).add(
+const chained1 = defineExtension("chained-1").add(
 	defineCommand("chained-1", (command) =>
 		command.flags({ "chained-flag-1": { type: "boolean" } }).action(() => 1 as const),
 	),
 );
-const chained2 = defineExtension(defineExtensionId("chained-2")).add(
+const chained2 = defineExtension("chained-2").add(
 	defineCommand("chained-2", (command) =>
 		command.flags({ "chained-flag-2": { type: "boolean" } }).action(() => 2 as const),
 	),
 );
-const chained3 = defineExtension(defineExtensionId("chained-3")).add(
+const chained3 = defineExtension("chained-3").add(
 	defineCommand("chained-3", (command) =>
 		command.flags({ "chained-flag-3": { type: "boolean" } }).action(() => 3 as const),
 	),
 );
-const chained4 = defineExtension(defineExtensionId("chained-4")).add(
+const chained4 = defineExtension("chained-4").add(
 	defineCommand("chained-4", (command) =>
 		command.flags({ "chained-flag-4": { type: "boolean" } }).action(() => 4 as const),
 	),
 );
-const chained5 = defineExtension(defineExtensionId("chained-5")).add(
+const chained5 = defineExtension("chained-5").add(
 	defineCommand("chained-5", (command) =>
 		command.flags({ "chained-flag-5": { type: "boolean" } }).action(() => 5 as const),
 	),
 );
-const chained6 = defineExtension(defineExtensionId("chained-6")).add(
+const chained6 = defineExtension("chained-6").add(
 	defineCommand("chained-6", (command) =>
 		command.flags({ "chained-flag-6": { type: "boolean" } }).action(() => 6 as const),
 	),
 );
-const chained7 = defineExtension(defineExtensionId("chained-7")).add(
+const chained7 = defineExtension("chained-7").add(
 	defineCommand("chained-7", (command) =>
 		command.flags({ "chained-flag-7": { type: "boolean" } }).action(() => 7 as const),
 	),
 );
-const chained8 = defineExtension(defineExtensionId("chained-8")).add(
+const chained8 = defineExtension("chained-8").add(
 	defineCommand("chained-8", (command) =>
 		command.flags({ "chained-flag-8": { type: "boolean" } }).action(() => 8 as const),
 	),
 );
-const chained9 = defineExtension(defineExtensionId("chained-9")).add(
+const chained9 = defineExtension("chained-9").add(
 	defineCommand("chained-9", (command) =>
 		command.flags({ "chained-flag-9": { type: "boolean" } }).action(() => 9 as const),
 	),
 );
-const chained10 = defineExtension(defineExtensionId("chained-10")).add(
+const chained10 = defineExtension("chained-10").add(
 	defineCommand("chained-10", (command) =>
 		command.flags({ "chained-flag-10": { type: "boolean" } }).action(() => 10 as const),
 	),
 );
-const chained11 = defineExtension(defineExtensionId("chained-11")).add(
+const chained11 = defineExtension("chained-11").add(
 	defineCommand("chained-11", (command) =>
 		command.flags({ "chained-flag-11": { type: "boolean" } }).action(() => 11 as const),
 	),
 );
-const chained12 = defineExtension(defineExtensionId("chained-12")).add(
+const chained12 = defineExtension("chained-12").add(
 	defineCommand("chained-12", (command) =>
 		command.flags({ "chained-flag-12": { type: "boolean" } }).action(() => 12 as const),
 	),
 );
-const chained13 = defineExtension(defineExtensionId("chained-13")).add(
+const chained13 = defineExtension("chained-13").add(
 	defineCommand("chained-13", (command) =>
 		command.flags({ "chained-flag-13": { type: "boolean" } }).action(() => 13 as const),
 	),
 );
-const chained14 = defineExtension(defineExtensionId("chained-14")).add(
+const chained14 = defineExtension("chained-14").add(
 	defineCommand("chained-14", (command) =>
 		command.flags({ "chained-flag-14": { type: "boolean" } }).action(() => 14 as const),
 	),
 );
-const chained15 = defineExtension(defineExtensionId("chained-15")).add(
+const chained15 = defineExtension("chained-15").add(
 	defineCommand("chained-15", (command) =>
 		command.flags({ "chained-flag-15": { type: "boolean" } }).action(() => 15 as const),
 	),
 );
-const chained16 = defineExtension(defineExtensionId("chained-16")).add(
+const chained16 = defineExtension("chained-16").add(
 	defineCommand("chained-16", (command) =>
 		command.flags({ "chained-flag-16": { type: "boolean" } }).action(() => 16 as const),
 	),
 );
-const chained17 = defineExtension(defineExtensionId("chained-17")).add(
+const chained17 = defineExtension("chained-17").add(
 	defineCommand("chained-17", (command) =>
 		command.flags({ "chained-flag-17": { type: "boolean" } }).action(() => 17 as const),
 	),
 );
-const chained18 = defineExtension(defineExtensionId("chained-18")).add(
+const chained18 = defineExtension("chained-18").add(
 	defineCommand("chained-18", (command) =>
 		command.flags({ "chained-flag-18": { type: "boolean" } }).action(() => 18 as const),
 	),
 );
-const chained19 = defineExtension(defineExtensionId("chained-19")).add(
+const chained19 = defineExtension("chained-19").add(
 	defineCommand("chained-19", (command) =>
 		command.flags({ "chained-flag-19": { type: "boolean" } }).action(() => 19 as const),
 	),
 );
-const chained20 = defineExtension(defineExtensionId("chained-20")).add(
+const chained20 = defineExtension("chained-20").add(
 	defineCommand("chained-20", (command) =>
 		command.flags({ "chained-flag-20": { type: "boolean" } }).action(() => 20 as const),
 	),
 );
-const chained21 = defineExtension(defineExtensionId("chained-21")).add(
+const chained21 = defineExtension("chained-21").add(
 	defineCommand("chained-21", (command) =>
 		command.flags({ "chained-flag-21": { type: "boolean" } }).action(() => 21 as const),
 	),
 );
-const chained22 = defineExtension(defineExtensionId("chained-22")).add(
+const chained22 = defineExtension("chained-22").add(
 	defineCommand("chained-22", (command) =>
 		command.flags({ "chained-flag-22": { type: "boolean" } }).action(() => 22 as const),
 	),
 );
-const chained23 = defineExtension(defineExtensionId("chained-23")).add(
+const chained23 = defineExtension("chained-23").add(
 	defineCommand("chained-23", (command) =>
 		command.flags({ "chained-flag-23": { type: "boolean" } }).action(() => 23 as const),
 	),
 );
-const chained24 = defineExtension(defineExtensionId("chained-24")).add(
+const chained24 = defineExtension("chained-24").add(
 	defineCommand("chained-24", (command) =>
 		command.flags({ "chained-flag-24": { type: "boolean" } }).action(() => 24 as const),
 	),
 );
-const chained25 = defineExtension(defineExtensionId("chained-25")).add(
+const chained25 = defineExtension("chained-25").add(
 	defineCommand("chained-25", (command) =>
 		command.flags({ "chained-flag-25": { type: "boolean" } }).action(() => 25 as const),
 	),
 );
-const chained26 = defineExtension(defineExtensionId("chained-26")).add(
+const chained26 = defineExtension("chained-26").add(
 	defineCommand("chained-26", (command) =>
 		command.flags({ "chained-flag-26": { type: "boolean" } }).action(() => 26 as const),
 	),
 );
-const chained27 = defineExtension(defineExtensionId("chained-27")).add(
+const chained27 = defineExtension("chained-27").add(
 	defineCommand("chained-27", (command) =>
 		command.flags({ "chained-flag-27": { type: "boolean" } }).action(() => 27 as const),
 	),
 );
-const chained28 = defineExtension(defineExtensionId("chained-28")).add(
+const chained28 = defineExtension("chained-28").add(
 	defineCommand("chained-28", (command) =>
 		command.flags({ "chained-flag-28": { type: "boolean" } }).action(() => 28 as const),
 	),
 );
-const chained29 = defineExtension(defineExtensionId("chained-29")).add(
+const chained29 = defineExtension("chained-29").add(
 	defineCommand("chained-29", (command) =>
 		command.flags({ "chained-flag-29": { type: "boolean" } }).action(() => 29 as const),
 	),
 );
-const chained30 = defineExtension(defineExtensionId("chained-30")).add(
+const chained30 = defineExtension("chained-30").add(
 	defineCommand("chained-30", (command) =>
 		command.flags({ "chained-flag-30": { type: "boolean" } }).action(() => 30 as const),
 	),
 );
-const chained31 = defineExtension(defineExtensionId("chained-31")).add(
+const chained31 = defineExtension("chained-31").add(
 	defineCommand("chained-31", (command) =>
 		command.flags({ "chained-flag-31": { type: "boolean" } }).action(() => 31 as const),
 	),
 );
-const chained32 = defineExtension(defineExtensionId("chained-32")).add(
+const chained32 = defineExtension("chained-32").add(
 	defineCommand("chained-32", (command) =>
 		command.flags({ "chained-flag-32": { type: "boolean" } }).action(() => 32 as const),
 	),
 );
-const chained33 = defineExtension(defineExtensionId("chained-33")).add(
+const chained33 = defineExtension("chained-33").add(
 	defineCommand("chained-33", (command) =>
 		command.flags({ "chained-flag-33": { type: "boolean" } }).action(() => 33 as const),
 	),
 );
-const chained34 = defineExtension(defineExtensionId("chained-34")).add(
+const chained34 = defineExtension("chained-34").add(
 	defineCommand("chained-34", (command) =>
 		command.flags({ "chained-flag-34": { type: "boolean" } }).action(() => 34 as const),
 	),
 );
-const chained35 = defineExtension(defineExtensionId("chained-35")).add(
+const chained35 = defineExtension("chained-35").add(
 	defineCommand("chained-35", (command) =>
 		command.flags({ "chained-flag-35": { type: "boolean" } }).action(() => 35 as const),
 	),
 );
-const chained36 = defineExtension(defineExtensionId("chained-36")).add(
+const chained36 = defineExtension("chained-36").add(
 	defineCommand("chained-36", (command) =>
 		command.flags({ "chained-flag-36": { type: "boolean" } }).action(() => 36 as const),
 	),
 );
-const chained37 = defineExtension(defineExtensionId("chained-37")).add(
+const chained37 = defineExtension("chained-37").add(
 	defineCommand("chained-37", (command) =>
 		command.flags({ "chained-flag-37": { type: "boolean" } }).action(() => 37 as const),
 	),
 );
-const chained38 = defineExtension(defineExtensionId("chained-38")).add(
+const chained38 = defineExtension("chained-38").add(
 	defineCommand("chained-38", (command) =>
 		command.flags({ "chained-flag-38": { type: "boolean" } }).action(() => 38 as const),
 	),
 );
-const chained39 = defineExtension(defineExtensionId("chained-39")).add(
+const chained39 = defineExtension("chained-39").add(
 	defineCommand("chained-39", (command) =>
 		command.flags({ "chained-flag-39": { type: "boolean" } }).action(() => 39 as const),
 	),
 );
-const chained40 = defineExtension(defineExtensionId("chained-40")).add(
+const chained40 = defineExtension("chained-40").add(
 	defineCommand("chained-40", (command) =>
 		command.flags({ "chained-flag-40": { type: "boolean" } }).action(() => 40 as const),
 	),
 );
-const chained41 = defineExtension(defineExtensionId("chained-41")).add(
+const chained41 = defineExtension("chained-41").add(
 	defineCommand("chained-41", (command) =>
 		command.flags({ "chained-flag-41": { type: "boolean" } }).action(() => 41 as const),
 	),
 );
-const chained42 = defineExtension(defineExtensionId("chained-42")).add(
+const chained42 = defineExtension("chained-42").add(
 	defineCommand("chained-42", (command) =>
 		command.flags({ "chained-flag-42": { type: "boolean" } }).action(() => 42 as const),
 	),
 );
-const chained43 = defineExtension(defineExtensionId("chained-43")).add(
+const chained43 = defineExtension("chained-43").add(
 	defineCommand("chained-43", (command) =>
 		command.flags({ "chained-flag-43": { type: "boolean" } }).action(() => 43 as const),
 	),
 );
-const chained44 = defineExtension(defineExtensionId("chained-44")).add(
+const chained44 = defineExtension("chained-44").add(
 	defineCommand("chained-44", (command) =>
 		command.flags({ "chained-flag-44": { type: "boolean" } }).action(() => 44 as const),
 	),
 );
-const chained45 = defineExtension(defineExtensionId("chained-45")).add(
+const chained45 = defineExtension("chained-45").add(
 	defineCommand("chained-45", (command) =>
 		command.flags({ "chained-flag-45": { type: "boolean" } }).action(() => 45 as const),
 	),
 );
-const chained46 = defineExtension(defineExtensionId("chained-46")).add(
+const chained46 = defineExtension("chained-46").add(
 	defineCommand("chained-46", (command) =>
 		command.flags({ "chained-flag-46": { type: "boolean" } }).action(() => 46 as const),
 	),
 );
-const chained47 = defineExtension(defineExtensionId("chained-47")).add(
+const chained47 = defineExtension("chained-47").add(
 	defineCommand("chained-47", (command) =>
 		command.flags({ "chained-flag-47": { type: "boolean" } }).action(() => 47 as const),
 	),
 );
-const chained48 = defineExtension(defineExtensionId("chained-48")).add(
+const chained48 = defineExtension("chained-48").add(
 	defineCommand("chained-48", (command) =>
 		command.flags({ "chained-flag-48": { type: "boolean" } }).action(() => 48 as const),
 	),
 );
-const chained49 = defineExtension(defineExtensionId("chained-49")).add(
+const chained49 = defineExtension("chained-49").add(
 	defineCommand("chained-49", (command) =>
 		command.flags({ "chained-flag-49": { type: "boolean" } }).action(() => 49 as const),
 	),
 );
-const chained50 = defineExtension(defineExtensionId("chained-50")).add(
+const chained50 = defineExtension("chained-50").add(
 	defineCommand("chained-50", (command) =>
 		command.flags({ "chained-flag-50": { type: "boolean" } }).action(() => 50 as const),
 	),
 );
-const chained51 = defineExtension(defineExtensionId("chained-51")).add(
+const chained51 = defineExtension("chained-51").add(
 	defineCommand("chained-51", (command) =>
 		command.flags({ "chained-flag-51": { type: "boolean" } }).action(() => 51 as const),
 	),
 );
-const chained52 = defineExtension(defineExtensionId("chained-52")).add(
+const chained52 = defineExtension("chained-52").add(
 	defineCommand("chained-52", (command) =>
 		command.flags({ "chained-flag-52": { type: "boolean" } }).action(() => 52 as const),
 	),
 );
-const chained53 = defineExtension(defineExtensionId("chained-53")).add(
+const chained53 = defineExtension("chained-53").add(
 	defineCommand("chained-53", (command) =>
 		command.flags({ "chained-flag-53": { type: "boolean" } }).action(() => 53 as const),
 	),
 );
-const chained54 = defineExtension(defineExtensionId("chained-54")).add(
+const chained54 = defineExtension("chained-54").add(
 	defineCommand("chained-54", (command) =>
 		command.flags({ "chained-flag-54": { type: "boolean" } }).action(() => 54 as const),
 	),
 );
-const chained55 = defineExtension(defineExtensionId("chained-55")).add(
+const chained55 = defineExtension("chained-55").add(
 	defineCommand("chained-55", (command) =>
 		command.flags({ "chained-flag-55": { type: "boolean" } }).action(() => 55 as const),
 	),
 );
-const chained56 = defineExtension(defineExtensionId("chained-56")).add(
+const chained56 = defineExtension("chained-56").add(
 	defineCommand("chained-56", (command) =>
 		command.flags({ "chained-flag-56": { type: "boolean" } }).action(() => 56 as const),
 	),
 );
-const chained57 = defineExtension(defineExtensionId("chained-57")).add(
+const chained57 = defineExtension("chained-57").add(
 	defineCommand("chained-57", (command) =>
 		command.flags({ "chained-flag-57": { type: "boolean" } }).action(() => 57 as const),
 	),
 );
-const chained58 = defineExtension(defineExtensionId("chained-58")).add(
+const chained58 = defineExtension("chained-58").add(
 	defineCommand("chained-58", (command) =>
 		command.flags({ "chained-flag-58": { type: "boolean" } }).action(() => 58 as const),
 	),
 );
-const chained59 = defineExtension(defineExtensionId("chained-59")).add(
+const chained59 = defineExtension("chained-59").add(
 	defineCommand("chained-59", (command) =>
 		command.flags({ "chained-flag-59": { type: "boolean" } }).action(() => 59 as const),
 	),
 );
-const chained60 = defineExtension(defineExtensionId("chained-60")).add(
+const chained60 = defineExtension("chained-60").add(
 	defineCommand("chained-60", (command) =>
 		command.flags({ "chained-flag-60": { type: "boolean" } }).action(() => 60 as const),
 	),
 );
-const chained61 = defineExtension(defineExtensionId("chained-61")).add(
+const chained61 = defineExtension("chained-61").add(
 	defineCommand("chained-61", (command) =>
 		command.flags({ "chained-flag-61": { type: "boolean" } }).action(() => 61 as const),
 	),
 );
-const chained62 = defineExtension(defineExtensionId("chained-62")).add(
+const chained62 = defineExtension("chained-62").add(
 	defineCommand("chained-62", (command) =>
 		command.flags({ "chained-flag-62": { type: "boolean" } }).action(() => 62 as const),
 	),
 );
-const chained63 = defineExtension(defineExtensionId("chained-63")).add(
+const chained63 = defineExtension("chained-63").add(
 	defineCommand("chained-63", (command) =>
 		command.flags({ "chained-flag-63": { type: "boolean" } }).action(() => 63 as const),
 	),
 );
-const chained64 = defineExtension(defineExtensionId("chained-64")).add(
+const chained64 = defineExtension("chained-64").add(
 	defineCommand("chained-64", (command) =>
 		command.flags({ "chained-flag-64": { type: "boolean" } }).action(() => 64 as const),
 	),
 );
-const chained65 = defineExtension(defineExtensionId("chained-65")).add(
+const chained65 = defineExtension("chained-65").add(
 	defineCommand("chained-65", (command) =>
 		command.flags({ "chained-flag-65": { type: "boolean" } }).action(() => 65 as const),
 	),
 );
-const chained66 = defineExtension(defineExtensionId("chained-66")).add(
+const chained66 = defineExtension("chained-66").add(
 	defineCommand("chained-66", (command) =>
 		command.flags({ "chained-flag-66": { type: "boolean" } }).action(() => 66 as const),
 	),
 );
-const chained67 = defineExtension(defineExtensionId("chained-67")).add(
+const chained67 = defineExtension("chained-67").add(
 	defineCommand("chained-67", (command) =>
 		command.flags({ "chained-flag-67": { type: "boolean" } }).action(() => 67 as const),
 	),
 );
-const chained68 = defineExtension(defineExtensionId("chained-68")).add(
+const chained68 = defineExtension("chained-68").add(
 	defineCommand("chained-68", (command) =>
 		command.flags({ "chained-flag-68": { type: "boolean" } }).action(() => 68 as const),
 	),
 );
-const chained69 = defineExtension(defineExtensionId("chained-69")).add(
+const chained69 = defineExtension("chained-69").add(
 	defineCommand("chained-69", (command) =>
 		command.flags({ "chained-flag-69": { type: "boolean" } }).action(() => 69 as const),
 	),
 );
-const chained70 = defineExtension(defineExtensionId("chained-70")).add(
+const chained70 = defineExtension("chained-70").add(
 	defineCommand("chained-70", (command) =>
 		command.flags({ "chained-flag-70": { type: "boolean" } }).action(() => 70 as const),
 	),
 );
-const chained71 = defineExtension(defineExtensionId("chained-71")).add(
+const chained71 = defineExtension("chained-71").add(
 	defineCommand("chained-71", (command) =>
 		command.flags({ "chained-flag-71": { type: "boolean" } }).action(() => 71 as const),
 	),
 );
-const chained72 = defineExtension(defineExtensionId("chained-72")).add(
+const chained72 = defineExtension("chained-72").add(
 	defineCommand("chained-72", (command) =>
 		command.flags({ "chained-flag-72": { type: "boolean" } }).action(() => 72 as const),
 	),
 );
-const chained73 = defineExtension(defineExtensionId("chained-73")).add(
+const chained73 = defineExtension("chained-73").add(
 	defineCommand("chained-73", (command) =>
 		command.flags({ "chained-flag-73": { type: "boolean" } }).action(() => 73 as const),
 	),
 );
-const chained74 = defineExtension(defineExtensionId("chained-74")).add(
+const chained74 = defineExtension("chained-74").add(
 	defineCommand("chained-74", (command) =>
 		command.flags({ "chained-flag-74": { type: "boolean" } }).action(() => 74 as const),
 	),
 );
-const chained75 = defineExtension(defineExtensionId("chained-75")).add(
+const chained75 = defineExtension("chained-75").add(
 	defineCommand("chained-75", (command) =>
 		command.flags({ "chained-flag-75": { type: "boolean" } }).action(() => 75 as const),
 	),
 );
-const chained76 = defineExtension(defineExtensionId("chained-76")).add(
+const chained76 = defineExtension("chained-76").add(
 	defineCommand("chained-76", (command) =>
 		command.flags({ "chained-flag-76": { type: "boolean" } }).action(() => 76 as const),
 	),
 );
-const chained77 = defineExtension(defineExtensionId("chained-77")).add(
+const chained77 = defineExtension("chained-77").add(
 	defineCommand("chained-77", (command) =>
 		command.flags({ "chained-flag-77": { type: "boolean" } }).action(() => 77 as const),
 	),
 );
-const chained78 = defineExtension(defineExtensionId("chained-78")).add(
+const chained78 = defineExtension("chained-78").add(
 	defineCommand("chained-78", (command) =>
 		command.flags({ "chained-flag-78": { type: "boolean" } }).action(() => 78 as const),
 	),
 );
-const chained79 = defineExtension(defineExtensionId("chained-79")).add(
+const chained79 = defineExtension("chained-79").add(
 	defineCommand("chained-79", (command) =>
 		command.flags({ "chained-flag-79": { type: "boolean" } }).action(() => 79 as const),
 	),
 );
-const chained80 = defineExtension(defineExtensionId("chained-80")).add(
+const chained80 = defineExtension("chained-80").add(
 	defineCommand("chained-80", (command) =>
 		command.flags({ "chained-flag-80": { type: "boolean" } }).action(() => 80 as const),
 	),
 );
-const chained81 = defineExtension(defineExtensionId("chained-81")).add(
+const chained81 = defineExtension("chained-81").add(
 	defineCommand("chained-81", (command) =>
 		command.flags({ "chained-flag-81": { type: "boolean" } }).action(() => 81 as const),
 	),
 );
-const chained82 = defineExtension(defineExtensionId("chained-82")).add(
+const chained82 = defineExtension("chained-82").add(
 	defineCommand("chained-82", (command) =>
 		command.flags({ "chained-flag-82": { type: "boolean" } }).action(() => 82 as const),
 	),
 );
-const chained83 = defineExtension(defineExtensionId("chained-83")).add(
+const chained83 = defineExtension("chained-83").add(
 	defineCommand("chained-83", (command) =>
 		command.flags({ "chained-flag-83": { type: "boolean" } }).action(() => 83 as const),
 	),
 );
-const chained84 = defineExtension(defineExtensionId("chained-84")).add(
+const chained84 = defineExtension("chained-84").add(
 	defineCommand("chained-84", (command) =>
 		command.flags({ "chained-flag-84": { type: "boolean" } }).action(() => 84 as const),
 	),
 );
-const chained85 = defineExtension(defineExtensionId("chained-85")).add(
+const chained85 = defineExtension("chained-85").add(
 	defineCommand("chained-85", (command) =>
 		command.flags({ "chained-flag-85": { type: "boolean" } }).action(() => 85 as const),
 	),
 );
-const chained86 = defineExtension(defineExtensionId("chained-86")).add(
+const chained86 = defineExtension("chained-86").add(
 	defineCommand("chained-86", (command) =>
 		command.flags({ "chained-flag-86": { type: "boolean" } }).action(() => 86 as const),
 	),
 );
-const chained87 = defineExtension(defineExtensionId("chained-87")).add(
+const chained87 = defineExtension("chained-87").add(
 	defineCommand("chained-87", (command) =>
 		command.flags({ "chained-flag-87": { type: "boolean" } }).action(() => 87 as const),
 	),
 );
-const chained88 = defineExtension(defineExtensionId("chained-88")).add(
+const chained88 = defineExtension("chained-88").add(
 	defineCommand("chained-88", (command) =>
 		command.flags({ "chained-flag-88": { type: "boolean" } }).action(() => 88 as const),
 	),
 );
-const chained89 = defineExtension(defineExtensionId("chained-89")).add(
+const chained89 = defineExtension("chained-89").add(
 	defineCommand("chained-89", (command) =>
 		command.flags({ "chained-flag-89": { type: "boolean" } }).action(() => 89 as const),
 	),
 );
-const chained90 = defineExtension(defineExtensionId("chained-90")).add(
+const chained90 = defineExtension("chained-90").add(
 	defineCommand("chained-90", (command) =>
 		command.flags({ "chained-flag-90": { type: "boolean" } }).action(() => 90 as const),
 	),
 );
-const chained91 = defineExtension(defineExtensionId("chained-91")).add(
+const chained91 = defineExtension("chained-91").add(
 	defineCommand("chained-91", (command) =>
 		command.flags({ "chained-flag-91": { type: "boolean" } }).action(() => 91 as const),
 	),
 );
-const chained92 = defineExtension(defineExtensionId("chained-92")).add(
+const chained92 = defineExtension("chained-92").add(
 	defineCommand("chained-92", (command) =>
 		command.flags({ "chained-flag-92": { type: "boolean" } }).action(() => 92 as const),
 	),
 );
-const chained93 = defineExtension(defineExtensionId("chained-93")).add(
+const chained93 = defineExtension("chained-93").add(
 	defineCommand("chained-93", (command) =>
 		command.flags({ "chained-flag-93": { type: "boolean" } }).action(() => 93 as const),
 	),
 );
-const chained94 = defineExtension(defineExtensionId("chained-94")).add(
+const chained94 = defineExtension("chained-94").add(
 	defineCommand("chained-94", (command) =>
 		command.flags({ "chained-flag-94": { type: "boolean" } }).action(() => 94 as const),
 	),
 );
-const chained95 = defineExtension(defineExtensionId("chained-95")).add(
+const chained95 = defineExtension("chained-95").add(
 	defineCommand("chained-95", (command) =>
 		command.flags({ "chained-flag-95": { type: "boolean" } }).action(() => 95 as const),
 	),
 );
-const chained96 = defineExtension(defineExtensionId("chained-96")).add(
+const chained96 = defineExtension("chained-96").add(
 	defineCommand("chained-96", (command) =>
 		command.flags({ "chained-flag-96": { type: "boolean" } }).action(() => 96 as const),
 	),
 );
-const chained97 = defineExtension(defineExtensionId("chained-97")).add(
+const chained97 = defineExtension("chained-97").add(
 	defineCommand("chained-97", (command) =>
 		command.flags({ "chained-flag-97": { type: "boolean" } }).action(() => 97 as const),
 	),
 );
-const chained98 = defineExtension(defineExtensionId("chained-98")).add(
+const chained98 = defineExtension("chained-98").add(
 	defineCommand("chained-98", (command) =>
 		command.flags({ "chained-flag-98": { type: "boolean" } }).action(() => 98 as const),
 	),
 );
-const chained99 = defineExtension(defineExtensionId("chained-99")).add(
+const chained99 = defineExtension("chained-99").add(
 	defineCommand("chained-99", (command) =>
 		command.flags({ "chained-flag-99": { type: "boolean" } }).action(() => 99 as const),
 	),
@@ -1478,7 +1475,7 @@ function _typecheckMixedLiteralAndDynamicAdd() {
 
 // A runtime-only Extension command name opens the tree; recursive Extension flags still apply to it.
 function _typecheckRecursiveFlagsReachAnOpenTree(name: string) {
-	const open = defineExtension(defineExtensionId("open-recursive"))
+	const open = defineExtension("open-recursive")
 		.flags({ r: { type: "boolean" } })
 		.add(defineCommand(name, (command) => command));
 	const app = new Crust("open-recursive")
@@ -1491,15 +1488,13 @@ function _typecheckRecursiveFlagsReachAnOpenTree(name: string) {
 
 // Recursive flags registered before an opening `.extend()` still reach the opened tree.
 function _typecheckEarlierRecursiveFlagsReachALaterOpenTree(name: string) {
-	const trace = defineExtension(defineExtensionId("earlier-trace")).flags({
+	const trace = defineExtension("earlier-trace").flags({
 		trace: { type: "boolean" },
 	});
-	const tools = defineExtension(defineExtensionId("earlier-tools")).add(
+	const tools = defineExtension("earlier-tools").add(
 		defineCommand("tool", (command) => command.action(() => 7 as const)),
 	);
-	const runtimeName = defineExtension(defineExtensionId("later-open")).add(
-		defineCommand(name, (command) => command),
-	);
+	const runtimeName = defineExtension("later-open").add(defineCommand(name, (command) => command));
 	const app = new Crust("earlier-recursive")
 		.add(defineCommand("known", (command) => command.action(() => 42 as const)))
 		.extend(tools, trace)
@@ -2140,7 +2135,7 @@ function _typecheckChainedProvideCalls() {
 
 // 120 chained Extension and Context builder `.flags()` calls must not hit TS2589.
 function _typecheckChainedBuilderFlagsCalls() {
-	const extension = defineExtension(defineExtensionId("chained-flags"))
+	const extension = defineExtension("chained-flags")
 		.flags({ "extension-flag-0": { type: "string" } })
 		.flags({ "extension-flag-1": { type: "string" } })
 		.flags({ "extension-flag-2": { type: "string" } })

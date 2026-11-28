@@ -2,7 +2,6 @@ import {
 	CrustError,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 	type CommandDefinition,
 	type Extension,
 	type ExtensionContext,
@@ -566,7 +565,7 @@ export function defineConfig<
 			? ""
 			: ` (${inUser(key) ? userName : projectName} only)`;
 	const width = Math.max(0, ...keys.map((key) => key.length));
-	const extension = defineExtension(defineExtensionId(`crust:config:${name}`))
+	const extension = defineExtension(`crust:config:${name}`)
 		.owns("config")
 		.setup(async (ctx) => {
 			startRun(ctx);

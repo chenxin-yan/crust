@@ -3,9 +3,7 @@ import {
 	type CommandShape,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 	type ExtensionFactory,
-	type ExtensionId,
 } from "@crustjs/core";
 import { isCompiledExecutable } from "@crustjs/utils/artifacts";
 import { shellQuote } from "@crustjs/utils/process";
@@ -23,8 +21,6 @@ declare module "@crustjs/core" {
 		mcp?: false | McpToolAnnotations | undefined;
 	}
 }
-
-export const MCP: ExtensionId = defineExtensionId("crust:mcp");
 
 export const MCP_CLIENTS = ["claude", "cursor", "vscode"] as const;
 export type McpClient = (typeof MCP_CLIENTS)[number];
@@ -126,7 +122,7 @@ export const mcp: ExtensionFactory<
 	[],
 	{},
 	readonly [McpCommandDefinition]
-> = defineExtension(MCP)
+> = defineExtension("crust:mcp")
 	.owns("mcp")
 	.factory((extension, options = {}) =>
 		extension.add(

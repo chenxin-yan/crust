@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { FlagsDef } from "../types.ts";
 import { commandInputSchema } from "./command-input.ts";
 import { Crust, defineCommand } from "./crust.ts";
@@ -237,7 +236,7 @@ describe("snapshotCommand", () => {
 	});
 
 	it("marks the commands and flags an Extension contributes with its id", async () => {
-		const tooling = defineExtensionId("tooling");
+		const tooling = "tooling";
 		const app = new Crust("cli")
 			.flags({ verbose: { type: "boolean" } })
 			.extend(
@@ -308,7 +307,7 @@ describe("keys packages add", () => {
 		const command = defineCommand("deploy", { mcp: false } as {}, (c) =>
 			c.flags({ mode: flag }).action(() => {}),
 		);
-		const tool = defineExtension(defineExtensionId("tool")).add(
+		const tool = defineExtension("tool").add(
 			defineCommand("serve", { mcp: false } as {}, (c) => c.action(() => {})),
 		);
 		const seen: unknown[] = [];
@@ -316,7 +315,7 @@ describe("keys packages add", () => {
 			.extend(
 				tool,
 				// Owns the keys, so the definition check passes.
-				defineExtension(defineExtensionId("owner"))
+				defineExtension("owner")
 					.owns(...(["mcp", "complete"] as never[]))
 					.postRun(({ rootCommand }) => {
 						const deploy = rootCommand.subCommands.deploy!;
@@ -337,7 +336,7 @@ describe("keys packages add", () => {
 		const env = { hint: "local" };
 		const owned = { env, aliases: "abc", negatable: false, deprecated: "x" };
 		const app = new Crust("cli")
-			.extend(defineExtension(defineExtensionId("owner")).owns(...(Object.keys(owned) as never[])))
+			.extend(defineExtension("owner").owns(...(Object.keys(owned) as never[])))
 			.args({ name: "file", type: "string", required: true, ...(owned as object) })
 			.action(() => {});
 		const snapshot = await app.snapshot();
@@ -365,7 +364,7 @@ describe("keys packages add", () => {
 
 describe("command metadata sections", () => {
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
-		const first = defineExtension(defineExtensionId("first")).sections((snapshot) => {
+		const first = defineExtension("first").sections((snapshot) => {
 			expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
 			expect(snapshot.subCommands.build).toBeDefined();
 			expect(snapshot.subCommands.generated).toBeDefined();
@@ -379,7 +378,7 @@ describe("command metadata sections", () => {
 				},
 			];
 		});
-		const second = defineExtension(defineExtensionId("second"))
+		const second = defineExtension("second")
 			.add(defineCommand("generated", (command) => command))
 			.sections(() => [{ command: [], title: "Second root", body: "Second body" }]);
 		const app = new Crust("cli", {
@@ -418,12 +417,12 @@ describe("command metadata sections", () => {
 		const authored = [{ title: "Root guide", body: "Root body" }];
 		const seen: CommandSnapshot[] = [];
 		const contribute = (name: string) =>
-			defineExtension(defineExtensionId(name)).sections((snapshot) => {
+			defineExtension(name).sections((snapshot) => {
 				seen.push(snapshot);
 				return [{ command: [], title: name, body: `${name} body` }];
 			});
 		const plain = new Crust("cli", { sections: authored })
-			.extend(defineExtension(defineExtensionId("silent")).flags({ extra: { type: "boolean" } }))
+			.extend(defineExtension("silent").flags({ extra: { type: "boolean" } }))
 			.add(defineCommand("build", (command) => command.action(() => {})));
 		const contributed = plain.extend(contribute("first")).extend(contribute("second"));
 
@@ -447,8 +446,8 @@ describe("command metadata sections", () => {
 	});
 
 	it("normalizes object and mixed section consumers for authored and contributed sections", async () => {
-		const agentDocs = defineExtension(defineExtensionId("agent-docs"));
-		const terminal = defineExtensionId("terminal");
+		const agentDocs = defineExtension("agent-docs");
+		const terminal = "terminal";
 		const app = new Crust("cli")
 			.add(
 				defineCommand(
@@ -460,7 +459,7 @@ describe("command metadata sections", () => {
 				),
 			)
 			.extend(
-				defineExtension(defineExtensionId("docs")).sections(() => [
+				defineExtension("docs").sections(() => [
 					{
 						command: ["build"],
 						title: "Human notes",
@@ -486,11 +485,7 @@ describe("command metadata sections", () => {
 	it("rejects unknown and aliased contribution paths", async () => {
 		for (const command of [["missing"], ["b"], ["constructor"], ["__proto__"], ["toString"]]) {
 			const app = new Crust("cli")
-				.extend(
-					defineExtension(defineExtensionId("docs")).sections(() => [
-						{ command, title: "Notes", body: "Body" },
-					]),
-				)
+				.extend(defineExtension("docs").sections(() => [{ command, title: "Notes", body: "Body" }]))
 				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
 
 			const rejection = {
@@ -512,7 +507,7 @@ describe("command metadata sections", () => {
 		const failure = new Error("broken recipe");
 		const app = new Crust("cli")
 			.extend(
-				defineExtension(defineExtensionId("docs")).sections((snapshot) => [
+				defineExtension("docs").sections((snapshot) => [
 					{ command: ["good"], title: "About", body: snapshot.meta.name },
 				]),
 			)
@@ -540,7 +535,7 @@ describe("command metadata sections", () => {
 		const seen: CommandSnapshot[] = [];
 		const app = new Crust("cli", { sections: [{ title: "Root guide", body: "Root body" }] })
 			.extend(
-				defineExtension(defineExtensionId("docs"))
+				defineExtension("docs")
 					.sections((snapshot) => {
 						authored = snapshot;
 						return [
@@ -567,7 +562,7 @@ describe("command metadata sections", () => {
 
 		// A childless root is fully built at preparation, so it is eligible for shared projections.
 		const solo = new Crust("solo").extend(
-			defineExtension(defineExtensionId("docs"))
+			defineExtension("docs")
 				.sections(() => [{ command: [], title: "Root extra", body: "x" }])
 				.setup((ctx) => {
 					seen.push(ctx.rootCommand);
@@ -598,7 +593,7 @@ describe("command metadata sections", () => {
 			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
 		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(
-			defineExtension(defineExtensionId("docs")).sections(() => [
+			defineExtension("docs").sections(() => [
 				{ command: [], title: "Injected\rheading", body: "Body" },
 			]),
 		);

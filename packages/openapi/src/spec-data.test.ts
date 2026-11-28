@@ -3,13 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import {
-	Crust,
-	defineCommand,
-	defineContext,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineExtension } from "@crustjs/core";
 import { didYouMean, help } from "@crustjs/extensions";
 import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -295,7 +289,7 @@ describe("spec data files", () => {
 	});
 
 	it("carry an override's package keys onto the command, from source and in a built CLI", async () => {
-		const tiers = defineExtension(defineExtensionId("tiers")).owns("tier");
+		const tiers = defineExtension("tiers").owns("tier");
 		const keyed = () =>
 			chained().override({ status: { tier: "gold" }, listUsers: { tier: "free" } });
 		const appWith = () => appOf(keyed()).extend(tiers);
@@ -701,7 +695,7 @@ describe("spec data files", () => {
 		// With this handle's commands read, a handle that differs only in a package key, either way.
 		void acme.commands;
 		const keyed = acme.override({ status: { tier: "gold" } });
-		const tiers = defineExtension(defineExtensionId("tiers")).owns("tier");
+		const tiers = defineExtension("tiers").owns("tier");
 		for (const [extension, commands] of [
 			[acme.extension, keyed.commands],
 			[keyed.extension, acme.commands],
@@ -718,7 +712,7 @@ describe("spec data files", () => {
 			).toContain('missing or different "status"');
 		}
 		// An Extension's section on a generated command is no difference.
-		const notes = defineExtension(defineExtensionId("notes")).sections(() => [
+		const notes = defineExtension("notes").sections(() => [
 			{ command: ["status"], title: "Notes", body: "Read the status page first." },
 		]);
 		expect(

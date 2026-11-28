@@ -55,8 +55,8 @@ describe("buildEntrypoint", () => {
 
 	it("runs Extension build hooks and returns their artifact report", async () => {
 		const result = await prepare(
-			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact")).build(() => [{ path: "artifact.txt", content: "built" }, { path: "assets/bytes.bin", content: new Uint8Array([0, 255, 128, 10]) }]);\n` +
+			`import { Crust, defineExtension } from ${JSON.stringify(coreUrl)};\n` +
+				`const artifact = defineExtension("artifact").build(() => [{ path: "artifact.txt", content: "built" }, { path: "assets/bytes.bin", content: new Uint8Array([0, 255, 128, 10]) }]);\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
@@ -89,6 +89,7 @@ describe("buildEntrypoint", () => {
 	it.each([
 		null,
 		{ extensions: [{ id: 42, files: [] }] },
+		{ extensions: [{ id: "", files: [] }] },
 		{ extensions: [{ id: " padded ", files: [] }] },
 		{ extensions: [{ id: "missing", files: ["missing.txt"] }] },
 	])("rejects malformed or synthetic legacy reports: %j", async (report) => {

@@ -1,6 +1,5 @@
 export type { McpClient, McpExtensionOptions, McpLaunch } from "./extension.ts";
 export {
-	MCP,
 	MCP_CLIENTS,
 	currentLaunch,
 	mcp,

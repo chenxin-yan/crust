@@ -35,7 +35,7 @@ const deploy = defineCommand("deploy", { description: "Deploy the app" }, (comma
 );
 //#endregion
 
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 import { defineApi } from "@crustjs/openapi";
 
@@ -66,7 +66,7 @@ const pager = defineCommand("pager", { description: "Print the pager" }, (comman
 //#region chdir
 // `acme -C ../other deploy` runs as if started in ../other, so that folder's project file applies.
 // Listed before config.extension: setups run in .extend() order.
-const chdir = defineExtension(defineExtensionId("acme:chdir"))
+const chdir = defineExtension("acme:chdir")
 	.flags({ dir: { type: "path", short: "C", description: "Run as if started in this folder" } })
 	.setup((ctx) => {
 		if (ctx.flags.dir !== undefined) process.chdir(ctx.flags.dir);
@@ -75,7 +75,7 @@ const chdir = defineExtension(defineExtensionId("acme:chdir"))
 
 //#region schema
 // `crust build` writes the file's JSON Schema beside the CLI.
-const configSchema = defineExtension(defineExtensionId("acme:config-schema")).build(() => [
+const configSchema = defineExtension("acme:config-schema").build(() => [
 	{ path: "config/schema.json", content: JSON.stringify(config.jsonSchema(), null, 2) },
 ]);
 //#endregion

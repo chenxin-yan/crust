@@ -1,6 +1,6 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
-export const preview = defineExtension(defineExtensionId("acme:preview"))
+export const preview = defineExtension("acme:preview")
 	.flags({ preview: { type: "boolean", description: "Show the plan" } })
 	.handle("preview", (ctx) => ctx.stdout("nothing changed")); // [!code highlight]
 

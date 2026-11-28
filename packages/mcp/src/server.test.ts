@@ -10,7 +10,6 @@ import {
 	defineCommand,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
 	type RunOutcome,
 } from "@crustjs/core";
 import { json, nextSteps } from "@crustjs/extensions";
@@ -42,7 +41,7 @@ async function connect(app: AnyCrust, options: McpServerOptions = {}) {
 	return client;
 }
 
-const contributed = defineExtension(defineExtensionId("test:contrib")).add(
+const contributed = defineExtension("test:contrib").add(
 	defineCommand("extra", { description: "From an Extension" }, (c) =>
 		c.action(() => ({ from: "extension" })),
 	),
@@ -793,7 +792,7 @@ describe("toolResultFromOutcome", () => {
 			"handled",
 			{
 				status: "handled" as const,
-				by: defineExtensionId("test:h"),
+				by: "test:h",
 				exitCode: 0,
 				stdout: "out",
 				stderr: "",

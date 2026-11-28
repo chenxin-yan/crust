@@ -2,7 +2,6 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { FlagDef } from "../types.ts";
 import type { IsUnion } from "../validation/shared.ts";
 import { Crust, defineCommand } from "./crust.ts";
@@ -129,7 +128,7 @@ function _numberKeysMustBeQuoted() {
 		// @ts-expect-error -- Contexts reject number keys
 		1.5: { type: "boolean" },
 	});
-	defineExtension(defineExtensionId("test:number")).flags({
+	defineExtension("test:number").flags({
 		// @ts-expect-error -- as do Extensions
 		1.5: { type: "boolean" },
 	});
@@ -149,14 +148,14 @@ function _unionDefinitionsCheckEveryBranch(
 	// @ts-expect-error -- Contexts check every branch too
 	defineContext("ctx").flags({ value: asyncParse });
 	// @ts-expect-error -- as do Extensions
-	defineExtension(defineExtensionId("test:union")).flags({ value: asyncParse });
+	defineExtension("test:union").flags({ value: asyncParse });
 	new Crust("cli").flags({
 		value: {} as { type: "boolean" } | { type: "string"; parse: (raw: string) => string },
 	});
 }
 
 function _conditionalRecords(definitions: {} | { port: { type: "number"; default: number } }) {
-	const extension = defineExtension(defineExtensionId("conditional"))
+	const extension = defineExtension("conditional")
 		.flags(definitions)
 		.flags({ quiet: { type: "boolean" } });
 	void new Crust("cli").extend(extension).run([], { flags: { port: 3 } });
@@ -203,7 +202,7 @@ function _inferredConditionalRecords(cond: boolean, maybe: { type: "boolean" } |
 		// @ts-expect-error -- Contexts check each branch too
 		cond ? { ok: { type: "boolean" } } : { bad: { type: "string", choices: ["a"], default: "b" } },
 	);
-	defineExtension(defineExtensionId("cfg")).flags(
+	defineExtension("cfg").flags(
 		// @ts-expect-error -- as do Extensions
 		cond ? { ok: { type: "boolean" } } : { bad: { type: "string", choices: ["a"], default: "b" } },
 	);
@@ -236,7 +235,7 @@ function _conditionalNormalization(
 			// @ts-expect-error -- setup must retain the a branch too
 			flags.b.toUpperCase();
 		});
-	defineExtension(defineExtensionId("partial"))
+	defineExtension("partial")
 		.flags(partial)
 		.preRun(({ flags }) => {
 			// @ts-expect-error -- extension hooks must retain the a branch too
@@ -284,7 +283,7 @@ function _contexts() {
 }
 
 function _extensions() {
-	const trace = defineExtension(defineExtensionId("test:trace"))
+	const trace = defineExtension("test:trace")
 		.flags({
 			trace: { type: "boolean" },
 			root: { type: "string", recursive: false },

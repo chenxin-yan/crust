@@ -1,13 +1,9 @@
 import {
 	type Extension,
 	type RootMetaKey,
-	type ExtensionId,
 	type ExtensionContext,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
-
-const VERSION: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:version");
 
 export type VersionValue = string | (() => string);
 
@@ -45,12 +41,12 @@ type VersionRegistration<K extends RootMetaKey> = Extension<{}, [], VersionFlags
 export interface VersionExtension {
 	(value: VersionValue, options?: VersionOptions): VersionRegistration<never>;
 	(value?: VersionValue, options?: VersionOptions): VersionRegistration<"version">;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 // The builder requires no metadata so one factory serves both overloads; the
 // `VersionExtension` annotation narrows omitted values to require root `version`.
-export const version: VersionExtension = /* @__PURE__ */ defineExtension(VERSION).factory(
+export const version: VersionExtension = /* @__PURE__ */ defineExtension("crust:version").factory(
 	(extension, value?: VersionValue, options: VersionOptions = {}) => {
 		const { format, short = "v" } = options;
 		const flags: VersionFlags = { version: short ? { ...versionFlag, short } : versionFlag };

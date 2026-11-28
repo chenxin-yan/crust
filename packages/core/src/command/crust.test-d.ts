@@ -4,7 +4,6 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { type ContextBag, defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -35,7 +34,7 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	// @ts-expect-error -- .command() rejects a union of builders that differ in state
 	void treeUnion.command("inline", (command) => command);
 
-	const extension = defineExtension(defineExtensionId("conditional"));
+	const extension = defineExtension("conditional");
 	// @ts-expect-error -- app-capability builders still reject union calls via .extend()
 	void flagsUnion.extend(extension);
 
@@ -105,7 +104,7 @@ function _typecheckAcceptsGenericAndPolymorphicThisReceivers() {
 function _typecheckUnionReceiverKeepsExtensionContextDemands(condition: boolean) {
 	const db = defineContext("db").setup(() => "ok");
 	const wrongDb = defineContext("db").setup(() => 42);
-	const extension = defineExtension(defineExtensionId("demands"))
+	const extension = defineExtension("demands")
 		.use(db)
 		.preRun(async ({ ctx }) => {
 			(await ctx.db).toUpperCase();
@@ -209,7 +208,7 @@ function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 
 // infers Extension-owned flags in hook contexts
 function _typecheckExtensionOwnedHookFlags() {
-	defineExtension(defineExtensionId("typed-flags"))
+	defineExtension("typed-flags")
 		.flags({
 			verbose: { type: "boolean", default: false },
 			rootPort: { type: "number", default: 3000, recursive: false },
@@ -240,7 +239,7 @@ function _typecheckExtensionOwnedHookFlags() {
 // infers defineFlag() values attached to an Extension
 function _typecheckDefinedExtensionFlags() {
 	const trace = defineFlag({ type: "boolean", default: false });
-	defineExtension(defineExtensionId("defined-flags"))
+	defineExtension("defined-flags")
 		.flags({ trace })
 		.preRun((ctx) => {
 			type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
@@ -249,7 +248,7 @@ function _typecheckDefinedExtensionFlags() {
 
 // recursive Extension flags reach a nested recipe child without counting as its own flags
 function _typecheckNestedRecipeChildrenDoNotOwnRecursiveExtensionFlags() {
-	const trace = defineExtension(defineExtensionId("nested-trace")).flags({
+	const trace = defineExtension("nested-trace").flags({
 		trace: { type: "boolean" },
 	});
 	const deep = defineCommand("deep", (command) => command);
@@ -259,7 +258,7 @@ function _typecheckNestedRecipeChildrenDoNotOwnRecursiveExtensionFlags() {
 
 // inline .command() children, at any depth, see the recursive Extension flags registered before them
 function _typecheckInlineChildrenSeeRecursiveExtensionFlags() {
-	const logging = defineExtension(defineExtensionId("logging")).flags({
+	const logging = defineExtension("logging").flags({
 		trace: { type: "boolean", default: false },
 		root: { type: "string", recursive: false },
 	});

@@ -1,7 +1,6 @@
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 
 import type { BuildReport } from "../api/extension.ts";
-import type { ExtensionId } from "../identity.ts";
 import { applyExtensionSections, type MaterializeCommandDefinition } from "./extensions-install.ts";
 import { buildExtensionTree } from "./invocation.ts";
 import { cloneCommandNode, type CommandNode } from "./node.ts";
@@ -53,7 +52,7 @@ export async function writeSnapshotProtocol(
 		const extensions: Array<BuildReport["extensions"][number]> = [];
 		// Keyed case-insensitively: the tree may land on a case-insensitive filesystem
 		// where `Config.json` and `config.json` are one file and the second write wins.
-		const owners = new Map<string, { id: ExtensionId; path: string }>();
+		const owners = new Map<string, { id: string; path: string }>();
 		for (const extension of base.extensions) {
 			if (!extension.build) continue;
 			try {

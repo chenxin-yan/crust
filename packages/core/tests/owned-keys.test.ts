@@ -16,7 +16,6 @@ const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
 const STAND_IN = `import {
 	defineExtension,
-	defineExtensionId,
 	type ArgSnapshot,
 	type FlagSnapshot,
 } from "@crustjs/core";
@@ -35,7 +34,7 @@ declare module "@crustjs/core" {
 
 // Reads its keys from the routed command's snapshot, typed, without a cast.
 export const standIn = () =>
-	defineExtension(defineExtensionId("acme:stand-in"))
+	defineExtension("acme:stand-in")
 		.owns("hint", "tool")
 		.preRun(({ command, stdout }) => {
 			const tool: false | { readonly readOnly?: true } | undefined = command.meta.tool;

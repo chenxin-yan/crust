@@ -1,14 +1,8 @@
-import {
-	Crust,
-	defineCommand,
-	defineContext,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineExtension } from "@crustjs/core";
 
 const clock = defineContext("clock").setup(() => ({ now: () => "12:00" }));
 
-export const time = defineExtension(defineExtensionId("acme:time"))
+export const time = defineExtension("acme:time")
 	.provide(clock())
 	.factory((extension) => extension);
 

@@ -24,7 +24,6 @@ import type {
 	UseSource,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
 import { flagRecordEntries, isBareToken, normalizeArg } from "../parsing/spellings.ts";
 import { validateCommandSections } from "../sections.ts";
 import type {
@@ -315,7 +314,7 @@ function checkSiblingNames(
 function materializeCommandDefinition(
 	definition: CommandDefinition,
 	parent: CommandNode,
-	extensionId?: ExtensionId,
+	extensionId?: string,
 ): CommandNode {
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
@@ -664,7 +663,7 @@ type ReplaceEntries<Base, Next> = [LiteralKeys<Base> & LiteralKeys<Next>] extend
 type ExtensionFlagNamesOf<S extends AnyBuilderFacts> = Exclude<S["extensionFlagNames"], undefined>;
 
 /** An Extension's literal id; `never` for a runtime-only one, which the types cannot follow. */
-type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
+type ExtensionLiteralId<E> = E extends { readonly id: infer Id extends string }
 	? IsUnion<Id> extends true
 		? never
 		: IsClosedName<Id> extends true
@@ -674,7 +673,7 @@ type LiteralExtensionId<E> = E extends { readonly id: ExtensionId<infer Id> }
 
 // Only a registration that certainly happens retires an id: not a conditional or open list.
 type DefiniteExtensionIds<Es extends readonly AnyExtension[]> =
-	IsStaticTuple<Es> extends true ? LiteralExtensionId<Es[number]> : never;
+	IsStaticTuple<Es> extends true ? ExtensionLiteralId<Es[number]> : never;
 
 /**
  * Flag names an Extension contributes, for a later same-id registration; an open record names
@@ -706,9 +705,9 @@ type RegisteredFlagNames<Names extends object, Es extends readonly AnyExtension[
 	: | Exclude<Names, readonly [DefiniteExtensionIds<Es>, unknown]>
 		| (Es[number] extends infer E
 				? E extends unknown
-					? [LiteralExtensionId<E>] extends [never]
+					? [ExtensionLiteralId<E>] extends [never]
 						? never
-						: readonly [LiteralExtensionId<E>, ContributedFlagNames<E>]
+						: readonly [ExtensionLiteralId<E>, ContributedFlagNames<E>]
 					: never
 				: never);
 
@@ -1780,7 +1779,7 @@ export class Crust<
 		...sources: Us
 	): AfterUse<Flags, A, Ctx, Tree, CtxFlags, Facts, Result, Us, Meta> {
 		const demands: (AnyContextInstance | AnyContextFactory)[] = [];
-		const extensions: ExtensionId[] = [];
+		const extensions: string[] = [];
 		for (const source of sources) {
 			if ("contextName" in source) {
 				demands.push(definingOf(source));
@@ -1800,7 +1799,7 @@ export class Crust<
 			const {
 				id,
 				provide,
-			}: { readonly id: ExtensionId; readonly provide: readonly AnyContextInstance[] } =
+			}: { readonly id: string; readonly provide: readonly AnyContextInstance[] } =
 				definingOf(source);
 			extensions.push(id);
 			demands.push(...provide);
@@ -1961,7 +1960,7 @@ export class Crust<
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
 	 * contribute. Repeated calls accumulate Extensions in registration order,
-	 * except that registering an `ExtensionId` again keeps only the last
+	 * except that registering an Extension id again keeps only the last
 	 * registration — its contributions and providers replace the earlier ones
 	 * and its hooks run once, at the later position. A literal flag or command name
 	 * the later registration contributes again takes its type. For a literal id

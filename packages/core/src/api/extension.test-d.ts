@@ -1,7 +1,6 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand, type AnyCrust, type RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
 import { defineContext } from "./context.ts";
 import {
@@ -14,7 +13,7 @@ import {
 } from "./extension.ts";
 
 function _metadataRequirements() {
-	const ID = defineExtensionId("test:metadata");
+	const ID = "test:metadata";
 	const needsVersion = defineExtension<"version">(ID)
 		.preRun((ctx) => {
 			type _version = Expect<Equal<typeof ctx.rootCommand.meta.version, string>>;
@@ -183,7 +182,7 @@ function _genericMetadataRequirements<K extends "version">(
 ) {
 	const app = new Crust("app", { version: "1" });
 	const unversioned = new Crust("app");
-	const plain = defineExtension(defineExtensionId("test:generic-metadata")).flags({
+	const plain = defineExtension("test:generic-metadata").flags({
 		verbose: {
 			type: "boolean",
 		},
@@ -214,7 +213,7 @@ function _genericMultipleMetadataRequirements<K extends "version" | "description
 }
 
 function _fluentInference() {
-	const ID = defineExtensionId("test:inference");
+	const ID = "test:inference";
 	const logger = defineContext("logger").setup(() => ({ info: () => {} }));
 	const instance = logger();
 	const command = defineCommand("docs", (cmd) => cmd.action(() => "docs"));
@@ -263,7 +262,7 @@ function _fluentInference() {
 }
 
 function _conditionalFactoryDependencies() {
-	const ID = defineExtensionId("test:conditional-factory");
+	const ID = "test:conditional-factory";
 	const db = defineContext("db").setup(() => "ok");
 	const make = defineExtension<"version">(ID).factory((extension, enabled: boolean) =>
 		enabled
@@ -291,7 +290,7 @@ function _conditionalFactoryDependencies() {
 }
 
 function _positionalCallbacks() {
-	const ID = defineExtensionId("test:positions");
+	const ID = "test:positions";
 	const logger = defineContext("logger").setup(() => "logger");
 	defineExtension(ID)
 		.preRun(({ ctx, flags }) => {
@@ -313,7 +312,7 @@ function _positionalCallbacks() {
 }
 
 function _handleCallbacks() {
-	const ID = defineExtensionId("test:handle");
+	const ID = "test:handle";
 	const logger = defineContext("logger").setup(() => "logger");
 	const owned = defineExtension(ID)
 		.use(logger)
@@ -350,7 +349,7 @@ function _handleCallbacks() {
 }
 
 function _postRunOutcome() {
-	defineExtension(defineExtensionId("test:outcome")).postRun((_ctx, outcome) => {
+	defineExtension("test:outcome").postRun((_ctx, outcome) => {
 		type _outcome = Expect<Equal<typeof outcome, InvocationOutcome>>;
 		// @ts-expect-error The result exists only once the outcome is narrowed to completed.
 		void outcome.result;
@@ -362,7 +361,7 @@ function _postRunOutcome() {
 
 function _rendererSelector() {
 	const logger = defineContext("logger").setup(() => "logger");
-	const owned = defineExtension(defineExtensionId("test:renderer"))
+	const owned = defineExtension("test:renderer")
 		.use(logger)
 		.flags({ json: { type: "boolean" } });
 	owned.renderer((ctx) => {
@@ -384,7 +383,7 @@ function _rendererSelector() {
 }
 
 function _parseCommandArgv() {
-	defineExtension(defineExtensionId("test:parse")).preRun(async (ctx) => {
+	defineExtension("test:parse").preRun(async (ctx) => {
 		const parsed = await ctx.parseCommandArgv(["app", "db"], ["--to", "3"]);
 		type _parsed = Expect<Equal<typeof parsed, ParsedCommandArgv>>;
 		type _flags = Expect<Equal<typeof parsed.flags, Readonly<Record<string, unknown>>>>;
@@ -402,7 +401,7 @@ function _hookFlagsAreTheOwnedAndUsedContextFlags() {
 		.flags({ level: { type: "string", choices: ["info", "warn"], default: "info" } })
 		.setup(({ flags }) => flags.level);
 	const plain = defineContext("plain").setup(() => "plain");
-	defineExtension(defineExtensionId("test:hook-flags"))
+	defineExtension("test:hook-flags")
 		.use(settings, plain)
 		.flags({ trace: { type: "boolean", default: false } })
 		.preRun(async ({ flags, ctx }) => {
@@ -426,7 +425,7 @@ function _hookFlagsAreTheOwnedAndUsedContextFlags() {
 
 // A same-id registration that drops a flag removes it from every typed view.
 function _replacingAnExtensionIdRecomputesItsFlags() {
-	const id = defineExtensionId("test:format");
+	const id = "test:format";
 	const old = defineExtension(id).flags({ format: { type: "string", default: "text" } });
 	const replacement = defineExtension(id).flags({ color: { type: "boolean" } });
 	new Crust("x")
@@ -452,7 +451,7 @@ function _replacingAnExtensionIdRecomputesItsFlags() {
 	// Another id keeps its flags.
 	new Crust("x")
 		.extend(old)
-		.extend(defineExtension(defineExtensionId("test:other")))
+		.extend(defineExtension("test:other"))
 		.action(({ flags }) => {
 			type _format = Expect<Equal<typeof flags.format, string>>;
 		});
@@ -485,17 +484,17 @@ function _replacingAnExtensionIdRecomputesItsFlags() {
 
 function _onlyACertainRegistrationRetiresAnId() {
 	const condition = Math.random() > 0.5;
-	const old = defineExtension(defineExtensionId("test:old")).flags({
+	const old = defineExtension("test:old").flags({
 		q: { type: "string", required: true },
 	});
-	const same = defineExtension(defineExtensionId("test:old"));
-	const other = defineExtension(defineExtensionId("test:other"));
-	const maybe = defineExtension(defineExtensionId(condition ? "test:old" : "test:other"));
+	const same = defineExtension("test:old");
+	const other = defineExtension("test:other");
+	const maybe = defineExtension(condition ? "test:old" : "test:other");
 	const rest: (typeof same)[] = [];
 	// @ts-expect-error -- a union id may be the other one: q stays required
 	void new Crust("x").extend(old).extend(maybe).run([]);
 	const name: string = "old";
-	const template = defineExtension(defineExtensionId(`test:${name}`));
+	const template = defineExtension(`test:${name}`);
 	// @ts-expect-error -- a template id may be another one: q stays required
 	void new Crust("x").extend(old).extend(template).run([]);
 	// @ts-expect-error -- a conditional list

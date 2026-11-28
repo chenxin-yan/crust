@@ -5,7 +5,6 @@ import { unwrap } from "../../tests/helpers.ts";
 import { type AnyCrust, Crust, defineCommand } from "../command/crust.ts";
 import type { RunOutcome } from "../command/typed-run.ts";
 import type { CaughtError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { OutputStream } from "../types.ts";
 import { type AnyContextFactory, type ContextSetup, defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
@@ -210,9 +209,7 @@ describe("Context-owned sections", () => {
 	};
 
 	it("retains frozen validated sections on factory and .of() instances", () => {
-		const sections = [
-			{ title: "Environment", body: "APP_TOKEN", except: [defineExtensionId("man")] as const },
-		];
+		const sections = [{ title: "Environment", body: "APP_TOKEN", except: ["man"] as const }];
 		const builder = defineContext("env").sections(...sections);
 		sections[0]!.title = "Mutated";
 		sections.length = 0;
@@ -338,7 +335,7 @@ describe("Context-owned sections", () => {
 	it("keeps Extension section contributions merging after Context sections", async () => {
 		const { factory: env } = sectioned();
 		const seen: unknown[] = [];
-		const docs = defineExtension(defineExtensionId("docs")).sections((snapshot) => {
+		const docs = defineExtension("docs").sections((snapshot) => {
 			seen.push(snapshot.meta.sections);
 			return [{ command: [], title: "Environment", body: "More" }];
 		});
@@ -352,7 +349,7 @@ describe("Context-owned sections", () => {
 		const env = defineContext("env")
 			.sections(envSection)
 			.setup(() => 1);
-		const provider = defineExtension(defineExtensionId("env-provider")).provide(env(), env.of(2));
+		const provider = defineExtension("env-provider").provide(env(), env.of(2));
 		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
 
 		expect(await app.run([])).toMatchObject({ status: "completed", result: 2 });
@@ -369,9 +366,7 @@ describe("Context-owned sections", () => {
 		const current = defineContext("env")
 			.sections(...sections)
 			.setup(() => 2);
-		const provider = defineExtension(defineExtensionId("env-provider"))
-			.provide(old())
-			.provide(current());
+		const provider = defineExtension("env-provider").provide(old()).provide(current());
 		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
 
 		expect(await app.run([])).toMatchObject({ status: "completed", result: 2 });
@@ -380,7 +375,7 @@ describe("Context-owned sections", () => {
 
 	it("documents Extension-provided Contexts once on the root across re-registration", async () => {
 		const { factory: env } = sectioned();
-		const id = defineExtensionId("env-provider");
+		const id = "env-provider";
 		const provider = defineExtension(id).provide(env());
 		const app = new Crust("cli")
 			.extend(provider)
@@ -596,7 +591,7 @@ describe("Context-owned flags at use sites", () => {
 		const confirm = defineContext("confirm")
 			.flags({ yes: { type: "boolean" } })
 			.setup(({ flags }) => flags.yes === true);
-		const ext = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const ext = defineExtension("confirm").provide(confirm());
 		const remove = defineCommand("remove", (command) =>
 			command.use(confirm).action(async ({ ctx }) => await ctx.confirm),
 		);
@@ -616,7 +611,7 @@ describe("Context-owned flags at use sites", () => {
 		const confirm = defineContext("confirm")
 			.flags({ yes: { type: "boolean" } })
 			.setup(({ flags }) => flags.yes === true);
-		const byValue = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const byValue = defineExtension("confirm").provide(confirm());
 		const byFactory = byValue.factory((extension) => extension);
 		const list = defineCommand("list", (command) => command.action(() => "list"));
 		const removeByValue = defineCommand("remove", (command) =>
@@ -667,7 +662,7 @@ describe("Context-owned flags at use sites", () => {
 		const api = defineContext("api")
 			.use(config)
 			.setup(async ({ ctx }) => `api:${await ctx.config}`);
-		const byValue = defineExtension(defineExtensionId("api")).provide(api());
+		const byValue = defineExtension("api").provide(api());
 		const byFactory = byValue.factory((extension) => extension);
 		const valueUser = defineCommand("call", (command) =>
 			command.use(byValue).action(async ({ ctx, flags }) => {
@@ -700,7 +695,7 @@ describe("Context-owned flags at use sites", () => {
 			const confirm = defineContext("confirm")
 				.flags({ yes: { type: "boolean" } })
 				.setup(({ flags }) => flags.yes === true);
-			const base = defineExtension(defineExtensionId("confirm"))
+			const base = defineExtension("confirm")
 				.use(confirm)
 				.postRun(async ({ ctx }) => void seen.push(await ctx.confirm));
 			const list = defineCommand("list", (command) => command.action(() => "list"));
@@ -743,7 +738,7 @@ describe("Context-owned flags at use sites", () => {
 		const confirm = defineContext("confirm")
 			.flags({ yes: { type: "boolean" } })
 			.setup(({ flags }) => flags.yes === true);
-		const ext = defineExtension(defineExtensionId("confirm")).provide(confirm());
+		const ext = defineExtension("confirm").provide(confirm());
 		const before = new Crust("cli")
 			.command("early", (command) =>
 				command.command("nested", (nested) => nested.action(() => "nested")).action(() => "early"),
@@ -803,8 +798,8 @@ describe("Context-owned flags at use sites", () => {
 		const cmd = defineCommand("cmd", (command) => command.use(declared));
 		const leaf = defineCommand("leaf", (command) => command.use(declared));
 		const group = defineCommand("group", (command) => command.use(declared).add(leaf));
-		const fromExtension = defineExtension(defineExtensionId("auth")).provide(supplied());
-		const hooked = defineExtension(defineExtensionId("audit")).use(declared);
+		const fromExtension = defineExtension("auth").provide(supplied());
+		const hooked = defineExtension("audit").use(declared);
 		const list = defineCommand("list", (command) => command.action(() => "list"));
 		const apps = [
 			new Crust("cli").provide(supplied()).add(cmd),
@@ -858,7 +853,7 @@ describe("Context-owned flags at use sites", () => {
 		const reading = defineCommand("cmd", (command) =>
 			command.use(declared).action(async ({ ctx }) => await ctx.auth),
 		);
-		const hooked = defineExtension(defineExtensionId("config-hook"))
+		const hooked = defineExtension("config-hook")
 			.use(config)
 			.preRun(() => {});
 		const hookedApp = new Crust("cli").provide(config(), supplied()).extend(hooked).add(reading);
@@ -917,7 +912,7 @@ describe("Context-owned flags at use sites", () => {
 		const current = defineContext("auth")
 			.flags({ current: { type: "string" } })
 			.setup(() => 1);
-		const ext = defineExtension(defineExtensionId("auth")).provide(current()).use(current);
+		const ext = defineExtension("auth").provide(current()).use(current);
 		const list = defineCommand("list", (command) => command.action(() => "list"));
 		// @ts-expect-error -- TypeScript rejects the replacement too (FIX_DUPLICATE_CONTEXT)
 		const app = new Crust("cli").provide(old()).extend(ext);
@@ -1218,7 +1213,7 @@ describe("Context setup dependencies", () => {
 			.use(config)
 			.setup(async ({ ctx }) => await ctx.config);
 		let seen: string | undefined;
-		const observer = defineExtension(defineExtensionId("of-cut-observer"))
+		const observer = defineExtension("of-cut-observer")
 			.use(db, config)
 			.setup(async ({ ctx }) => {
 				seen = await ctx.config;
@@ -1232,7 +1227,7 @@ describe("Context dependency runtime boundaries", () => {
 	it("rejects a hook dependency absent from a stale child path", async () => {
 		const logger = defineContext("logger").setup(() => "logger");
 		const child = defineCommand("child", (builder) => builder.action(() => {}));
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.use(logger)
 			.preRun(async ({ ctx }) => void (await ctx.logger));
 		// .provide() is positional (flag scoping): the child added before it never
@@ -1259,7 +1254,7 @@ describe("Context dependency runtime boundaries", () => {
 				.provide(service.of("local"))
 				.action(async ({ ctx }) => void values.push(await ctx.service)),
 		);
-		const provider = defineExtension(defineExtensionId("provider")).provide(service());
+		const provider = defineExtension("provider").provide(service());
 		// ValidateExtensionProvides sees only the root Ctx (Tree carries no context
 		// names), so this composition typechecks; the child's local provider is
 		// more specific and must win on its own path.
@@ -1275,9 +1270,9 @@ describe("Context dependency runtime boundaries", () => {
 
 	it("accepts an Extension dependency provided by an earlier .extend() call", async () => {
 		const logger = defineContext("logger").setup(() => "logger");
-		const providerExtension = defineExtension(defineExtensionId("provider")).provide(logger());
+		const providerExtension = defineExtension("provider").provide(logger());
 		let seen: string | undefined;
-		const consumerExtension = defineExtension(defineExtensionId("consumer"))
+		const consumerExtension = defineExtension("consumer")
 			.use(logger)
 			.setup(async ({ ctx }) => {
 				seen = await ctx.logger;
@@ -1322,7 +1317,7 @@ describe("lazy Context bags", () => {
 					return "degraded";
 				}
 			});
-		const observer = defineExtension(defineExtensionId("degraded-observer"))
+		const observer = defineExtension("degraded-observer")
 			.use(wrapper)
 			.preRun(async ({ ctx }) => void (await bagOf(ctx).wrapper!));
 		await unwrap(
@@ -1343,10 +1338,8 @@ describe("lazy Context bags", () => {
 		const service = defineContext("service")
 			.use(base)
 			.setup(async ({ ctx }) => `service:${await ctx.base}`);
-		const serviceProvider = defineExtension(defineExtensionId("service-provider")).provide(
-			service(),
-		);
-		const baseProvider = defineExtension(defineExtensionId("base-provider")).provide(base());
+		const serviceProvider = defineExtension("service-provider").provide(service());
+		const baseProvider = defineExtension("base-provider").provide(base());
 		await unwrap(
 			new Crust("cli")
 				.extend(serviceProvider, baseProvider)
@@ -1363,7 +1356,7 @@ describe("lazy Context bags", () => {
 		const service = defineContext("service")
 			.use(auth)
 			.setup(async ({ ctx }) => await ctx.auth);
-		const extension = defineExtension(defineExtensionId("consumer"))
+		const extension = defineExtension("consumer")
 			.use(service)
 			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!));
 		const app = new Crust("cli")
@@ -1392,7 +1385,7 @@ describe("lazy Context bags", () => {
 					throw new Error("auth unavailable", { cause: error });
 				}
 			});
-		const extension = defineExtension(defineExtensionId("consumer"))
+		const extension = defineExtension("consumer")
 			.use(service)
 			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!.catch(() => undefined)));
 		const app = new Crust("cli")
@@ -1435,7 +1428,7 @@ describe("lazy Context bags", () => {
 				await ctx.auth.catch(() => undefined);
 				throw replacement;
 			});
-		const extension = defineExtension(defineExtensionId("consumer"))
+		const extension = defineExtension("consumer")
 			.use(service)
 			.preRun(async (ctx) => {
 				await bagOf(ctx.ctx).service!.catch(() => undefined);
@@ -1476,7 +1469,7 @@ describe("lazy Context bags", () => {
 		const auth = defineContext("auth")
 			.flags({ token })
 			.setup(({ flags }) => flags.token);
-		const extension = defineExtension(defineExtensionId("consumer"))
+		const extension = defineExtension("consumer")
 			.use(auth)
 			.flags({ stop: { type: "boolean" } })
 			.handle("stop", () => {})
@@ -1512,7 +1505,7 @@ describe("Context disposal", () => {
 				events.push("dispose");
 			},
 		}));
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.use(resource)
 			.postRun(async (ctx) => {
 				(await ctx.ctx.resource).use();
@@ -1537,7 +1530,7 @@ describe("Context disposal", () => {
 				events.push("dispose");
 			},
 		}));
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.use(resource)
 			.postRun(async (ctx) => {
 				(await ctx.ctx.resource).use();
@@ -1630,7 +1623,7 @@ describe("Context disposal", () => {
 				},
 			};
 		});
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.use(first, second)
 			.postRun((ctx) => {
 				void ctx.ctx.first
@@ -2009,7 +2002,7 @@ describe("Context setup defer()", () => {
 				});
 				return await ctx.auth;
 			});
-		const extension = defineExtension(defineExtensionId("consumer"))
+		const extension = defineExtension("consumer")
 			.use(service)
 			.preRun(async (ctx) => void (await bagOf(ctx.ctx).service!.catch(() => undefined)));
 		await unwrap(
@@ -2220,7 +2213,7 @@ describe("Context replacements", () => {
 	it("replaces a Context for one invocation with the provide option", async () => {
 		const app = new Crust("mono").provide(config(), workspace()).add(list);
 		const hooked: unknown[] = [];
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.use(workspace)
 			.preRun(async ({ ctx }) => void hooked.push(await ctx.workspace));
 
@@ -2276,7 +2269,7 @@ describe("Context replacements", () => {
 		const shared = defineContext("shared").setup(() => "real");
 		const unused = defineContext("unused").setup(() => "real");
 		const app = new Crust("mono")
-			.extend(defineExtension(defineExtensionId("sharing")).provide(shared()))
+			.extend(defineExtension("sharing").provide(shared()))
 			.command("work", (cmd) =>
 				cmd
 					.provide(local())

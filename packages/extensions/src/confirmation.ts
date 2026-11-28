@@ -1,13 +1,9 @@
 import {
 	type ContextInstance,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
-
-const CONFIRMATION: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:confirmation");
 
 const yesFlags = {
 	yes: {
@@ -47,6 +43,6 @@ export const confirmation: ExtensionFactory<
 	[],
 	{},
 	readonly [ContextInstance<"confirm", Confirm, typeof yesFlags, {}>]
-> = /* @__PURE__ */ defineExtension(CONFIRMATION).factory((extension) =>
+> = /* @__PURE__ */ defineExtension("crust:confirmation").factory((extension) =>
 	extension.provide(confirmContext()),
 );

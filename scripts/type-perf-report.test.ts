@@ -107,7 +107,7 @@ describe("type performance report", () => {
 			`new Crust("type-perf-wide-extensions").extend(${extensions.join(", ")})`,
 		);
 		expect(source).toContain(
-			'const wideExtension59 = defineExtension(defineExtensionId("type-perf-wide-extension-59")).flags({ "wide-extension-59": { type: "boolean" } }).provide(defineContext("wide-extension-59").setup(() => 59)()).add(defineCommand("wide-extension-command-59", (command) => command));',
+			'const wideExtension59 = defineExtension("type-perf-wide-extension-59").flags({ "wide-extension-59": { type: "boolean" } }).provide(defineContext("wide-extension-59").setup(() => 59)()).add(defineCommand("wide-extension-command-59", (command) => command));',
 		);
 		expect(source).not.toContain("wide59");
 	});

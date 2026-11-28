@@ -1,11 +1,6 @@
-import {
-	Crust,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
-const id = defineExtensionId("acme:preview");
-const preview = defineExtension(id)
+const preview = defineExtension("acme:preview")
 	// [!code highlight]
 	.flags({ preview: { type: "boolean" } })
 	.handle("preview", (ctx) => {

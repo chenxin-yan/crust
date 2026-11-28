@@ -1,6 +1,5 @@
 import type { CommandSnapshot } from "./command/snapshot.ts";
 import { CrustError } from "./errors.ts";
-import type { ExtensionId } from "./identity.ts";
 import type { CommandSection, CommandSectionInput, SectionConsumer } from "./types.ts";
 
 /** Whether a command belongs in user-facing listings. */
@@ -8,14 +7,15 @@ export function isListed(command: CommandSnapshot): boolean {
 	return command.meta.hidden !== true;
 }
 
-/** Select and merge sections visible to the given consumer. */
+/** Select and merge sections visible to the given consumer: an Extension, or its id. */
 export function sectionsFor(
 	sections: readonly CommandSection[] | undefined,
-	consumer: ExtensionId,
+	consumer: SectionConsumer,
 ): readonly CommandSection[] {
+	const id = typeof consumer === "string" ? consumer : consumer.id;
 	const visible = (sections ?? []).filter((section) => {
-		if (section.only) return section.only.includes(consumer);
-		if (section.except) return !section.except.includes(consumer);
+		if (section.only) return section.only.includes(id);
+		if (section.except) return !section.except.includes(id);
 		return true;
 	});
 	const merged = new Map<string, CommandSection>();
@@ -29,10 +29,13 @@ export function sectionsFor(
 	return [...merged.values()];
 }
 
-/** Collect section-bearing visible commands in canonical path order. The root path is `[]`. */
+/**
+ * Collect section-bearing visible commands for the given consumer, an Extension or its id, in
+ * canonical path order. The root path is `[]`.
+ */
 export function visibleSectionsFor(
 	snapshot: CommandSnapshot,
-	consumer: ExtensionId,
+	consumer: SectionConsumer,
 ): readonly {
 	readonly path: readonly string[];
 	readonly sections: readonly CommandSection[];
@@ -76,11 +79,16 @@ export function normalizeSection(
 	) {
 		throw invalidSections(owner);
 	}
-	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
-		// SAFETY: `CommandSectionInput` audiences are nonempty; consumers carry minted IDs.
-		return Object.freeze(
-			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
-		) as readonly [ExtensionId, ...ExtensionId[]];
+	const audience = (consumers: readonly SectionConsumer[]): readonly [string, ...string[]] => {
+		const ids = consumers.map((consumer) =>
+			typeof consumer === "string" ? consumer : consumer.id,
+		);
+		// An Extension's id is non-empty and trimmed, so any other id here matches no consumer.
+		if (process.env.CRUST_INTERNAL_BUILD !== "1" && ids.some((id) => !id || id !== id.trim())) {
+			throw invalidSections(owner);
+		}
+		// SAFETY: `CommandSectionInput` audiences are nonempty.
+		return Object.freeze(ids) as readonly [string, ...string[]];
 	};
 	return Object.freeze({
 		title,

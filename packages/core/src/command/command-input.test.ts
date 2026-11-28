@@ -4,7 +4,6 @@ import { z } from "zod";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 import { commandInputFields, commandInputSchema, parseCommandInput } from "./command-input.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
@@ -48,7 +47,7 @@ async function sendSnapshot() {
 	return (await new Crust("cli").add(send).snapshot()).subCommands.send!;
 }
 
-const presentation = defineExtensionId("presentation");
+const presentation = "presentation";
 const yesContext = defineContext("yes")
 	.flags({ yes: { type: "boolean", description: "Confirm" } })
 	.setup(() => "yes");

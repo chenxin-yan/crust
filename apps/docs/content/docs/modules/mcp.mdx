@@ -176,6 +176,6 @@ These build the [`mcp config`](#client-configuration) output yourself:
 
 - `currentLaunch()` returns the launch for the running process; `resolveLaunch(execPath, entry, compiled, execArgv?)` computes one from explicit values.
 - `renderClientConfig(client, name, launch)` and `renderClaudeAddCommand(name, launch)` render the snippet and the one-liner.
-- `MCP_CLIENTS` lists the supported `--client` values, and `MCP` is the Extension identity, the same as `mcp.id`.
+- `MCP_CLIENTS` lists the supported `--client` values.
 
 The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/mcp/src/index.ts) is the complete export list, including the `McpClient`, `McpLaunch`, and schema types.

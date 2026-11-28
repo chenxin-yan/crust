@@ -3,15 +3,11 @@ import {
 	type CommandShape,
 	type ContextInstance,
 	type ExtensionFactory,
-	type ExtensionId,
 	type RunInput,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import type { RunInputPayload } from "@crustjs/core/tooling";
-
-const NEXT_STEPS: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:next-steps");
 
 type AnyCommandDefinition = CommandDefinition<any, any, any, any>;
 
@@ -103,7 +99,7 @@ export const nextSteps: ExtensionFactory<
 	[],
 	never,
 	{ nextSteps: NextSteps }
-> = /* @__PURE__ */ defineExtension(NEXT_STEPS).factory(
+> = /* @__PURE__ */ defineExtension("crust:next-steps").factory(
 	(extension, options: NextStepsOptions = {}) =>
 		extension
 			.use(nextStepsContext)

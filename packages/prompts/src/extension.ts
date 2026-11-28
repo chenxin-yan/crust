@@ -5,10 +5,8 @@
 import {
 	type ArgSnapshot,
 	type ExtensionFactory,
-	type ExtensionId,
 	type FlagSnapshot,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 
 import { canPrompt } from "./core/renderer.ts";
@@ -33,8 +31,6 @@ declare module "@crustjs/core" {
 		prompt?: string | undefined;
 	}
 }
-
-const PROMPTS: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:prompts");
 
 /**
  * Asks for `def`'s value and binds the answer: yes/no for a boolean, a list for `choices`
@@ -109,7 +105,7 @@ async function ask(
  * `execute()` where {@link canPrompt} is true, never under typed `run()`; elsewhere the
  * command's own errors, such as a missing required flag, apply.
  */
-export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension(PROMPTS)
+export const prompts: ExtensionFactory = /* @__PURE__ */ defineExtension("crust:prompts")
 	.owns("prompt")
 	.factory((extension) =>
 		extension.preRun(async (ctx) => {

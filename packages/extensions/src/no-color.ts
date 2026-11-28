@@ -1,13 +1,12 @@
 import {
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	CrustError,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 
-const NO_COLOR: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:no-color");
+// A constant, not `noColor.id`: code that only renders must not keep the Extension's definition in a bundle.
+const NO_COLOR = "crust:no-color";
 
 // Overlapping execute() calls share process.env, so per-run snapshots would
 // capture each other's temporary overrides and restores would race. Instead,

@@ -9,7 +9,6 @@ type StandardInput = Parameters<StandardSchema["~standard"]["validate"]>[0];
 import { defineExtension } from "../api/extension.ts";
 import { Crust } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 
 /** Minimal hand-rolled Standard Schema (no vendor dependency). */
 function schema<Input, Output>(
@@ -237,7 +236,7 @@ describe("schema interaction with Extensions", () => {
 		let preRunSaw: unknown;
 		let actionSaw: unknown;
 
-		const probe = defineExtension(defineExtensionId("probe")).preRun((ctx) => {
+		const probe = defineExtension("probe").preRun((ctx) => {
 			preRunSaw = (ctx.flags as Record<string, unknown>).port;
 		});
 
@@ -260,7 +259,7 @@ describe("schema interaction with Extensions", () => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const gate = defineExtension(defineExtensionId("gate"))
+		const gate = defineExtension("gate")
 			.flags({ stop: { type: "boolean" } })
 			.handle("stop", () => {});
 

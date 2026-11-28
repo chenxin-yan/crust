@@ -2,19 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
 import { executeCrust, lineSink } from "../../tests/helpers.ts";
-import {
-	Crust,
-	defineExtension,
-	defineExtensionId,
-	type InvocationOutcome,
-	type Renderer,
-} from "../index.ts";
+import { Crust, defineExtension, type InvocationOutcome, type Renderer } from "../index.ts";
 
 const quiet = { stdout: { write() {} }, stderr: { write() {} } };
 
 /** An Extension whose renderer logs its stream signals and passes text through. */
 function loggingRenderer(log: string[], overrides: Partial<Renderer> = {}) {
-	return defineExtension(defineExtensionId("observe")).renderer((ctx) => ({
+	return defineExtension("observe").renderer((ctx) => ({
 		text: ctx.stdout.write,
 		diag: ctx.stderr.write,
 		stream: () => void log.push("stream"),
@@ -64,7 +58,7 @@ describe("async generator actions", () => {
 
 	it("marks a generator that yields nothing with empty events, and a normal action with none", async () => {
 		const outcomes: InvocationOutcome[] = [];
-		const observe = defineExtension(defineExtensionId("observe")).postRun(
+		const observe = defineExtension("observe").postRun(
 			(_ctx, outcome) => void outcomes.push(outcome),
 		);
 		const app = new Crust("cli")
@@ -164,7 +158,7 @@ describe("async generator actions", () => {
 
 	it("fails on a throw mid-stream, keeping the events yielded before it", async () => {
 		const outcomes: InvocationOutcome[] = [];
-		const observe = defineExtension(defineExtensionId("observe")).postRun(
+		const observe = defineExtension("observe").postRun(
 			(_ctx, outcome) => void outcomes.push(outcome),
 		);
 		const failure = new Error("boom");

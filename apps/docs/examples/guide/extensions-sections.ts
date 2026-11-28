@@ -1,7 +1,7 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
-export const guidance = defineExtension(defineExtensionId("acme:guidance")).sections(() => [
+export const guidance = defineExtension("acme:guidance").sections(() => [
 	{
 		command: [], // [!code highlight]
 		title: "Environment",

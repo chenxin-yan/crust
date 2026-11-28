@@ -2,7 +2,6 @@ import type { JsonValue } from "@crustjs/utils/json";
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { ParsedFlagValue } from "../types.ts";
 import { defineExtension, type InferExtensionFlags } from "./extension.ts";
 
@@ -87,7 +86,7 @@ function _contextual(
 	toggle: Toggle & { multiple?: true },
 ) {
 	const optional: { port?: Port } = {};
-	defineExtension(defineExtensionId("optional"))
+	defineExtension("optional")
 		.flags(optional)
 		.preRun(({ flags }) => {
 			// @ts-expect-error An absent definition lets a peer own this name with another value type.
@@ -97,7 +96,7 @@ function _contextual(
 			// @ts-expect-error Post-run hooks have the same uncertain ownership.
 			flags.port?.toFixed();
 		});
-	defineExtension(defineExtensionId("defaulted"))
+	defineExtension("defaulted")
 		.flags({ port: { type: "number", default: 123 } })
 		.preRun(({ flags }) => {
 			// @ts-expect-error `--port abc` leaves a defaulted flag unset until validation reports it.
@@ -107,21 +106,21 @@ function _contextual(
 			// @ts-expect-error A failed invocation's post-run hooks see the same unvalidated value.
 			flags.port.toFixed();
 		});
-	defineExtension(defineExtensionId("scope"))
+	defineExtension("scope")
 		.flags({ port: { type: "number", default: 123, recursive } })
 		.preRun(({ flags }) => {
 			// @ts-expect-error A false-capable scope may omit this flag on descendants.
 			const value: number = flags.port;
 			void value;
 		});
-	defineExtension(defineExtensionId("collection"))
+	defineExtension("collection")
 		.flags(flags)
 		.preRun(({ flags }) => {
 			// @ts-expect-error A dynamic record permits other extensions to supply another value type.
 			const value: number | undefined = flags.port;
 			void value;
 		});
-	defineExtension(defineExtensionId("multiple"))
+	defineExtension("multiple")
 		.flags({ toggle })
 		.preRun(({ flags }) => {
 			// @ts-expect-error Optional multiplicity permits an array before schema validation.

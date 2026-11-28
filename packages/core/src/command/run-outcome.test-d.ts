@@ -3,7 +3,6 @@ import {
 	defineCommand,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
 	defineFlag,
 	type AnyCrust,
 	type RunOutcome,
@@ -103,7 +102,7 @@ function _runOutcome(
 
 function _localProviders(condition: boolean) {
 	const text = defineContext("db").setup(() => "text");
-	const demand = defineExtension(defineExtensionId("demand")).use(text);
+	const demand = defineExtension("demand").use(text);
 	const root = new Crust("app").provide(text()).extend(demand);
 	root.command("inline", (c) => (condition ? c.provide(text()) : c));
 	root.add(defineCommand("sealed", (c) => (condition ? c.provide(text()) : c)));

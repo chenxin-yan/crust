@@ -6,7 +6,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 import { subCommandsOf } from "./node.ts";
 
@@ -301,7 +300,7 @@ describe("command definitions", () => {
 		const options = defineContext("options")
 			.flags({ value: { type: "string" } })
 			.setup(({ flags }) => flags.value);
-		const id = defineExtensionId("provider");
+		const id = "provider";
 		const group = defineCommand("group", (command) => {
 			configured.push("group");
 			return command
@@ -328,8 +327,8 @@ describe("command definitions", () => {
 			.extend(defineExtension(id).provide(context("old"), options()))
 			.add(group);
 		const app = base
-			.extend(defineExtension(defineExtensionId("noop")))
-			// @ts-expect-error -- branded ids cannot prove same-id replacement at compile time.
+			.extend(defineExtension("noop"))
+			// @ts-expect-error -- same-id replacement does not retire the earlier providers at compile time.
 			.extend(defineExtension(id).provide(context("new"), options()));
 
 		expect(configured).toEqual([]);
@@ -358,14 +357,12 @@ describe("command definitions", () => {
 	it("runs root recipes once across apps that share the final Extension list", async () => {
 		let configured = 0;
 		const value = defineContext("value").setup(() => "extension");
-		const app = new Crust("cli")
-			.extend(defineExtension(defineExtensionId("provider")).provide(value()))
-			.add(
-				defineCommand("child", (command) => {
-					configured++;
-					return command.use(value).action(async ({ ctx }) => await ctx.value);
-				}),
-			);
+		const app = new Crust("cli").extend(defineExtension("provider").provide(value())).add(
+			defineCommand("child", (command) => {
+				configured++;
+				return command.use(value).action(async ({ ctx }) => await ctx.value);
+			}),
+		);
 		const derived = app.flags({ verbose: { type: "boolean" } });
 
 		expect(await unwrap(app.run(["child"]))).toMatchObject({ result: "extension" });
@@ -377,13 +374,13 @@ describe("command definitions", () => {
 	it("defers unused Extension command recipes", async () => {
 		const configured: string[] = [];
 		const app = new Crust("cli").extend(
-			defineExtension(defineExtensionId("first")).add(
+			defineExtension("first").add(
 				defineCommand("bad", () => {
 					configured.push("bad");
 					throw new Error("broken Extension recipe");
 				}),
 			),
-			defineExtension(defineExtensionId("last")).add(
+			defineExtension("last").add(
 				defineCommand("good", { aliases: ["g"] }, (command) => {
 					configured.push("good");
 					return command.action(() => "ok");

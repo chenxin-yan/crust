@@ -6,7 +6,6 @@ import {
 	defineCommand,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
 	defineFlag,
 	type ContextBag,
 } from "../src/index.ts";
@@ -242,7 +241,7 @@ describe("integration: public API", () => {
 	it("loads extensions separately from command context", async () => {
 		let actionVersion: unknown;
 		let wrapperCalled = false;
-		const version = defineExtension(defineExtensionId("version"))
+		const version = defineExtension("version")
 			.flags({ version: { type: "boolean" } })
 			.preRun(() => {
 				wrapperCalled = true;

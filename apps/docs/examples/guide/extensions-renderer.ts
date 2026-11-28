@@ -1,6 +1,6 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
-export const quiet = defineExtension(defineExtensionId("acme:quiet"))
+export const quiet = defineExtension("acme:quiet")
 	.flags({ quiet: { type: "boolean" } })
 	// [!code highlight:4]
 	.renderer((ctx) =>

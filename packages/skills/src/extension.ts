@@ -8,7 +8,6 @@ import {
 	type Extension,
 	type ExtensionBuildContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	type InvocationIO,
 	CrustError,
 	defineCommand,
@@ -331,7 +330,7 @@ export interface SkillExtension {
 	): Extension<{}, [], {}, readonly [SkillCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
 	(options: SkillOptions): Extension<{}, [], {}>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 const skillFactory: ExtensionFactory<
@@ -359,7 +358,7 @@ const skillFactory: ExtensionFactory<
 				command: [],
 				title: SKILLS_SECTION_TITLE,
 				body: formatSkillDocumentation(commandName, snapshot.meta.name),
-				except: [SKILLS],
+				except: [extension],
 			},
 		]);
 	// `crust build` runs build hooks from source; literal property access lets a Crust-built

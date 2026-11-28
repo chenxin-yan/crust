@@ -1,11 +1,4 @@
-import {
-	type AnyCrust,
-	Crust,
-	CrustError,
-	defineContext,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { type AnyCrust, Crust, CrustError, defineContext, defineExtension } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
@@ -98,7 +91,7 @@ describe("json", () => {
 				stdout("logger:setup");
 				return stdout;
 			});
-			const early = defineExtension(defineExtensionId("early"))
+			const early = defineExtension("early")
 				.provide(logger())
 				.use(logger)
 				.setup(async ({ ctx }) => void (await ctx.logger));
@@ -127,7 +120,7 @@ describe("json", () => {
 				stdout("logger:setup");
 				return stdout;
 			});
-			const failing = defineExtension(defineExtensionId("failing"))
+			const failing = defineExtension("failing")
 				.provide(logger())
 				.use(logger)
 				.setup(async ({ ctx }) => {
@@ -300,7 +293,7 @@ describe("json", () => {
 	it.each(["json first", "other first"])(
 		"renders the serialization error once beside another failing postRun (%s)",
 		async (order) => {
-			const other = defineExtension(defineExtensionId("other")).postRun(() => {
+			const other = defineExtension("other").postRun(() => {
 				throw new Error("other");
 			});
 			const base = new Crust("app");
@@ -592,7 +585,7 @@ describe("json", () => {
 		});
 
 		it("writes held text to stderr after a failure another Extension claims", async () => {
-			const claimer = defineExtension(defineExtensionId("claimer")).onError((_error, ctx) => {
+			const claimer = defineExtension("claimer").onError((_error, ctx) => {
 				ctx.stderr("claimed");
 				return true;
 			});
@@ -637,7 +630,7 @@ describe("json", () => {
 					stdout("logger:setup");
 					return stdout;
 				});
-				const cancelling = defineExtension(defineExtensionId("cancelling"))
+				const cancelling = defineExtension("cancelling")
 					.provide(logger())
 					.use(logger)
 					.setup(async ({ ctx, signal }) => {
@@ -854,7 +847,7 @@ describe("json", () => {
 			const app = new Crust("app")
 				.extend(
 					json(),
-					defineExtension(defineExtensionId("late-abort")).postRun(() => {
+					defineExtension("late-abort").postRun(() => {
 						throw new DOMException("stop", "AbortError");
 					}),
 				)

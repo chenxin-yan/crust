@@ -13,7 +13,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { lineSink } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineExtensionId } from "../identity.ts";
 import { type AnyCrust, Crust, type CommandDefinition, defineCommand } from "./crust.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -59,7 +58,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		vi.stubEnv(BUILD_OUT_DIR_ENV, undefined);
 		let actionRan = false;
 		let preRunRan = false;
-		const spy = defineExtension(defineExtensionId("spy")).preRun(() => {
+		const spy = defineExtension("spy").preRun(() => {
 			preRunRan = true;
 		});
 		const app = new Crust("build-subprocess", { description: "Snapshot test" })
@@ -82,7 +81,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("says why the snapshot cannot be written when an owned key holds a BigInt", async () => {
 		await stubBuildEnv();
 		const app = new Crust("build-subprocess")
-			.extend(defineExtension(defineExtensionId("owner")).owns(...(["quota"] as never[])))
+			.extend(defineExtension("owner").owns(...(["quota"] as never[])))
 			.flags({ limit: { type: "number", quota: 1n } as { type: "number" } })
 			.action(() => {});
 
@@ -98,7 +97,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess")
 			.extend(
-				defineExtension(defineExtensionId("first")).build((ctx) => {
+				defineExtension("first").build((ctx) => {
 					expect(Object.isFrozen(ctx.snapshot)).toBe(true);
 					expect(ctx.snapshot.meta.name).toBe("build-subprocess");
 					// The output directory is owned by core; a hook has no handle to write beside its returned files.
@@ -109,8 +108,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 						{ path: "nested/../first-two.txt", content: new TextEncoder().encode("two") },
 					];
 				}),
-				defineExtension(defineExtensionId("runtime-only")),
-				defineExtension(defineExtensionId("second")).build(() => {
+				defineExtension("runtime-only"),
+				defineExtension("second").build(() => {
 					calls.push("second");
 					return [];
 				}),
@@ -136,12 +135,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("rejects paths that differ only by case, naming both Extensions and both spellings", async () => {
 		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("first")).build(() => [
-				{ path: "shared/Config.json", content: "first" },
-			]),
-			defineExtension(defineExtensionId("second")).build(() => [
-				{ path: "shared/config.json", content: "second" },
-			]),
+			defineExtension("first").build(() => [{ path: "shared/Config.json", content: "first" }]),
+			defineExtension("second").build(() => [{ path: "shared/config.json", content: "second" }]),
 		);
 
 		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(1) was called");
@@ -158,8 +153,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("rejects a path nested under a file an earlier hook produced, before writing", async () => {
 		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("first")).build(() => [{ path: "Foo", content: "first" }]),
-			defineExtension(defineExtensionId("second")).build(() => [
+			defineExtension("first").build(() => [{ path: "Foo", content: "first" }]),
+			defineExtension("second").build(() => [
 				{ path: "second/own.txt", content: "own" },
 				{ path: "foo/bar", content: "second" },
 			]),
@@ -179,7 +174,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("rejects a hook whose own files nest under each other, before writing", async () => {
 		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("only")).build(() => [
+			defineExtension("only").build(() => [
 				{ path: "foo/bar", content: "nested" },
 				{ path: "foo", content: "file" },
 			]),
@@ -200,12 +195,12 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const marker = join(outDir, "generated-source", "marker.txt");
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("producer")).build(async () => {
+			defineExtension("producer").build(async () => {
 				expect(existsSync(path)).toBe(false);
 				calls.push("producer");
 				return [{ path: "generated-source/marker.txt", content: "ready" }];
 			}),
-			defineExtension(defineExtensionId("consumer"))
+			defineExtension("consumer")
 				// Reads the earlier hook's file from disk, like skills reading artifactPath("skills").
 				.sections(() => [
 					{
@@ -237,7 +232,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await stubBuildEnv();
 		let recipeRuns = 0;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("contributor"))
+			defineExtension("contributor")
 				.add(
 					defineCommand("generated", (command) => {
 						recipeRuns += 1;
@@ -245,7 +240,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 					}),
 				)
 				.build(() => []),
-			defineExtension(defineExtensionId("second-hook")).build(() => []),
+			defineExtension("second-hook").build(() => []),
 		);
 
 		await expect(app.execute({ argv: [], io })).rejects.toThrow("process.exit(0) was called");
@@ -256,7 +251,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("attributes build hook failures to the extension", async () => {
 		await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("broken")).build(() => {
+			defineExtension("broken").build(() => {
 				throw new Error("disk full");
 			}),
 		);
@@ -276,7 +271,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	])("rejects %s returned artifact path", async (_label, artifactPath, message) => {
 		const { outDir } = await stubBuildEnv();
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("unsafe"))
+			defineExtension("unsafe")
 				// A valid sibling first: every path is checked before any file is written.
 				.build(() => [
 					{ path: "valid.txt", content: "valid" },
@@ -296,7 +291,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 describe("Invocation pipeline — snapshot projection", () => {
 	function rootObserver() {
 		const roots: CommandSnapshot[] = [];
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.preRun((ctx) => void roots.push(ctx.rootCommand))
 			.onError((_error, ctx) => {
 				roots.push(ctx.rootCommand);
@@ -486,11 +481,11 @@ describe("Invocation pipeline — commandPathOf", () => {
 	const status = defineCommand("status", (c) => c.action(() => {}));
 	const doctor = defineCommand("doctor", (c) => c.action(() => {}));
 	const unmounted = defineCommand("unmounted", (c) => c.action(() => {}));
-	const tools = defineExtension(defineExtensionId("tools")).add(doctor);
+	const tools = defineExtension("tools").add(doctor);
 
 	function lookup(definitions: readonly CommandDefinition<any, any, any, any>[]) {
 		const found: unknown[] = [];
-		const observer = defineExtension(defineExtensionId("observer"))
+		const observer = defineExtension("observer")
 			.postRun((ctx) => {
 				for (const definition of definitions) found.push(ctx.commandPathOf(definition));
 			})
@@ -557,7 +552,7 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 
 	function setUp() {
 		const ran: string[] = [];
-		const trace = defineExtension(defineExtensionId("trace"))
+		const trace = defineExtension("trace")
 			.flags({ trace: { type: "boolean" } })
 			.setup(() => void ran.push("setup"))
 			.preRun((ctx) => void ran.push(`preRun ${ctx.commandPath.join(" ")}`));
@@ -581,7 +576,7 @@ describe("Invocation pipeline — parseCommandArgv", () => {
 		});
 		const parsed: unknown[] = [];
 		const preview = (path: readonly string[], argv: readonly string[]) =>
-			defineExtension(defineExtensionId("preview")).preRun(async (ctx) => {
+			defineExtension("preview").preRun(async (ctx) => {
 				parsed.push(await ctx.parseCommandArgv(path, argv));
 			});
 		const app = (path: readonly string[], argv: readonly string[]) =>
@@ -707,7 +702,7 @@ describe("Invocation pipeline — exit status", () => {
 		// An Extension that fails to apply goes through the same rule.
 		const broken = new Crust("app")
 			.extend(
-				defineExtension(defineExtensionId("broken")).sections(() => {
+				defineExtension("broken").sections(() => {
 					throw child;
 				}),
 			)
@@ -731,7 +726,7 @@ describe("Invocation pipeline — exit status", () => {
 	});
 
 	it("ignores process.exitCode set by the action or a hook", async () => {
-		const hooks = defineExtension(defineExtensionId("hooks"))
+		const hooks = defineExtension("hooks")
 			.onError(() => {
 				process.exitCode = 0;
 				return true;
@@ -749,7 +744,7 @@ describe("Invocation pipeline — exit status", () => {
 		expect(await execute(failing, [])).toMatchObject({ exitCode: 1, processExitCode: 1 });
 		const rewriting = new Crust("app")
 			.extend(
-				defineExtension(defineExtensionId("rewrite")).onError((error) => {
+				defineExtension("rewrite").onError((error) => {
 					Object.assign(error as object, { exitCode: 5 });
 				}),
 			)
@@ -759,7 +754,7 @@ describe("Invocation pipeline — exit status", () => {
 		expect(await execute(rewriting, [])).toMatchObject({ exitCode: 3, processExitCode: 3 });
 		const rewritingAfterRun = new Crust("app")
 			.extend(
-				defineExtension(defineExtensionId("rewrite")).postRun((_context, outcome) => {
+				defineExtension("rewrite").postRun((_context, outcome) => {
 					if (outcome.status === "failed") Object.assign(outcome.error as object, { exitCode: 5 });
 				}),
 			)
@@ -835,7 +830,7 @@ describe("Invocation pipeline — output failures", () => {
 		// A writer that bypasses stdout(), such as raw bytes to the process's stdout.
 		// Hooks see the cancellation, and a failing cleanup keeps 141.
 		let postRunCause: unknown;
-		const leaky = defineExtension(defineExtensionId("leaky"))
+		const leaky = defineExtension("leaky")
 			.setup(({ defer }) =>
 				defer(() => {
 					throw new Error("close failed");
@@ -926,7 +921,7 @@ describe("Invocation pipeline — streams", () => {
 
 	it("passes Renderers each chunk as it was written", async () => {
 		const chunks: unknown[] = [];
-		const render = defineExtension(defineExtensionId("render")).renderer(() => ({
+		const render = defineExtension("render").renderer(() => ({
 			text: (chunk) => void chunks.push(chunk),
 			diag: (chunk) => void chunks.push(chunk),
 		}));
@@ -969,7 +964,7 @@ describe("Invocation pipeline — streams", () => {
 		const probe = defineContext("probe").setup(({ stdout, stdin }) => {
 			seen.push(stdout.isTTY, stdout.columns, stdin.isTTY);
 		});
-		const hooks = defineExtension(defineExtensionId("hooks")).preRun((ctx) => {
+		const hooks = defineExtension("hooks").preRun((ctx) => {
 			seen.push(ctx.stdout.isTTY, ctx.stderr.columns, ctx.stdin.isTTY);
 		});
 		const app = new Crust("app")

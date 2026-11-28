@@ -19,8 +19,6 @@ import {
 	defineArg,
 	defineContext,
 	defineExtension,
-	defineExtensionId,
-	type ExtensionId,
 } from "./index.ts";
 import type { CommandSectionInput } from "./types.ts";
 
@@ -115,7 +113,7 @@ function _genericCommandNameWithLiteralAliases() {
 function _localMetadata(
 	title: string,
 	aliases: string[],
-	only: [ExtensionId, ...ExtensionId[]],
+	only: [string, ...string[]],
 	text: string,
 ) {
 	// @ts-expect-error -- audiences are constructively nonempty
@@ -147,16 +145,19 @@ function _runtimeAliasesKeepOtherPathsTyped(aliases: string[]) {
 }
 
 function _sectionShapesStayTyped() {
-	// @ts-expect-error -- consumer identities are branded, including on checked configs
-	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: ["unbranded"] }] });
+	// A section audience takes an Extension or its id, including on checked configs.
+	const docs = defineExtension("acme:docs");
+	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: [docs, "acme:man"] }] });
+	// @ts-expect-error -- a consumer is an id or a value exposing one, not any value
+	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: [42] }] });
 	new Crust("cli", {
 		sections: [
 			// @ts-expect-error -- section audiences cannot specify both only and except
 			{
 				title: "Notes",
 				body: "text",
-				only: [defineExtensionId("a")],
-				except: [defineExtensionId("b")],
+				only: ["a"],
+				except: ["b"],
 			},
 		],
 	});
@@ -251,7 +252,7 @@ function _contextProofCannotBeForged() {
 }
 
 function _checkedExtensionMetadata() {
-	const requiresVersion = defineExtension<"version">(defineExtensionId("version"));
+	const requiresVersion = defineExtension<"version">("version");
 	// @ts-expect-error -- an Extension without contributions keeps TS-owned metadata requirements
 	new Crust("missing").extend(requiresVersion);
 	new Crust("present", { version: "1" }).extend(requiresVersion);
@@ -459,7 +460,7 @@ function _openInheritedFlags(recursive: boolean) {
 		.add(child)
 		.provide(...providers)
 		.run(["child", "leaf"]);
-	const ext = defineExtension(defineExtensionId("recursive-open")).flags({
+	const ext = defineExtension("recursive-open").flags({
 		token: {
 			type: "string",
 			required: true,
@@ -511,12 +512,12 @@ function _infiniteNames(
 	const aliased = new Crust("app").flags({ safe: alias });
 	void aliased.run([], { flags: { safe: "ok" } });
 	aliased.flags({ other: { type: "boolean" } });
-	const ext = defineExtension(defineExtensionId("infinite-recursive")).flags({ [name]: flag });
+	const ext = defineExtension("infinite-recursive").flags({ [name]: flag });
 	const extended = new Crust("app").add(defineCommand("child", (c) => c)).extend(ext);
 	void extended.run(["child"]);
 	const replacement = new Crust("app")
 		.add(defineCommand("known", (c) => c))
-		.extend(defineExtension(defineExtensionId("open-replacement")).add(command));
+		.extend(defineExtension("open-replacement").add(command));
 	void replacement.run([name]);
 }
 
@@ -606,12 +607,12 @@ function _disjointOpenProviderFlags(condition: boolean) {
 	const app = new Crust("app").provide(...providers).add(child);
 	void app.run(["child"]);
 	void app.run([]);
-	const ext = defineExtension(defineExtensionId("disjoint-owned")).provide(...providers);
+	const ext = defineExtension("disjoint-owned").provide(...providers);
 	void new Crust("app").add(child).extend(ext).run(["child"]);
 }
 
 function _nonrecursiveTemplateFlags(name: `mode-${string}`) {
-	const ext = defineExtension(defineExtensionId("local-template")).flags({
+	const ext = defineExtension("local-template").flags({
 		[name]: { type: "string", required: true, recursive: false },
 	});
 	const child = defineCommand("child", (c) => c.action(() => "safe" as const));
@@ -862,8 +863,8 @@ function _openProviderNamespace() {
 	// The `ExtensionFactory` JSDoc's open provider form is writable from the package entry.
 	const logger = defineContext("logger").setup(() => "logger");
 	const optionalLogger: ExtensionFactory<[enabled: boolean], {}, readonly AnyContextInstance[]> =
-		defineExtension(defineExtensionId("test:open-providers")).factory(
-			(extension, enabled: boolean) => (enabled ? extension.provide(logger()) : extension),
+		defineExtension("test:open-providers").factory((extension, enabled: boolean) =>
+			enabled ? extension.provide(logger()) : extension,
 		);
 	void optionalLogger;
 }

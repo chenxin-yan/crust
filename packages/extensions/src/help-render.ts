@@ -1,4 +1,4 @@
-import type { CommandSnapshot, ExtensionId } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	formatDescription,
@@ -97,7 +97,7 @@ function formatCommandDescription(command: CommandDocumentation): string {
 export function renderHelpText(
 	command: CommandSnapshot,
 	path: readonly string[] | undefined,
-	consumer: ExtensionId,
+	consumer: string,
 	columns: number | undefined,
 ): string {
 	// Help lists children by static metadata only; reading anything else from a

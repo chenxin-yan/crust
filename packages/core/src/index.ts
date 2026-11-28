@@ -35,8 +35,6 @@ export type {
 	UseSource,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
-export type { ExtensionId } from "./identity.ts";
-export { defineExtensionId } from "./identity.ts";
 export { defineArg, defineFlag } from "./api/flags.ts";
 export type { UnnamedArgDef } from "./api/flags.ts";
 

@@ -4,10 +4,8 @@ import {
 	type CommandSnapshot,
 	type Extension,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 
 import { COMPLETE_COMMAND, type Completer, completerAt } from "./complete.ts";
@@ -36,8 +34,6 @@ declare module "@crustjs/core" {
 // Renderers, templates and file writing load on first use (see render.ts), so
 // registering completion() costs nothing until a script is generated.
 const loadRenderer = () => import("./render.ts");
-
-const COMPLETION: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:completion");
 
 /** The shells `completion()` generates scripts for. */
 export type CompletionShell = "bash" | "zsh" | "fish" | "powershell";
@@ -154,7 +150,7 @@ export interface CompletionExtension {
 	// Omitted `Commands` is the open command namespace.
 	(options: CompletionOptions & { version: string }): Extension<{}, [], {}>;
 	(options?: CompletionOptions): Extension<{}, [], {}, OpenCommands, "version">;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 /** Render a bash completion script from a prepared root Command Snapshot. */
@@ -195,7 +191,7 @@ const completionFactory: ExtensionFactory<
 	[],
 	{},
 	readonly [CompletionCommandDefinition<string>, CompleteCommandDefinition]
-> = /* @__PURE__ */ defineExtension(COMPLETION)
+> = /* @__PURE__ */ defineExtension("crust:completion")
 	.owns("complete")
 	.factory((extension, options = {}) => {
 		const subcommandName = options.command ?? "completion";
@@ -274,7 +270,7 @@ const completionFactory: ExtensionFactory<
 						command: [subcommandName],
 						title: "Setup",
 						// Lines to copy: only help prints a body line by line.
-						only: [defineExtensionId("crust:help")],
+						only: ["crust:help"],
 						body: [
 							"# bash, in ~/.bashrc",
 							`source <(${run} bash)`,

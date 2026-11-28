@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { lineSink, unwrap } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import type { CommandShapeAt, RunInput, RunOutcome } from "./typed-run.ts";
 
@@ -20,7 +19,7 @@ interface StructuredRunCapture {
 }
 describe("typed programmatic invocation", () => {
 	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
-		const tools = defineExtension(defineExtensionId("tools"))
+		const tools = defineExtension("tools")
 			.flags({ trace: { type: "boolean" }, version: { type: "boolean", recursive: false } })
 			.add(
 				defineCommand("inspect", { aliases: ["scan"] }, (command) =>
@@ -52,10 +51,10 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("opens child results when a later Extension can replace any canonical child", async () => {
-		const lit = defineExtension(defineExtensionId("lit")).add(
+		const lit = defineExtension("lit").add(
 			defineCommand("inspect", (command) => command.action(() => ({ kind: "lit" as const }))),
 		);
-		const widened: Extension = defineExtension(defineExtensionId("dyn")).add(
+		const widened: Extension = defineExtension("dyn").add(
 			defineCommand("generated", (command) => command.action(() => {})),
 		);
 		const app = new Crust("cli").extend(lit, widened);
@@ -66,15 +65,15 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("runtime-checks paths below commands a widened tree can no longer see into", async () => {
-		const nested = defineExtension(defineExtensionId("nested")).add(
+		const nested = defineExtension("nested").add(
 			defineCommand("bar", (command) =>
 				command.command("sub", (sub) => sub.action(() => "sub-s" as const)),
 			),
 		);
-		const widened: Extension = defineExtension(defineExtensionId("dyn")).add(
+		const widened: Extension = defineExtension("dyn").add(
 			defineCommand("generated", (command) => command.action(() => {})),
 		);
-		const trace = defineExtension(defineExtensionId("trace")).flags({
+		const trace = defineExtension("trace").flags({
 			trace: { type: "boolean" },
 		});
 		const app = new Crust("cli").extend(nested).extend(widened);
@@ -99,7 +98,7 @@ describe("typed programmatic invocation", () => {
 
 	it("surfaces delayed Extension recipe failures only when the command is used", async () => {
 		const app = new Crust("cli").extend(
-			defineExtension(defineExtensionId("failure")).add(
+			defineExtension("failure").add(
 				defineCommand("child", () => {
 					throw new Error("recipe failed");
 				}),
@@ -134,7 +133,7 @@ describe("typed programmatic invocation", () => {
 				}),
 		);
 		const app = new Crust("git").add(remoteAdd).extend(
-			defineExtension(defineExtensionId("argv")).preRun((ctx) => {
+			defineExtension("argv").preRun((ctx) => {
 				expect(ctx.argv).toEqual(["remote-add"]);
 			}),
 		);
@@ -238,7 +237,7 @@ describe("typed programmatic invocation", () => {
 describe('variadic: "afterDoubleDash" arguments', () => {
 	function taskRunner() {
 		const received: unknown[] = [];
-		const binder = defineExtension(defineExtensionId("dd-binder"))
+		const binder = defineExtension("dd-binder")
 			.flags({ bind: { type: "boolean" } })
 			.preRun((ctx) => {
 				if (ctx.flags.bind) ctx.bindInput({ args: { extra: ["--bound"] } });

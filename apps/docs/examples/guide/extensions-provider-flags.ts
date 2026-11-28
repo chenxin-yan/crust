@@ -1,17 +1,11 @@
-import {
-	Crust,
-	defineCommand,
-	defineContext,
-	defineExtension,
-	defineExtensionId,
-} from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineExtension } from "@crustjs/core";
 
 //#region use-site
 const confirm = defineContext("confirm")
 	.flags({ yes: { type: "boolean", description: "Skip the confirmation" } })
 	.setup(({ flags }) => ({ skip: flags.yes === true }));
 
-const confirmation = defineExtension(defineExtensionId("acme:confirmation")).provide(confirm());
+const confirmation = defineExtension("acme:confirmation").provide(confirm());
 
 const remove = defineCommand("remove", (command) =>
 	command

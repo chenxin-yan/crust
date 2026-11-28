@@ -1,7 +1,6 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -48,7 +47,7 @@ function _typecheckNestedFlaggedDefinitionAfterArgsSatisfiesErasedBuilder() {
 // capability constraints keep root-only operations uncallable in recipes across fluent transitions
 function _typecheckRestrictsBuilderCapabilities() {
 	const auth = defineContext("auth").setup(() => ({ user: "yan" }));
-	const extension = defineExtension(defineExtensionId("nested"));
+	const extension = defineExtension("nested");
 	const app = new Crust("app");
 
 	// @ts-expect-error -- Context demand declarations are recipe-only

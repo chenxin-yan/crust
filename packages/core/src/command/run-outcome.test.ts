@@ -1,13 +1,7 @@
 import { getAmbientTerminalIO, getTerminalIO, withTerminalIO } from "@crustjs/utils/terminal";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import {
-	Crust,
-	defineContext,
-	defineExtension,
-	defineExtensionId,
-	type AnyCrust,
-} from "../index.ts";
+import { Crust, defineContext, defineExtension, type AnyCrust } from "../index.ts";
 
 describe("captured run outcomes", () => {
 	it("captures quietly, preserving callback payloads and result", async () => {
@@ -80,7 +74,7 @@ describe("captured run outcomes", () => {
 		});
 	});
 	it("validates before noAction handles the invocation, and captures hook output", async () => {
-		const id = defineExtensionId("handled");
+		const id = "handled";
 		const app = new Crust("app").flags({ mode: { type: "string", required: true } }).extend(
 			defineExtension(id).noAction((ctx) => {
 				ctx.stdout("help");
@@ -105,7 +99,7 @@ describe("captured run outcomes", () => {
 it("captures preparation output/failure while snapshot still rejects", async () => {
 	const error = { preparation: true };
 	const app = new Crust("app").extend(
-		defineExtension(defineExtensionId("prepare")).sections(() => {
+		defineExtension("prepare").sections(() => {
 			getAmbientTerminalIO()?.stderr("preparing");
 			throw error;
 		}),
@@ -134,7 +128,7 @@ it("captures cleanup failure only after disposal, without presenting errors or c
 	const app = new Crust("app")
 		.provide(resource())
 		.extend(
-			defineExtension(defineExtensionId("errors")).onError(() => {
+			defineExtension("errors").onError(() => {
 				presented = true;
 			}),
 		)
@@ -159,7 +153,7 @@ it("captures cancellation and postRun diagnostics with original error identity",
 	const error = new DOMException("cancelled", "AbortError");
 	const app = new Crust("app")
 		.extend(
-			defineExtension(defineExtensionId("post")).postRun(({ stderr }, outcome) => {
+			defineExtension("post").postRun(({ stderr }, outcome) => {
 				stderr(outcome.status);
 				throw "secondary";
 			}),
@@ -236,7 +230,7 @@ it("resolves conditional inline providers once for the action and postRun", asyn
 			setups++;
 			return "text";
 		});
-		const hook = defineExtension(defineExtensionId("demand"))
+		const hook = defineExtension("demand")
 			.use(db)
 			.postRun(async ({ ctx }) => {
 				expect(await ctx.db).toBe("text");

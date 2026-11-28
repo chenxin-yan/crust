@@ -7,7 +7,6 @@ import {
 	type CommandDefinitionBuilder,
 } from "../command/crust.ts";
 import type { CommandShape } from "../command/typed-run.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { RunOutcome } from "../index.ts";
 import { defineContext, type ContextInstance } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
@@ -15,7 +14,7 @@ import { defineExtension, type Extension } from "./extension.ts";
 // A command whose type is not statically known may be an async generator action.
 type OpenEvents = readonly unknown[] | undefined;
 
-const id = defineExtensionId("boundary");
+const id = "boundary";
 
 function _extensionBoundary(broad: Extension) {
 	const empty = defineExtension(id);
@@ -25,7 +24,7 @@ function _extensionBoundary(broad: Extension) {
 			void name;
 			return [];
 		}),
-		defineExtension(defineExtensionId("second")),
+		defineExtension("second"),
 	);
 	void nested.run([]);
 	const contributed = new Crust("app").extend(
@@ -228,7 +227,7 @@ function _contributedDemandValues() {
 	const number = defineContext("db").setup(() => 42);
 	const demand = defineExtension(id).use(text);
 	const child = defineCommand("child", (c) => c.provide(number()));
-	const contribute = defineExtension(defineExtensionId("commands")).add(child);
+	const contribute = defineExtension("commands").add(child);
 	// @ts-expect-error Contributed children also run applicable hooks.
 	new Crust("app").provide(text()).extend(demand).extend(contribute);
 	// @ts-expect-error Existing contributed children cannot invalidate new hooks.
@@ -237,7 +236,7 @@ function _contributedDemandValues() {
 		.provide(text())
 		.extend(demand)
 		// @ts-expect-error Checked contributed provider replacement retains prior hook contracts.
-		.extend(defineExtension(defineExtensionId("provider")).provide(number()));
+		.extend(defineExtension("provider").provide(number()));
 	// @ts-expect-error An open holder cannot erase a concrete provider shape.
 	const broad: CommandDefinition = child;
 	// A broad child holder has no statically known descendant value mismatch.
@@ -351,7 +350,7 @@ function _conditionalDescendantDemand(condition: boolean) {
 	// @ts-expect-error Later hooks check existing conditional inline recipes.
 	root.command("child", (c) => (condition ? c.provide(number()) : c)).extend(demand);
 
-	const contribution = defineExtension(defineExtensionId("conditional")).add(child);
+	const contribution = defineExtension("conditional").add(child);
 	// @ts-expect-error Contributed conditional recipes must satisfy existing hooks.
 	root.extend(demand).extend(contribution);
 	// @ts-expect-error Later hooks must check contributed conditional recipes.
@@ -378,7 +377,7 @@ function _conditionalDescendantDemand(condition: boolean) {
 	root.extend(demand).add(compatible);
 	root.add(compatible).extend(demand);
 	root.extend(demand).command("inline", (c) => (condition ? c.provide(text()) : c));
-	const compatibleContribution = defineExtension(defineExtensionId("compatible")).add(compatible);
+	const compatibleContribution = defineExtension("compatible").add(compatible);
 	root.extend(demand).extend(compatibleContribution);
 	root.extend(compatibleContribution).extend(demand);
 	root.add(child); // No applicable hook demand: conditional replacement remains allowed.
@@ -424,7 +423,7 @@ function _conditionalProviderAndChildHolders(
 // types cannot see may replace an earlier Extension's command with a different result. The
 // types don't track ids, so every earlier Extension's command opens; app commands stay precise.
 function _runtimeOnlyNamesMayReplaceSameIdCommands() {
-	const shared = defineExtensionId("shared");
+	const shared = "shared";
 	const name: string = "child";
 	const first = defineExtension(shared).add(defineCommand("child", (c) => c.action(() => 1)));
 	const second = defineExtension(shared).add(defineCommand(name, (c) => c.action(() => "s")));
@@ -443,9 +442,7 @@ function _runtimeOnlyNamesMayReplaceSameIdCommands() {
 	const viaAlias = new Crust("app").extend(aliased).extend(second).run(["al"]);
 	type _viaAlias = Expect<Equal<typeof viaAlias, Promise<RunOutcome<unknown, OpenEvents>>>>;
 	// Literal Extensions after the open one stay precise until another open call.
-	const third = defineExtension(defineExtensionId("third")).add(
-		defineCommand("third", (c) => c.action(() => 1n)),
-	);
+	const third = defineExtension("third").add(defineCommand("third", (c) => c.action(() => 1n)));
 	const withThird = app.extend(third).command("added", (c) => c.action(() => "a"));
 	const precise = withThird.run(["third"]);
 	type _precise = Expect<Equal<typeof precise, Promise<RunOutcome<bigint>>>>;

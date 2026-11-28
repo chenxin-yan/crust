@@ -1,4 +1,4 @@
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -82,7 +82,7 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("honors only and except audiences", async () => {
-		const other = defineExtensionId("acme:other");
+		const other = "acme:other";
 		const snapshot = await new Crust("demo", {
 			sections: [
 				{ title: "MAN ONLY", body: "visible", only: [man.id] },
@@ -225,7 +225,7 @@ describe("renderManPageMdoc", () => {
 			sections: [{ title: "Extra notes", body: ".config is supported.\nMore details." }],
 		})
 			.extend(
-				defineExtension(defineExtensionId("docs")).sections(() => [
+				defineExtension("docs").sections(() => [
 					{
 						command: [],
 						title: "Extra notes",

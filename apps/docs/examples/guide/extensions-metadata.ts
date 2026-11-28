@@ -1,7 +1,7 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
 // [!code highlight]
-export const stamp = defineExtension<"version">(defineExtensionId("acme:stamp")).preRun((ctx) => {
+export const stamp = defineExtension<"version">("acme:stamp").preRun((ctx) => {
 	ctx.stdout(`version ${ctx.rootCommand.meta.version}`);
 	//                                         ^?
 });

@@ -1,7 +1,7 @@
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension } from "@crustjs/core";
 
-export const banner = defineExtension(defineExtensionId("acme:banner")).factory(
-	(extension, text: string = "hello") => extension.preRun((ctx) => ctx.stdout(text)),
+export const banner = defineExtension("acme:banner").factory((extension, text: string = "hello") =>
+	extension.preRun((ctx) => ctx.stdout(text)),
 );
 
 const app = new Crust("my-cli").extend(banner("welcome")).action(() => {});

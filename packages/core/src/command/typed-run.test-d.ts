@@ -2,7 +2,6 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension } from "../api/extension.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./typed-run.ts";
 
@@ -52,7 +51,7 @@ type Nest<
 // layers recursive Extension flags onto earlier command trees
 function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 	const local = defineCommand("local", (command) => command.action(() => {}));
-	const trace = defineExtension(defineExtensionId("trace")).flags({
+	const trace = defineExtension("trace").flags({
 		trace: {
 			type: "boolean",
 		},
@@ -65,7 +64,7 @@ function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 		Equal<NonNullable<LocalInput["flags"]>, { trace?: boolean | undefined }>
 	>;
 
-	const tools = defineExtension(defineExtensionId("tools")).add(
+	const tools = defineExtension("tools").add(
 		defineCommand("inspect", (command) => command.action(() => {})),
 	);
 	const extendedTwice = new Crust("cli").extend(tools).extend(trace);
@@ -82,13 +81,11 @@ function _typecheckKeepsConditionallyAssembledExtensionContributionsRuntimeOnly(
 	const foo = defineCommand("foo", (command) => command.action(() => {}));
 	const bar = defineCommand("bar", (command) => command.action(() => {}));
 	const condition = (globalThis as { __never?: boolean }).__never === true;
-	const conditional = defineExtension(defineExtensionId("conditional"))
+	const conditional = defineExtension("conditional")
 		.flags(condition ? { fa: { type: "boolean" } } : { fb: { type: "boolean" } })
 		.add(...(condition ? [foo] : [bar]));
 	const app = new Crust("cli").action(() => {}).extend(conditional);
-	const elementConditional = defineExtension(defineExtensionId("element")).add(
-		condition ? foo : bar,
-	);
+	const elementConditional = defineExtension("element").add(condition ? foo : bar);
 	const elementApp = new Crust("cli").extend(elementConditional);
 
 	// A conditional commands array leaves paths to runtime checks, like other runtime-only names.
@@ -105,12 +102,12 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 
 	// Homogeneous variable-length contribution arrays may be empty at runtime.
 	const homoCommands: (typeof foo)[] = condition ? [foo] : [];
-	const homoExt = defineExtension(defineExtensionId("homo")).add(...homoCommands);
+	const homoExt = defineExtension("homo").add(...homoCommands);
 	const homoApp = new Crust("cli").extend(homoExt);
 
 	// A conditionally selected Extension installs only one branch.
-	const extFoo = defineExtension(defineExtensionId("extfoo")).add(foo);
-	const extBar = defineExtension(defineExtensionId("extbar")).add(bar);
+	const extFoo = defineExtension("extfoo").add(foo);
+	const extBar = defineExtension("extbar").add(bar);
 	const unionApp = new Crust("cli").extend(condition ? extFoo : extBar);
 	const bothApp = new Crust("cli").extend(extFoo, extBar);
 
@@ -132,7 +129,7 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 // keeps widened recursive flag scopes off descendant typed inputs
 function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 	const dynamicScope = (globalThis as { __never?: boolean }).__never === true;
-	const scoped = defineExtension(defineExtensionId("scoped")).flags({
+	const scoped = defineExtension("scoped").flags({
 		trace: {
 			type: "boolean",
 			recursive: dynamicScope,

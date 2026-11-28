@@ -86,9 +86,9 @@ export const search = new Crust("search")
 //#endregion
 
 //#region debug
-import { defineExtension, defineExtensionId } from "@crustjs/core";
+import { defineExtension } from "@crustjs/core";
 
-export const debug = defineExtension(defineExtensionId("acme:debug"))
+export const debug = defineExtension("acme:debug")
 	.flags({ debug: { type: "boolean", description: "Print errors with their stack and causes" } })
 	// [!code highlight:12]
 	.onError((error, { flags, stderr }) => {

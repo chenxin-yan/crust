@@ -14,10 +14,9 @@ export default defineConfig({
 		// The published packages only optionally depend on the Node binary backend
 		// (tsdown, resolved at build time, never imported); the binaries inline
 		// everything else, so the library bundles the workspace packages' code.
-		// Declarations stay external: bundling core's `unique symbol` brands would
-		// mint a second `ExtensionId`, making the re-exported `BuildReport`
-		// incompatible with `@crustjs/core`'s. package.json declares core as the
-		// peer that resolves those types.
+		// Declarations stay external, so the re-exported `BuildReport` is
+		// `@crustjs/core`'s own type rather than a bundled copy. package.json
+		// declares core as the peer that resolves those types.
 		deps: {
 			alwaysBundle: [/^@crustjs\//],
 			// An empty list, not omitted: tsdown falls back to the JS list otherwise.

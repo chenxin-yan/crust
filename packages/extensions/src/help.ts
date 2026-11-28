@@ -6,16 +6,15 @@ import {
 	type Extension,
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 
 import { withTypedColorFlag } from "./no-color.ts";
 import { textOutput } from "./text-output.ts";
 
-const HELP: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:help");
+// A constant, not `help.id`: code that only renders must not keep the Extension's definition in a bundle.
+const HELP = "crust:help";
 
 /** Options for {@link renderHelp}. */
 export interface RenderHelpOptions {
@@ -91,7 +90,7 @@ export interface HelpExtension {
 	(
 		options?: HelpOptions & { readonly command?: false | undefined },
 	): Extension<{}, [], typeof helpFlags, []>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 const helpFactory: ExtensionFactory<

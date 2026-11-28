@@ -4,16 +4,15 @@ import {
 	type CommandSnapshot,
 	type Extension,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import type { CommandInputSchema } from "@crustjs/core/tooling";
 
 import { printedOutput } from "./text-output.ts";
 
-const SCHEMA: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:schema");
+// A constant, not `schema.id`: code that only renders must not keep the Extension's definition in a bundle.
+const SCHEMA = "crust:schema";
 
 /** What `schema [path...]` prints for one command, and returns as its result. */
 export interface CommandSchema {
@@ -79,7 +78,7 @@ export interface SchemaExtension {
 	): Extension<{}, [], typeof llmsFlags, readonly [SchemaCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
 	(options?: SchemaOptions): Extension<{}, [], typeof llmsFlags>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 /**

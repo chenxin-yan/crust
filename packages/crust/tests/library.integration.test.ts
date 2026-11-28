@@ -14,7 +14,6 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { checkPackage, createPackageFromTarballData } from "@arethetypeswrong/core";
-import { defineExtensionId } from "@crustjs/core";
 import { which } from "@crustjs/utils/process";
 import { publint } from "publint";
 import { formatMessage } from "publint/utils";
@@ -245,8 +244,8 @@ export const coreAcceptsResult: CoreReport | undefined = result.reports?.["cli"]
 		);
 		writeFileSync(
 			join(app, "src", "cli.ts"),
-			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-				`const hook = defineExtension(defineExtensionId("hook")).build(() => [{ path: "man/installed-app.1", content: ".Dd" }]);\n` +
+			`import { Crust, defineExtension } from ${JSON.stringify(corePath)};\n` +
+				`const hook = defineExtension("hook").build(() => [{ path: "man/installed-app.1", content: ".Dd" }]);\n` +
 				`await new Crust("installed-app").extend(hook).action(({ stdout }) => stdout("hello from installed-app")).execute();\n`,
 		);
 
@@ -303,7 +302,7 @@ writeFileSync(resultPath, JSON.stringify({ ...result, logged }));
 		});
 		expect(result.reports).toEqual({
 			"installed-app": {
-				extensions: [{ id: defineExtensionId("hook"), files: ["man/installed-app.1"] }],
+				extensions: [{ id: "hook", files: ["man/installed-app.1"] }],
 			},
 		});
 		expect(existsSync(join(app, ".crust", "root", "man", "installed-app.1"))).toBe(true);

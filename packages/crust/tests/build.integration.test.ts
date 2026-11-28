@@ -115,8 +115,8 @@ console.log("hello from crust build test");
 			// Names differ from the package name and the source filenames. Each entry's
 			// `skills/` and `man/` directories merge into the shared artifact tree.
 			const entry = (name: string) =>
-				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};
-const hook = defineExtension(defineExtensionId("hook")).build(() => [
+				`import { Crust, defineExtension } from ${JSON.stringify(corePath)};
+const hook = defineExtension("hook").build(() => [
   { path: "skills/${name}/SKILL.md", content: "${name}" },
   { path: "man/${name}.1", content: "${name}" },
 ]);

@@ -3,14 +3,10 @@ import {
 	type CommandShape,
 	type Extension,
 	type ExtensionFactory,
-	type ExtensionId,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
-
-const SEARCH: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:search");
 
 /** One command `search` found, as it prints under `--json` and returns as its result. */
 export interface SearchMatch {
@@ -98,7 +94,7 @@ export interface SearchExtension {
 	): Extension<{}, [], {}, readonly [SearchCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
 	(options?: SearchOptions): Extension<{}, [], {}>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 const searchFactory: ExtensionFactory<
@@ -107,7 +103,7 @@ const searchFactory: ExtensionFactory<
 	[],
 	{},
 	readonly [SearchCommandDefinition<string>]
-> = /* @__PURE__ */ defineExtension(SEARCH).factory((extension, options = {}) => {
+> = /* @__PURE__ */ defineExtension("crust:search").factory((extension, options = {}) => {
 	const name = options.command ?? "search";
 	return extension
 		.sections((root) => [

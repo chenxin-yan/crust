@@ -5,15 +5,11 @@ import {
 	type Extension,
 	type ExtensionContext,
 	type ExtensionFactory,
-	type ExtensionId,
 	type InvocationOutcome,
 	defineCommand,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import type { StandardJSONSchema, StandardSchema } from "@crustjs/utils/schema";
-
-const TELEMETRY: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:telemetry");
 
 /** One usage event. It never carries argument or flag values. */
 export interface TelemetryEvent {
@@ -142,7 +138,7 @@ interface TelemetryExtension {
 	): Extension<{}, [], {}, readonly [TelemetryCommandDefinition]>;
 	// Omitted `Commands` is the open command namespace.
 	(options: TelemetryOptions): Extension<{}, [], {}>;
-	readonly id: ExtensionId;
+	readonly id: string;
 }
 
 const SEND_TIMEOUT_MS = 1_000;
@@ -230,7 +226,7 @@ const telemetryFactory: ExtensionFactory<
 	[],
 	{},
 	readonly [TelemetryCommandDefinition<string>]
-> = /* @__PURE__ */ defineExtension(TELEMETRY).factory((extension, options) => {
+> = /* @__PURE__ */ defineExtension("crust:telemetry").factory((extension, options) => {
 	const commandName = options.command ?? DEFAULT_TELEMETRY_COMMAND;
 	return extension
 		.add(telemetryCommand(options, commandName))

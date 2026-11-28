@@ -9,14 +9,12 @@ import {
 	type ContextMap,
 	type Extension,
 	type ExtensionContext,
-	type ExtensionId,
 	type FlagsDef,
 	type MergeContext,
 	type UseSource,
 	type UsedContexts,
 	CrustError,
 	defineExtension,
-	defineExtensionId,
 } from "@crustjs/core";
 import { artifactPath, isSourceRun } from "@crustjs/utils/artifacts";
 
@@ -53,7 +51,7 @@ import {
 import { BUILT_SPEC_FILE, builtFilePath, readBuiltFile, readSpec } from "./spec-source.ts";
 import type { SpecOperationsOf, Specs } from "./typed-client.ts";
 
-const API: ExtensionId = /* @__PURE__ */ defineExtensionId("crust:openapi");
+const API = "crust:openapi";
 
 export interface DefineApiOptions<Id extends string = string> {
 	/** The http: or https: URL request paths resolve against, e.g. `https://api.example.com/v1`. */

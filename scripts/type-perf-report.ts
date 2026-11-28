@@ -128,7 +128,7 @@ export function generateConsumerSource(
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const flag = (name: string, fields: string) => `{ "${name}": { ${fields} } }`;
 	const lines = [
-		'import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";',
+		'import { Crust, defineCommand, defineContext, defineExtension, defineFlag } from "@crustjs/core";',
 		"",
 	];
 
@@ -160,7 +160,7 @@ export function generateConsumerSource(
 		}
 		lines.push(
 			`const wideCommand = defineCommand("wide-command", (command) => command.use(${wide.join(", ")}).action(async ({ ctx }) => { void await ctx["wide-59"]; }));`,
-			`const wideExtension = defineExtension(defineExtensionId("type-perf-wide-extension")).provide(${wideInstances});`,
+			`const wideExtension = defineExtension("type-perf-wide-extension").provide(${wideInstances});`,
 			'export const wideApp = new Crust("type-perf-wide").extend(wideExtension).action(async ({ ctx }) => { void await ctx["wide-59"]; });',
 			"",
 		);
@@ -170,7 +170,7 @@ export function generateConsumerSource(
 		const extensions = Array.from({ length: 60 }, (_, index) => `wideExtension${index}`);
 		for (const [index, name] of extensions.entries()) {
 			lines.push(
-				`const ${name} = defineExtension(defineExtensionId("type-perf-wide-extension-${index}")).flags(${flag(`wide-extension-${index}`, 'type: "boolean"')}).provide(${valueContext(`wide-extension-${index}`, index)}()).add(defineCommand("wide-extension-command-${index}", (command) => command));`,
+				`const ${name} = defineExtension("type-perf-wide-extension-${index}").flags(${flag(`wide-extension-${index}`, 'type: "boolean"')}).provide(${valueContext(`wide-extension-${index}`, index)}()).add(defineCommand("wide-extension-command-${index}", (command) => command));`,
 			);
 		}
 		lines.push(
@@ -207,7 +207,7 @@ export function generateConsumerSource(
 
 	const extensionCommand = `defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags(${flag("extension-mode", 'type: "string"')}).action(() => ({ source: "extension" as const })))`;
 	lines.push(
-		'const extension = defineExtension(defineExtensionId("type-perf-extension"))',
+		'const extension = defineExtension("type-perf-extension")',
 		`\t.flags(${flag("extension-trace", 'type: "boolean"')})`,
 		`\t.add(${extensionCommand});`,
 	);
