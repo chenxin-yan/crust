@@ -133,6 +133,25 @@ void defineConfig({ name: "acme", user: wide }).get("pager");
 void defineConfig({ name: "acme", user: wide, project: { entry: { type: "string" } } }).get(
 	"entry",
 );
+// list() keeps each group's value types: a number setting beside a record of text settings.
+void (async () => {
+	const mixed = defineConfig({
+		name: "acme",
+		user: wide,
+		project: { port: { type: "number", default: 80 } },
+	});
+	for (const entry of await mixed.list()) {
+		// @ts-expect-error -- the port entry's value is a number
+		entry.value?.toUpperCase();
+	}
+})();
+// A name a record-typed group declares besides its any names still counts for the two-groups check.
+const declared = defineConfig({
+	name: "acme",
+	user: wide as Record<string, { type: "string" }> & { pager: { type: "string" } },
+	project: { pager: { type: "string" } },
+});
+type _Declared = Expect<Equal<typeof declared, { readonly FIX_SETTING_IN_TWO_GROUPS: "pager" }>>;
 const twice = defineConfig({
 	name: "acme",
 	user: { region: { type: "string" } },

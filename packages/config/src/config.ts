@@ -151,6 +151,7 @@ export interface Config<
 	UK extends keyof S & string,
 	PK extends keyof S & string,
 	Commands extends readonly ConfigCommandDefinition[],
+	Entry = ConfigEntry<S>,
 > {
 	/**
 	 * The flag for a setting, under any flag name: `.flags({ format: config.flag("psFormat") })`.
@@ -163,7 +164,7 @@ export interface Config<
 	 */
 	get<K extends keyof S & string>(key: K): Promise<SettingValue<S[K]>>;
 	/** Every setting with its value and where it comes from. */
-	list(): Promise<ConfigEntry<S>[]>;
+	list(): Promise<Entry[]>;
 	/**
 	 * Save settings in the user's file; `undefined` removes one. Throws for a value the setting's
 	 * rules refuse or a file that would exceed 16 MiB, before anything is saved.
@@ -195,8 +196,8 @@ type CheckedSettings<G> = {
 /** A group's settings: none for a group given as `undefined`. */
 type Group<G> = G extends ConfigSettings ? G : {};
 
-/** A group's names, when they are known: a record of any names tells nothing about another group. */
-type Names<G> = string extends keyof G ? never : keyof G;
+/** The names a group declares: a record of any names tells nothing about another group. */
+type Names<G> = keyof { [K in keyof G as string extends K ? never : K]: unknown };
 
 /** The settings that are in two groups. */
 type InTwoGroups<U, P, B> = (Names<U> & Names<P>) | (Names<U> & Names<B>) | (Names<P> & Names<B>);
@@ -318,7 +319,9 @@ export function defineConfig<
 			Group<U> & Group<P> & Group<B>,
 			keyof (Group<U> & Group<B>) & string,
 			keyof (Group<P> & Group<B>) & string,
-			C extends true ? readonly [ConfigCommandDefinition] : []
+			C extends true ? readonly [ConfigCommandDefinition] : [],
+			// By group: one of any names would otherwise give its value type to every entry.
+			ConfigEntry<Group<U>> | ConfigEntry<Group<P>> | ConfigEntry<Group<B>>
 		>
 	: { readonly FIX_SETTING_IN_TWO_GROUPS: InTwoGroups<Group<U>, Group<P>, Group<B>> } {
 	const { name, format } = options;
